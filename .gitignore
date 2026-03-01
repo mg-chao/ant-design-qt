@@ -1,0 +1,10 @@
+build/
+build-*/
+examples/**/build-*/
+*.pro.user
+Makefile*
+*.obj
+*.o
+*.dll
+*.lib
+*.pdb

@@ -32,6 +32,7 @@ struct MenuMetrics {
   int groupTitleLineHeight = 22;
   int groupTitleHorizontalPadding = 16;
   int groupTitleVerticalPadding = 8;
+  int popupPlacementGap = 8;
   int horizontalSpacing = 4;
   QFont font;
 };

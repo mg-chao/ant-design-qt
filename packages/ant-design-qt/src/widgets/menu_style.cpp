@@ -145,6 +145,7 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
       std::max(metrics.groupTitleFontSize + 4, qRound(map.lineHeight * map.fontSize));
   metrics.groupTitleHorizontalPadding = metrics.itemPaddingInline;
   metrics.groupTitleVerticalPadding = std::max(4, qRound(map.sizeXS));
+  metrics.popupPlacementGap = std::max(0, qRound(map.sizeXS));
   metrics.horizontalSpacing = std::max(2, qRound(map.sizeXXS));
 
   applyTokenOverrides(metrics, tokenOverrides);

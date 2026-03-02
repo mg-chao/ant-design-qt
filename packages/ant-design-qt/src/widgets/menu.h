@@ -426,7 +426,7 @@ class AdMenu final : public QWidget {
   int inlineIndent_ = 24;
   TriggerSubMenuAction triggerSubMenuAction_ = TriggerSubMenuAction::Hover;
   int subMenuOpenDelayMs_ = 0;
-  int subMenuCloseDelayMs_ = 0;
+  int subMenuCloseDelayMs_ = 100;
   bool tooltipEnabled_ = true;
   TooltipPlacement tooltipPlacement_ = TooltipPlacement::Right;
   QString overflowedIndicatorText_ = "...";

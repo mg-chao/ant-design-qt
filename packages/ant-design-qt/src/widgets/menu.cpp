@@ -735,7 +735,9 @@ QSize AdMenu::sizeHint() const {
   }
   const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
   if (popupLayer) {
-    const int popupWidth = std::max(kAntdDropdownMinWidth, verticalContentWidthHint(style));
+    // Ant Design popup menu uses dropdown min-width behavior (default 160),
+    // instead of content-driven width expansion.
+    const int popupWidth = kAntdDropdownMinWidth;
     const int popupHeight = std::max(contentHeight_, style.metrics.itemHeight * 2);
     return QSize(popupWidth, popupHeight);
   }
@@ -1815,9 +1817,57 @@ int AdMenu::rowHeightForType(ItemType type) const {
 }
 
 int AdMenu::entryIndexAt(const QPoint& pos) const {
-  for (int i = 0; i < entries_.size(); ++i) {
-    if (entries_.at(i).rect.contains(pos)) {
-      return i;
+  const int count = entries_.size();
+  if (count <= 0) {
+    return -1;
+  }
+
+  const auto containsIndex = [this, &pos, count](int idx) {
+    return idx >= 0 && idx < count && entries_.at(idx).rect.contains(pos);
+  };
+
+  // Fast path for continuous mouse move: most events stay in the same row
+  // or move to an adjacent row.
+  if (containsIndex(hoveredEntry_)) {
+    return hoveredEntry_;
+  }
+  if (containsIndex(hoveredEntry_ - 1)) {
+    return hoveredEntry_ - 1;
+  }
+  if (containsIndex(hoveredEntry_ + 1)) {
+    return hoveredEntry_ + 1;
+  }
+
+  // Entries are ordered on the primary axis, so we can binary-search instead
+  // of scanning every row on each mouse move.
+  if (mode_ == Mode::Horizontal) {
+    int lo = 0;
+    int hi = count - 1;
+    while (lo <= hi) {
+      const int mid = lo + (hi - lo) / 2;
+      const QRect& rect = entries_.at(mid).rect;
+      if (pos.x() < rect.left()) {
+        hi = mid - 1;
+      } else if (pos.x() > rect.right()) {
+        lo = mid + 1;
+      } else {
+        return rect.contains(pos) ? mid : -1;
+      }
+    }
+    return -1;
+  }
+
+  int lo = 0;
+  int hi = count - 1;
+  while (lo <= hi) {
+    const int mid = lo + (hi - lo) / 2;
+    const QRect& rect = entries_.at(mid).rect;
+    if (pos.y() < rect.top()) {
+      hi = mid - 1;
+    } else if (pos.y() > rect.bottom()) {
+      lo = mid + 1;
+    } else {
+      return rect.contains(pos) ? mid : -1;
     }
   }
   return -1;
@@ -2338,27 +2388,92 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
     totalOffset += entry.item->popupOffset;
   }
 
-  popupRecord.popup->adjustSize();
-  QSize popupSize = popupRecord.popup->sizeHint();
-  if (!popupSize.isValid() || popupSize.isEmpty()) {
-    popupSize = popupRecord.popup->size();
+  int horizontalPopupAlignOffset = 0;
+  int horizontalPopupGap = 0;
+  int horizontalStretchWidth = 0;
+  if (mode_ == Mode::Horizontal) {
+    // Match antd horizontal behavior:
+    // rc-menu/rc-trigger stretch=minWidth is based on submenu-title width,
+    // which aligns with the horizontal active underline width (content box).
+    StyleContext ctx;
+    ctx.mode = mode_;
+    ctx.theme = theme_;
+    ctx.inlineCollapsed = inlineCollapsed_;
+    ctx.items = items_;
+    const SemanticStyles effectiveSemantic =
+        semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
+    const MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
+    horizontalPopupAlignOffset =
+        std::max(0, style.metrics.itemMarginInline + style.metrics.itemPaddingInline);
+    horizontalPopupGap = std::max(0, style.metrics.popupPlacementGap);
+    horizontalStretchWidth = std::max(0,
+                                      triggerRect.width() - style.metrics.itemMarginInline * 2 -
+                                          style.metrics.itemPaddingInline * 2);
   }
-  if (!popupSize.isValid() || popupSize.isEmpty()) {
-    popupSize = QSize(kAntdDropdownMinWidth, 120);
+
+  QLayout* popupLayout = popupRecord.popup->layout();
+  if (popupLayout) {
+    popupLayout->setContentsMargins(0, 0, 0, 0);
+    if (mode_ == Mode::Horizontal && horizontalPopupGap > 0) {
+      // Default to bottom placement gap (top padding). If we later flip to top placement,
+      // we swap this to bottom padding.
+      popupLayout->setContentsMargins(0, horizontalPopupGap, 0, 0);
+    }
   }
+
+  const auto measurePopupSize = [this, &popupRecord, horizontalStretchWidth]() {
+    popupRecord.popup->adjustSize();
+    QSize measured = popupRecord.popup->sizeHint();
+    if (!measured.isValid() || measured.isEmpty()) {
+      measured = popupRecord.popup->size();
+    }
+    if (!measured.isValid() || measured.isEmpty()) {
+      measured = QSize(kAntdDropdownMinWidth, 120);
+    }
+    if (mode_ == Mode::Horizontal) {
+      measured.setWidth(std::max(measured.width(), horizontalStretchWidth));
+    }
+    popupRecord.popup->resize(measured);
+    return measured;
+  };
+
+  QSize popupSize = measurePopupSize();
 
   QPoint preferredPos;
   if (mode_ == Mode::Horizontal) {
-    QPoint downPos(triggerTopLeft.x(), triggerTopLeft.y() + triggerRect.height());
-    QPoint upPos(triggerTopLeft.x(), triggerTopLeft.y() - popupSize.height());
+    QPoint downPos(triggerTopLeft.x() + horizontalPopupAlignOffset,
+                   triggerTopLeft.y() + triggerRect.height());
+    QPoint upPos(triggerTopLeft.x() + horizontalPopupAlignOffset,
+                 triggerTopLeft.y() - popupSize.height());
     downPos += totalOffset;
     upPos += totalOffset;
 
-    preferredPos = downPos;
+    bool useUpPlacement = false;
     if (downPos.y() + popupSize.height() > scopeWindow->rect().bottom() + 1 &&
         upPos.y() >= scopeWindow->rect().top()) {
-      preferredPos = upPos;
+      useUpPlacement = true;
     }
+
+    if (popupLayout && horizontalPopupGap > 0) {
+      const int topGap = useUpPlacement ? 0 : horizontalPopupGap;
+      const int bottomGap = useUpPlacement ? horizontalPopupGap : 0;
+      popupLayout->setContentsMargins(0, topGap, 0, bottomGap);
+      popupSize = measurePopupSize();
+
+      downPos = QPoint(triggerTopLeft.x() + horizontalPopupAlignOffset,
+                       triggerTopLeft.y() + triggerRect.height());
+      upPos = QPoint(triggerTopLeft.x() + horizontalPopupAlignOffset,
+                     triggerTopLeft.y() - popupSize.height());
+      downPos += totalOffset;
+      upPos += totalOffset;
+
+      useUpPlacement = false;
+      if (downPos.y() + popupSize.height() > scopeWindow->rect().bottom() + 1 &&
+          upPos.y() >= scopeWindow->rect().top()) {
+        useUpPlacement = true;
+      }
+    }
+    preferredPos = useUpPlacement ? upPos : downPos;
   } else {
     QPoint rightPos(triggerTopLeft.x() + triggerRect.width(), triggerTopLeft.y());
     QPoint leftPos(triggerTopLeft.x() - popupSize.width(), triggerTopLeft.y());

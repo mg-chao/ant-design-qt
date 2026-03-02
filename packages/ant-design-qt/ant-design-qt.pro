@@ -6,6 +6,7 @@ CONFIG += c++17
 CONFIG += staticlib
 
 INCLUDEPATH += $$PWD/src
+INCLUDEPATH += $$clean_path($$PWD/../ant-design-icons-qt/src)
 
 HEADERS += \
     src/widgets/button.h \

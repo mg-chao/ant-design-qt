@@ -37,7 +37,7 @@ After sync, generated files include:
 ```cpp
 #include "icons.h"
 
-button->setIcon(adqt::icons::outlined::Search());
+button->setIcon(adqt::icons::makeIcon(adqt::icons::outlined::Search()));
 ```
 
 Custom two-tone colors:
@@ -49,7 +49,7 @@ style.secondary = QColor("#E6F4FF");
 style.hasPrimary = true;
 style.hasSecondary = true;
 
-button->setIcon(adqt::icons::twotone::Alert(style));
+button->setIcon(adqt::icons::makeIcon(adqt::icons::twotone::Alert(style)));
 ```
 
 ## Theme integration

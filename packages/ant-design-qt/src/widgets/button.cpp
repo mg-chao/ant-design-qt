@@ -3,19 +3,19 @@
 #include "button_style.h"
 #include "interaction_overlay_manager.h"
 #include "theme/theme.h"
+#include "icons.h"
+#include "generated/icon_manifest.h"
 
 #include <QApplication>
 #include <QEvent>
 #include <QFocusEvent>
 #include <QFontMetrics>
 #include <QHideEvent>
-#include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QMoveEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPixmapCache>
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QSet>
@@ -88,6 +88,19 @@ QPoint mouseEventPos(const QMouseEvent* event) {
 #else
   return event->pos();
 #endif
+}
+
+bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
+  if (!adqt::icons::isValid(icon)) {
+    return false;
+  }
+
+  if (icon.style.hasPrimary || icon.style.hasSecondary) {
+    return false;
+  }
+
+  const adqt::icons::detail::IconEntry& entry = adqt::icons::detail::iconEntryAt(icon.index);
+  return entry.theme != adqt::icons::IconTheme::TwoTone;
 }
 
 int resolveIconSide(const QPushButton* button, const QFontMetrics& fm, const QFont& contentFont) {
@@ -252,53 +265,6 @@ bool isValidWaveColor(const QColor& color) {
   }
 
   return true;
-}
-
-QPixmap tintIconPixmap(const QPixmap& source, const QColor& color) {
-  if (source.isNull() || !color.isValid()) {
-    return source;
-  }
-
-  const QString cacheKey = QStringLiteral("adqt:button:icon-tint:%1:%2")
-                               .arg(static_cast<unsigned long long>(source.cacheKey()))
-                               .arg(color.rgba(), 8, 16, QLatin1Char('0'));
-  QPixmap cached;
-  if (QPixmapCache::find(cacheKey, &cached)) {
-    return cached;
-  }
-
-  const qreal dpr = source.devicePixelRatio();
-  QImage image = source.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
-  if (image.isNull()) {
-    return source;
-  }
-
-  QPainter painter(&image);
-  painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-  painter.fillRect(image.rect(), color);
-  painter.end();
-
-  QPixmap tinted = QPixmap::fromImage(image);
-  tinted.setDevicePixelRatio(dpr);
-  QPixmapCache::insert(cacheKey, tinted);
-  return tinted;
-}
-
-QPixmap buttonIconPixmap(const QIcon& icon,
-                         const QSize& size,
-                         qreal devicePixelRatio,
-                         QIcon::Mode mode,
-                         QIcon::State state) {
-  const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-  return icon.pixmap(size, dpr, mode, state);
-#else
-  QPixmap pixmap = icon.pixmap(size, mode, state);
-  if (!pixmap.isNull()) {
-    pixmap.setDevicePixelRatio(dpr);
-  }
-  return pixmap;
-#endif
 }
 
 }  // namespace
@@ -487,13 +453,21 @@ void AdButton::setAutoInsertSpace(bool value) {
   emit autoInsertSpaceChanged(autoInsertSpace_);
 }
 
-QIcon AdButton::loadingIcon() const { return loadingIcon_; }
+adqt::icons::IconToken AdButton::iconToken() const { return iconToken_; }
 
-void AdButton::setLoadingIcon(const QIcon& value) {
-  loadingIcon_ = value;
+void AdButton::setIconToken(const adqt::icons::IconToken& value) {
+  iconToken_ = value;
+  refreshAfterPropertyChange(false);
+  emit iconTokenChanged(iconToken_);
+}
+
+adqt::icons::IconToken AdButton::loadingIconToken() const { return loadingIconToken_; }
+
+void AdButton::setLoadingIconToken(const adqt::icons::IconToken& value) {
+  loadingIconToken_ = value;
   updateSpinnerState();
   refreshAfterPropertyChange(false);
-  emit loadingIconChanged(loadingIcon_);
+  emit loadingIconTokenChanged(loadingIconToken_);
 }
 
 bool AdButton::isLoadingVisible() const { return loadingVisible_; }
@@ -631,9 +605,9 @@ void AdButton::paintEvent(QPaintEvent* event) {
 
   const QString textToRender = renderText();
   const bool twoCnAutoSpacing = shouldApplyTwoCnSpacing(textToRender);
-  const bool spinnerOnly = loadingVisible_ && loadingIcon_.isNull();
-  const QIcon iconToRender = loadingVisible_ ? loadingIcon_ : icon();
-  const bool hasIcon = spinnerOnly || !iconToRender.isNull();
+  const bool spinnerOnly = loadingVisible_ && !adqt::icons::isValid(loadingIconToken_);
+  adqt::icons::IconToken iconToRender = loadingVisible_ ? loadingIconToken_ : iconToken_;
+  const bool hasIcon = spinnerOnly || adqt::icons::isValid(iconToRender);
   const bool iconOnly = hasIcon && textToRender.isEmpty();
 
   int iconSide = resolveIconSide(this, fm, style.metrics.font);
@@ -668,17 +642,19 @@ void AdButton::paintEvent(QPaintEvent* event) {
     if (spinnerOnly) {
       drawSpinner(painter, layout.iconRect, contentColor);
     } else {
+      if (shouldInheritCurrentColor(iconToRender)) {
+        iconToRender.style.primary = contentColor;
+        iconToRender.style.hasPrimary = true;
+      }
       const QIcon::Mode mode = enabled ? QIcon::Normal : QIcon::Disabled;
       const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
       const QPixmap pixmap =
-          buttonIconPixmap(iconToRender, layout.iconRect.size(), dpr, mode, QIcon::Off);
-      const QPixmap tintedPixmap = tintIconPixmap(pixmap, contentColor);
-      if (!tintedPixmap.isNull()) {
-        const QSize drawSize = tintedPixmap.deviceIndependentSize().toSize();
-        const QPoint drawTopLeft(
-            layout.iconRect.x() + (layout.iconRect.width() - drawSize.width()) / 2,
-            layout.iconRect.y() + (layout.iconRect.height() - drawSize.height()) / 2);
-        painter.drawPixmap(drawTopLeft, tintedPixmap);
+          adqt::icons::renderIconPixmap(iconToRender, layout.iconRect.size(), dpr, mode, QIcon::Off);
+      if (!pixmap.isNull()) {
+        const QSize drawSize = pixmap.deviceIndependentSize().toSize();
+        const QPoint drawTopLeft(layout.iconRect.x() + (layout.iconRect.width() - drawSize.width()) / 2,
+                                 layout.iconRect.y() + (layout.iconRect.height() - drawSize.height()) / 2);
+        painter.drawPixmap(drawTopLeft, pixmap);
       }
     }
   }
@@ -883,7 +859,7 @@ void AdButton::hideEvent(QHideEvent* event) {
 
 bool AdButton::interactionBlocked() const { return loadingVisible_; }
 
-bool AdButton::hasUserIcon() const { return !icon().isNull(); }
+bool AdButton::hasUserIcon() const { return adqt::icons::isValid(iconToken_); }
 
 bool AdButton::shouldApplyTwoCnSpacing(const QString& sourceText) const {
   if (!autoInsertSpace_ || sourceText.isEmpty()) {
@@ -956,7 +932,7 @@ void AdButton::updateLoadingVisualState() {
 }
 
 void AdButton::updateSpinnerState() {
-  const bool spinning = loadingVisible_ && loadingIcon_.isNull();
+  const bool spinning = loadingVisible_ && !adqt::icons::isValid(loadingIconToken_);
   if (spinning && !spinnerSubscribed_) {
     subscribeSharedSpinner(this);
     spinnerSubscribed_ = true;

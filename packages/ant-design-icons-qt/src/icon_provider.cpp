@@ -277,8 +277,22 @@ class IconRuntime final {
 
 }  // namespace
 
+IconToken makeTokenByIndex(int index, const IconStyle& style) {
+  IconToken token;
+  token.index = index;
+  token.style = style;
+  return token;
+}
+
 QIcon makeIconByIndex(int index, const IconStyle& style) {
   return IconRuntime::instance().makeIcon(index, style);
+}
+
+QIcon makeIcon(const IconToken& token) {
+  if (!token.isValid()) {
+    return QIcon();
+  }
+  return makeIconByIndex(token.index, token.style);
 }
 
 QPixmap renderIconPixmapByIndex(int index,
@@ -289,6 +303,18 @@ QPixmap renderIconPixmapByIndex(int index,
                                 QIcon::State state) {
   return IconRuntime::instance().renderPixmapByIndex(
       index, style, logicalSize, devicePixelRatio, mode, state);
+}
+
+QPixmap renderIconPixmap(const IconToken& token,
+                         const QSize& logicalSize,
+                         qreal devicePixelRatio,
+                         QIcon::Mode mode,
+                         QIcon::State state) {
+  if (!token.isValid()) {
+    return QPixmap();
+  }
+  return renderIconPixmapByIndex(token.index, token.style, logicalSize, devicePixelRatio, mode,
+                                 state);
 }
 
 void setThemeResolver(IconThemeResolver resolver) {

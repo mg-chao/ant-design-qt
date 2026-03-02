@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QColor>
-#include <QIcon>
 #include <QList>
 #include <QMap>
 #include <QObject>
@@ -17,6 +16,8 @@
 
 #include <functional>
 #include <optional>
+
+#include "icons_types.h"
 
 namespace adqt::widgets {
 
@@ -85,7 +86,7 @@ class AdMenu final : public QWidget {
     QString label;
     QString title;
     QString extra;
-    QIcon icon;
+    adqt::icons::IconToken icon;
     ItemType type = ItemType::Item;
     bool disabled = false;
     bool danger = false;
@@ -237,8 +238,8 @@ class AdMenu final : public QWidget {
   PopupRender popupRender() const;
   void setPopupRender(PopupRender render);
 
-  QIcon expandIcon() const;
-  void setExpandIcon(const QIcon& icon);
+  adqt::icons::IconToken expandIcon() const;
+  void setExpandIcon(const adqt::icons::IconToken& icon);
 
   QPoint popupOffset() const;
   void setPopupOffset(const QPoint& value);
@@ -277,7 +278,7 @@ class AdMenu final : public QWidget {
   void componentTokensChanged();
   void semanticStylesChanged();
   void popupRenderChanged();
-  void expandIconChanged(const QIcon& value);
+  void expandIconChanged(const adqt::icons::IconToken& value);
   void popupOffsetChanged(const QPoint& value);
 
   void clicked(const QString& key, const QStringList& keyPath);
@@ -335,6 +336,7 @@ class AdMenu final : public QWidget {
 
   void rebuildEntries();
   void rebuildDepthMaps();
+  void rebuildSelectedSubMenuKeys();
   void ensureDefaultStatesApplied();
   void syncPopupVisibility();
   void syncTooltipForHoveredEntry();
@@ -351,6 +353,7 @@ class AdMenu final : public QWidget {
   void appendHorizontalEntries(const QVector<Item>& items, int& cursorX);
   int horizontalEntryWidthHint(const Item& item, ItemType type, const detail::MenuVisualStyle& style) const;
   int horizontalContentWidthHint() const;
+  int verticalContentWidthHint(const detail::MenuVisualStyle& style) const;
 
   int rowHeightForType(ItemType type) const;
   int entryIndexAt(const QPoint& pos) const;
@@ -373,6 +376,9 @@ class AdMenu final : public QWidget {
                                    QSet<QString>& keys,
                                    int depth = 0,
                                    const QString& parentKey = QString());
+  bool collectSelectedSubMenuKeysRecursive(const QVector<Item>& items,
+                                           const QSet<QString>& selectedItemKeys,
+                                           QSet<QString>& selectedSubMenuKeys) const;
   bool isDescendantSubMenuKey(const QString& candidateKey, const QString& parentKey) const;
 
   void openSubMenuByKey(const QString& key);
@@ -380,6 +386,7 @@ class AdMenu final : public QWidget {
   void toggleSubMenuByKey(const QString& key);
 
   void requestHoverOpen(const QString& key);
+  void requestHoverClose();
   void showTooltipForEntry(const VisibleEntry& entry, const QPoint& globalPos);
 
   PopupRecord* ensurePopupForEntry(const VisibleEntry& entry);
@@ -394,6 +401,7 @@ class AdMenu final : public QWidget {
 
   QSet<QString> validItemKeys_;
   QSet<QString> validSubMenuKeys_;
+  QSet<QString> selectedSubMenuKeys_;
   QMap<QString, int> subMenuDepths_;
   QMap<QString, QString> subMenuParents_;
 
@@ -418,7 +426,7 @@ class AdMenu final : public QWidget {
   int inlineIndent_ = 24;
   TriggerSubMenuAction triggerSubMenuAction_ = TriggerSubMenuAction::Hover;
   int subMenuOpenDelayMs_ = 0;
-  int subMenuCloseDelayMs_ = 100;
+  int subMenuCloseDelayMs_ = 0;
   bool tooltipEnabled_ = true;
   TooltipPlacement tooltipPlacement_ = TooltipPlacement::Right;
   QString overflowedIndicatorText_ = "...";
@@ -427,7 +435,7 @@ class AdMenu final : public QWidget {
   SemanticStyles semanticStyles_;
   SemanticStyleResolver semanticStyleResolver_;
   PopupRender popupRender_;
-  QIcon expandIcon_;
+  adqt::icons::IconToken expandIcon_;
   QPoint popupOffset_;
 
   ItemPaintHook itemPaintHook_;

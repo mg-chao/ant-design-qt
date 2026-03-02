@@ -1,5 +1,7 @@
 #include "menu.h"
 
+#include "icons.h"
+#include "generated/icon_manifest.h"
 #include "menu_style.h"
 #include "theme/theme.h"
 
@@ -30,6 +32,12 @@ namespace {
 
 using detail::MenuStyleInput;
 using detail::MenuVisualStyle;
+namespace outlined_icons = adqt::icons::outlined;
+
+constexpr int kAntdDropdownMinWidth = 160;
+constexpr int kSubMenuArrowBoxWidth = 12;
+constexpr int kSubMenuArrowBoxHeight = 14;
+constexpr int kSubMenuArrowTextGap = 6;
 
 QPoint mouseEventPos(const QMouseEvent* event) {
   if (!event) {
@@ -92,37 +100,70 @@ QStringList uniqueStringList(const QStringList& values) {
   return out;
 }
 
-void drawDefaultExpandIndicator(QPainter& painter,
-                                const QRect& area,
-                                bool pointDown,
-                                const QColor& color) {
-  if (!area.isValid()) {
+bool shouldShowSubMenuArrow(AdMenu::Mode mode,
+                            bool inlineCollapsed,
+                            AdMenu::ItemType type,
+                            bool hasChildren) {
+  if (type != AdMenu::ItemType::SubMenu || !hasChildren) {
+    return false;
+  }
+  if (mode == AdMenu::Mode::Horizontal) {
+    return false;
+  }
+  if (mode == AdMenu::Mode::Inline && inlineCollapsed) {
+    return false;
+  }
+  return true;
+}
+
+QSize pixmapDeviceIndependentSize(const QPixmap& pixmap) {
+  if (pixmap.isNull()) {
+    return QSize();
+  }
+  const qreal dpr = pixmap.devicePixelRatio();
+  if (dpr <= 0.0) {
+    return pixmap.size();
+  }
+  return QSize(qRound(pixmap.width() / dpr), qRound(pixmap.height() / dpr));
+}
+
+bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
+  if (!adqt::icons::isValid(icon)) {
+    return false;
+  }
+
+  if (icon.style.hasPrimary || icon.style.hasSecondary) {
+    return false;
+  }
+
+  const adqt::icons::detail::IconEntry& entry = adqt::icons::detail::iconEntryAt(icon.index);
+  return entry.theme != adqt::icons::IconTheme::TwoTone;
+}
+
+void paintMenuIcon(QPainter& painter,
+                   adqt::icons::IconToken icon,
+                   const QRect& targetRect,
+                   const QColor& color,
+                   bool disabled) {
+  if (!adqt::icons::isValid(icon) || !targetRect.isValid()) {
     return;
   }
 
-  const int side = std::max(6, std::min(area.width(), area.height()) - 2);
-  const QRect iconRect(area.center().x() - side / 2, area.center().y() - side / 2, side, side);
-
-  QPainterPath path;
-  if (pointDown) {
-    path.moveTo(iconRect.left(), iconRect.top() + side / 3.0);
-    path.lineTo(iconRect.center().x(), iconRect.bottom() - side / 4.0);
-    path.lineTo(iconRect.right(), iconRect.top() + side / 3.0);
-  } else {
-    path.moveTo(iconRect.left() + side / 3.0, iconRect.top());
-    path.lineTo(iconRect.right() - side / 4.0, iconRect.center().y());
-    path.lineTo(iconRect.left() + side / 3.0, iconRect.bottom());
+  if (shouldInheritCurrentColor(icon)) {
+    icon.style.primary = color;
+    icon.style.hasPrimary = true;
+  }
+  const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
+  const QIcon::Mode mode = disabled ? QIcon::Disabled : QIcon::Normal;
+  const QPixmap pixmap = adqt::icons::renderIconPixmap(icon, targetRect.size(), dpr, mode, QIcon::Off);
+  if (pixmap.isNull()) {
+    return;
   }
 
-  QPen pen(color, 1.4);
-  pen.setCapStyle(Qt::RoundCap);
-  pen.setJoinStyle(Qt::RoundJoin);
-  painter.save();
-  painter.setRenderHint(QPainter::Antialiasing, true);
-  painter.setBrush(Qt::NoBrush);
-  painter.setPen(pen);
-  painter.drawPath(path);
-  painter.restore();
+  const QSize drawSize = pixmapDeviceIndependentSize(pixmap);
+  const QPoint drawTopLeft(targetRect.x() + (targetRect.width() - drawSize.width()) / 2,
+                           targetRect.y() + (targetRect.height() - drawSize.height()) / 2);
+  painter.drawPixmap(drawTopLeft, pixmap);
 }
 
 MenuVisualStyle resolveVisualStyle(const AdMenu* menu, const AdMenu::SemanticStyles& semantic) {
@@ -631,9 +672,9 @@ void AdMenu::setPopupRender(PopupRender render) {
   syncPopupVisibility();
 }
 
-QIcon AdMenu::expandIcon() const { return expandIcon_; }
+adqt::icons::IconToken AdMenu::expandIcon() const { return expandIcon_; }
 
-void AdMenu::setExpandIcon(const QIcon& icon) {
+void AdMenu::setExpandIcon(const adqt::icons::IconToken& icon) {
   expandIcon_ = icon;
   syncPopupVisibility();
   emit expandIconChanged(expandIcon_);
@@ -687,10 +728,16 @@ QSize AdMenu::sizeHint() const {
       semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   if (mode_ == Mode::Horizontal) {
-    const int h = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
+    const int h = style.metrics.itemHeight;
     const int contentWidth = horizontalContentWidthHint();
     const int preferredWidth = std::max(160, contentWidth);
     return QSize(std::max(width(), preferredWidth), h + style.metrics.borderWidth);
+  }
+  const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
+  if (popupLayer) {
+    const int popupWidth = std::max(kAntdDropdownMinWidth, verticalContentWidthHint(style));
+    const int popupHeight = std::max(contentHeight_, style.metrics.itemHeight * 2);
+    return QSize(popupWidth, popupHeight);
   }
   const int w = inlineCollapsed_ && mode_ == Mode::Inline ? 56 : 256;
   const int h = std::max(contentHeight_, style.metrics.itemHeight * 4);
@@ -707,8 +754,13 @@ QSize AdMenu::minimumSizeHint() const {
       semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   if (mode_ == Mode::Horizontal) {
-    const int h = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
+    const int h = style.metrics.itemHeight;
     return QSize(std::max(160, horizontalContentWidthHint()), h);
+  }
+  const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
+  if (popupLayer) {
+    const int minHeight = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
+    return QSize(kAntdDropdownMinWidth, minHeight);
   }
   const int w = inlineCollapsed_ && mode_ == Mode::Inline ? 48 : 120;
   return QSize(w, style.metrics.itemHeight + style.metrics.itemMarginBlock * 2);
@@ -727,6 +779,7 @@ void AdMenu::paintEvent(QPaintEvent* event) {
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.setFont(style.metrics.font);
 
   const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
   if (popupLayer) {
@@ -778,12 +831,14 @@ void AdMenu::paintEvent(QPaintEvent* event) {
 
     if (entry.type == ItemType::Group) {
       painter.setPen(style.groupTitleColor);
-      QFont groupFont = font();
+      QFont groupFont = style.metrics.font;
       groupFont.setBold(false);
-      groupFont.setPointSize(std::max(10, style.metrics.groupTitleFontSize));
+      groupFont.setPixelSize(std::max(10, style.metrics.groupTitleFontSize));
       painter.setFont(groupFont);
-      QRect textRect = rowRect.adjusted(style.metrics.groupTitleHorizontalPadding, 0,
-                                        -style.metrics.groupTitleHorizontalPadding, 0);
+      QRect textRect = rowRect.adjusted(style.metrics.groupTitleHorizontalPadding,
+                                        style.metrics.groupTitleVerticalPadding,
+                                        -style.metrics.groupTitleHorizontalPadding,
+                                        -style.metrics.groupTitleVerticalPadding);
       painter.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft,
                        trimmedOrFallback(entry.item->label, entry.item->key));
       continue;
@@ -791,23 +846,60 @@ void AdMenu::paintEvent(QPaintEvent* event) {
 
     const bool hovered = (hoveredEntry_ == i);
     const bool pressed = (pressedEntry_ == i);
-    const bool selected = selectedKeys_.contains(entry.key);
+    const bool itemSelected = selectedKeys_.contains(entry.key);
+    const bool subMenuSelected =
+        entry.type == ItemType::SubMenu && selectedSubMenuKeys_.contains(entry.key);
+    const bool selected = itemSelected || subMenuSelected;
     const bool opened = openKeys_.contains(entry.key);
 
     detail::MenuStateStyle state = style.normal;
-    if (horizontal) {
+    if (entry.disabled) {
+      state = style.disabled;
+    } else if (horizontal) {
       state = style.horizontalNormal;
       if (selected) {
         state = style.horizontalSelected;
+      } else if (entry.danger) {
+        if (pressed) {
+          state = style.dangerActive;
+        } else if (hovered || opened) {
+          state = style.dangerHover;
+        } else {
+          state = style.danger;
+        }
       } else if (pressed) {
         state = style.horizontalActive;
       } else if (hovered || opened) {
         state = style.horizontalHover;
       }
-    } else if (entry.disabled) {
-      state = style.disabled;
+    } else if (entry.type == ItemType::SubMenu && subMenuSelected) {
+      // Match Ant Design's `submenu-selected`: keep selected text color on title,
+      // but do not apply item-level selected background in inline/vertical modes.
+      if (entry.danger) {
+        if (pressed) {
+          state = style.dangerActive;
+        } else if (hovered) {
+          state = style.dangerHover;
+        } else {
+          state = style.danger;
+        }
+        if (style.dangerSelected.text.isValid()) {
+          state.text = style.dangerSelected.text;
+        }
+      } else {
+        if (pressed) {
+          state = style.active;
+        } else if (hovered) {
+          state = style.hover;
+        } else {
+          state = style.normal;
+        }
+        if (style.selected.text.isValid()) {
+          state.text = style.selected.text;
+        }
+      }
     } else if (entry.danger) {
-      if (selected) {
+      if (itemSelected) {
         state = style.dangerSelected;
       } else if (pressed) {
         state = style.dangerActive;
@@ -816,7 +908,7 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       } else {
         state = style.danger;
       }
-    } else if (selected) {
+    } else if (itemSelected) {
       state = style.selected;
     } else if (pressed) {
       state = style.active;
@@ -824,13 +916,20 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       state = style.hover;
     }
 
-    QRect fillRect = rowRect.adjusted(style.metrics.itemMarginInline, style.metrics.itemMarginBlock,
-                                      -style.metrics.itemMarginInline, -style.metrics.itemMarginBlock);
+    const int blockMargin = horizontal ? 0 : style.metrics.itemMarginBlock;
+    QRect fillRect = rowRect.adjusted(style.metrics.itemMarginInline, blockMargin,
+                                      -style.metrics.itemMarginInline, -blockMargin);
 
     int radius = entry.type == ItemType::SubMenu ? style.metrics.subMenuItemBorderRadius
                                                   : style.metrics.itemBorderRadius;
     if (horizontal) {
       radius = style.metrics.horizontalItemBorderRadius;
+
+      // Ant Design horizontal mode keeps active/hover/open background transparent by default.
+      // A custom `horizontalItemHoverBg` token can still opt into a filled background.
+      if (!entry.disabled && !selected && (hovered || pressed || opened)) {
+        state.background = style.horizontalHover.background;
+      }
     }
     if (state.background.alpha() > 0) {
       painter.setPen(Qt::NoPen);
@@ -838,14 +937,15 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       painter.drawRoundedRect(fillRect, radius, radius);
     }
 
-    if (style.metrics.activeBarWidth > 0 && selected && !horizontal && !collapsedInline) {
+    if (style.metrics.activeBarWidth > 0 && itemSelected && !horizontal && !collapsedInline) {
       QRect activeBar(fillRect.left(), fillRect.top(), style.metrics.activeBarWidth, fillRect.height());
       painter.setPen(Qt::NoPen);
       painter.setBrush(state.text);
       painter.drawRoundedRect(activeBar, style.metrics.activeBarWidth / 2.0,
                               style.metrics.activeBarWidth / 2.0);
     }
-    const bool horizontalActiveBar = horizontal && (selected || pressed || hovered || opened);
+    const bool horizontalActiveBar =
+        horizontal && !entry.disabled && (selected || pressed || hovered || opened);
     if (horizontalActiveBar) {
       const QColor activeBarColor = style.horizontalSelected.text.isValid()
                                         ? style.horizontalSelected.text
@@ -853,8 +953,10 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       painter.setPen(QPen(activeBarColor, 2));
       const int activeBarLeft = fillRect.left() + style.metrics.itemPaddingInline;
       const int activeBarRight = fillRect.right() - style.metrics.itemPaddingInline;
+      const int activeBarY =
+          rowRect.bottom() - std::max(0, style.metrics.borderWidth - 1);
       if (activeBarRight > activeBarLeft) {
-        painter.drawLine(activeBarLeft, fillRect.bottom(), activeBarRight, fillRect.bottom());
+        painter.drawLine(activeBarLeft, activeBarY, activeBarRight, activeBarY);
       }
     }
 
@@ -873,7 +975,7 @@ void AdMenu::paintEvent(QPaintEvent* event) {
     }
 
     const int iconSide = std::max(10, style.metrics.iconSize);
-    const bool hasIcon = !entry.item->icon.isNull();
+    const bool hasIcon = adqt::icons::isValid(entry.item->icon);
     QRect iconRect(contentRect.left(),
                    contentRect.center().y() - iconSide / 2,
                    iconSide,
@@ -881,26 +983,22 @@ void AdMenu::paintEvent(QPaintEvent* event) {
 
     int textLeft = contentRect.left();
     if (hasIcon) {
-      const QIcon::Mode iconMode = entry.disabled ? QIcon::Disabled : QIcon::Normal;
-      entry.item->icon.paint(&painter, iconRect, Qt::AlignCenter, iconMode);
+      paintMenuIcon(painter, entry.item->icon, iconRect, state.text, entry.disabled);
       textLeft = iconRect.right() + 1 + style.metrics.iconMarginInlineEnd;
     } else if (collapsedInline) {
       textLeft = contentRect.left();
     }
 
-    QRect arrowRect(contentRect.right() - 12,
-                    contentRect.center().y() - 7,
-                    12,
-                    14);
+    QRect arrowRect(contentRect.right() - kSubMenuArrowBoxWidth,
+                    contentRect.center().y() - kSubMenuArrowBoxHeight / 2,
+                    kSubMenuArrowBoxWidth,
+                    kSubMenuArrowBoxHeight);
 
-    bool showArrow = (entry.type == ItemType::SubMenu && entry.hasChildren);
-    if (collapsedInline && mode_ == Mode::Inline) {
-      showArrow = false;
-    }
+    const bool showArrow = shouldShowSubMenuArrow(mode_, inlineCollapsed_, entry.type, entry.hasChildren);
 
     int textRight = contentRect.right();
     if (showArrow) {
-      textRight = arrowRect.left() - 6;
+      textRight = arrowRect.left() - kSubMenuArrowTextGap;
     }
     if (!entry.item->extra.isEmpty() && !collapsedInline && !horizontal) {
       painter.setPen(state.text);
@@ -924,19 +1022,21 @@ void AdMenu::paintEvent(QPaintEvent* event) {
     }
 
     painter.setPen(state.text);
-    painter.setFont(font());
+    painter.setFont(style.metrics.font);
     QRect textRect(textLeft, contentRect.top(), std::max(0, textRight - textLeft), contentRect.height());
     painter.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, label);
 
     if (showArrow) {
-      if (!expandIcon_.isNull()) {
-        const QIcon::Mode iconMode = entry.disabled ? QIcon::Disabled : QIcon::Normal;
-        expandIcon_.paint(&painter, arrowRect, Qt::AlignCenter, iconMode);
+      if (adqt::icons::isValid(expandIcon_)) {
+        paintMenuIcon(painter, expandIcon_, arrowRect, state.text, entry.disabled);
       } else {
         const bool open = openKeys_.contains(entry.key);
-        const bool pointDown = (mode_ == Mode::Horizontal) ||
-                               (mode_ == Mode::Inline && !inlineCollapsed_ && open);
-        drawDefaultExpandIndicator(painter, arrowRect, pointDown, state.text);
+        const bool useUpOutlined = (mode_ == Mode::Inline && !inlineCollapsed_ && open);
+        paintMenuIcon(painter,
+                      useUpOutlined ? outlined_icons::Up() : outlined_icons::Down(),
+                      arrowRect,
+                      state.text,
+                      entry.disabled);
       }
     }
 
@@ -975,19 +1075,31 @@ void AdMenu::enterEvent(QEvent* event) {
 void AdMenu::leaveEvent(QEvent* event) {
   QWidget::leaveEvent(event);
   setHoveredEntry(-1);
+  unsetCursor();
 
   const bool popupLikeMode = mode_ == Mode::Vertical || mode_ == Mode::Horizontal ||
                              (mode_ == Mode::Inline && inlineCollapsed_);
   if (triggerSubMenuAction_ == TriggerSubMenuAction::Hover && popupLikeMode) {
     requestHoverOpen(QString());
-    const int delay = std::max(0, subMenuCloseDelayMs_);
-    hoverCloseTimer_.start(delay);
+    requestHoverClose();
   }
 }
 
 void AdMenu::mouseMoveEvent(QMouseEvent* event) {
   const int index = entryIndexAt(mouseEventPos(event));
   setHoveredEntry(index);
+
+  if (index >= 0 && index < entries_.size()) {
+    const VisibleEntry& entry = entries_.at(index);
+    const bool cursorEligible = entry.type == ItemType::Item || entry.type == ItemType::SubMenu;
+    if (cursorEligible) {
+      setCursor(entry.disabled ? Qt::ForbiddenCursor : Qt::PointingHandCursor);
+    } else {
+      unsetCursor();
+    }
+  } else {
+    unsetCursor();
+  }
 
   const bool popupLikeMode = mode_ == Mode::Vertical || mode_ == Mode::Horizontal ||
                              (mode_ == Mode::Inline && inlineCollapsed_);
@@ -1007,8 +1119,7 @@ void AdMenu::mouseMoveEvent(QMouseEvent* event) {
   if (hoverPopupMode && !hitOpenable) {
     requestHoverOpen(QString());
     if (!openKeys_.isEmpty()) {
-      const int delay = std::max(0, subMenuCloseDelayMs_);
-      hoverCloseTimer_.start(delay);
+      requestHoverClose();
     }
   }
 
@@ -1124,8 +1235,22 @@ void AdMenu::focusOutEvent(QFocusEvent* event) {
 
 void AdMenu::changeEvent(QEvent* event) {
   QWidget::changeEvent(event);
-  if (event && event->type() == QEvent::EnabledChange) {
-    update();
+  if (!event) {
+    return;
+  }
+
+  switch (event->type()) {
+    case QEvent::EnabledChange:
+      update();
+      break;
+    case QEvent::FontChange:
+      rebuildEntries();
+      syncPopupVisibility();
+      updateGeometry();
+      update();
+      break;
+    default:
+      break;
   }
 }
 
@@ -1192,12 +1317,10 @@ bool AdMenu::eventFilter(QObject* watched, QEvent* event) {
                triggerSubMenuAction_ == TriggerSubMenuAction::Hover &&
                (mode_ == Mode::Vertical || mode_ == Mode::Horizontal ||
                 (mode_ == Mode::Inline && inlineCollapsed_))) {
-      const bool cursorStillInPopup = host->popupWindow && host->popupWindow->isVisible() &&
-                                      widgetContainsGlobalPos(host->popupWindow, QCursor::pos());
-      if (!cursorStillInPopup) {
-        const int delay = std::max(0, subMenuCloseDelayMs_);
-        hoverCloseTimer_.start(delay);
-      }
+      // Do not gate close scheduling on QCursor::pos() during Leave handling.
+      // Cursor position can be transiently stale in event dispatch order and
+      // skip scheduling, which leaves a dangling popup until another event.
+      requestHoverClose();
     }
   }
 
@@ -1270,6 +1393,7 @@ void AdMenu::rebuildEntries() {
 
   selectedKeys_ = normalizeSelectedKeys(selectedKeys_);
   openKeys_ = normalizeOpenKeys(openKeys_);
+  rebuildSelectedSubMenuKeys();
 
   entries_.clear();
   contentHeight_ = 0;
@@ -1287,7 +1411,7 @@ void AdMenu::rebuildEntries() {
 
   if (mode_ == Mode::Horizontal) {
     appendHorizontalEntries(items_, cursorX);
-    contentHeight_ = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2 + style.metrics.borderWidth;
+    contentHeight_ = style.metrics.itemHeight + style.metrics.borderWidth;
   } else if (mode_ == Mode::Inline && !inlineCollapsed_) {
     appendInlineEntries(items_, 0, {}, cursorY);
     contentHeight_ = cursorY + style.metrics.borderWidth;
@@ -1320,6 +1444,26 @@ void AdMenu::rebuildDepthMaps() {
   };
 
   walk(items_, 1, QString());
+}
+
+void AdMenu::rebuildSelectedSubMenuKeys() {
+  selectedSubMenuKeys_.clear();
+  if (items_.isEmpty() || selectedKeys_.isEmpty()) {
+    return;
+  }
+
+  QSet<QString> selectedItemKeys;
+  selectedItemKeys.reserve(selectedKeys_.size());
+  for (const QString& key : selectedKeys_) {
+    if (!key.isEmpty()) {
+      selectedItemKeys.insert(key);
+    }
+  }
+  if (selectedItemKeys.isEmpty()) {
+    return;
+  }
+
+  collectSelectedSubMenuKeysRecursive(items_, selectedItemKeys, selectedSubMenuKeys_);
 }
 
 void AdMenu::ensureDefaultStatesApplied() {
@@ -1498,7 +1642,7 @@ void AdMenu::appendHorizontalEntries(const QVector<Item>& items, int& cursorX) {
   const SemanticStyles effectiveSemantic =
       semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
-  const int itemHeight = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
+  const int itemHeight = style.metrics.itemHeight;
 
   for (const Item& item : items) {
     const ItemType type = effectiveType(item);
@@ -1530,7 +1674,7 @@ int AdMenu::horizontalEntryWidthHint(const Item& item,
                                      ItemType type,
                                      const detail::MenuVisualStyle& style) const {
   const QString label = trimmedOrFallback(item.label, item.key);
-  const QFontMetricsF metrics(font());
+  const QFontMetricsF metrics(style.metrics.font);
   const int iconSide = std::max(10, style.metrics.iconSize);
 
   int widthHint = 0;
@@ -1538,14 +1682,15 @@ int AdMenu::horizontalEntryWidthHint(const Item& item,
   widthHint += style.metrics.itemPaddingInline * 2;
   widthHint += static_cast<int>(std::ceil(metrics.horizontalAdvance(label)));
 
-  if (!item.icon.isNull()) {
+  if (adqt::icons::isValid(item.icon)) {
     // Keep this in sync with paint geometry: icon area + explicit icon/text separation.
     widthHint += iconSide + style.metrics.iconMarginInlineEnd + 1;
   }
 
-  if (type == ItemType::SubMenu && !item.children.isEmpty()) {
-    // Match paint geometry: 12px arrow box + 6px text/arrow gap.
-    widthHint += 12 + 6;
+  const bool showArrow = shouldShowSubMenuArrow(mode_, inlineCollapsed_, type, !item.children.isEmpty());
+  if (showArrow) {
+    // Keep in sync with paint geometry: arrow box + text/arrow gap.
+    widthHint += kSubMenuArrowBoxWidth + kSubMenuArrowTextGap;
   }
 
   const int minWidth = 72 + style.metrics.itemMarginInline * 2;
@@ -1584,6 +1729,71 @@ int AdMenu::horizontalContentWidthHint() const {
   return totalWidth;
 }
 
+int AdMenu::verticalContentWidthHint(const detail::MenuVisualStyle& style) const {
+  if (entries_.isEmpty()) {
+    return 0;
+  }
+
+  const QFontMetricsF itemMetrics(style.metrics.font);
+  QFont groupFont = style.metrics.font;
+  groupFont.setBold(false);
+  groupFont.setPixelSize(std::max(10, style.metrics.groupTitleFontSize));
+  const QFontMetricsF groupMetrics(groupFont);
+
+  const int iconSide = std::max(10, style.metrics.iconSize);
+  int maxWidth = 0;
+
+  for (const VisibleEntry& entry : entries_) {
+    if (!entry.item) {
+      continue;
+    }
+    if (entry.type == ItemType::Divider) {
+      continue;
+    }
+
+    if (entry.type == ItemType::Group) {
+      const QString label = trimmedOrFallback(entry.item->label, entry.item->key);
+      const int textWidth = static_cast<int>(std::ceil(groupMetrics.horizontalAdvance(label)));
+      const int groupWidth = style.metrics.groupTitleHorizontalPadding * 2 + textWidth;
+      maxWidth = std::max(maxWidth, groupWidth);
+      continue;
+    }
+
+    int indent = 0;
+    if (mode_ == Mode::Vertical && entry.depth > 0) {
+      const int groupChildIndent =
+          std::max(0, style.metrics.itemPaddingInline - style.metrics.itemMarginInline);
+      indent = entry.depth * groupChildIndent;
+    }
+
+    int widthHint = 0;
+    widthHint += style.metrics.itemMarginInline * 2;
+    widthHint += style.metrics.itemPaddingInline * 2;
+    widthHint += indent;
+
+    if (adqt::icons::isValid(entry.item->icon)) {
+      widthHint += iconSide + style.metrics.iconMarginInlineEnd + 1;
+    }
+
+    const QString label = trimmedOrFallback(entry.item->label, entry.item->key);
+    widthHint += static_cast<int>(std::ceil(itemMetrics.horizontalAdvance(label)));
+
+    const bool showArrow =
+        shouldShowSubMenuArrow(mode_, inlineCollapsed_, entry.type, entry.hasChildren);
+    if (showArrow) {
+      widthHint += kSubMenuArrowBoxWidth + kSubMenuArrowTextGap;
+    }
+
+    if (!entry.item->extra.isEmpty()) {
+      widthHint += static_cast<int>(std::ceil(itemMetrics.horizontalAdvance(entry.item->extra))) + 12;
+    }
+
+    maxWidth = std::max(maxWidth, widthHint);
+  }
+
+  return maxWidth;
+}
+
 int AdMenu::rowHeightForType(ItemType type) const {
   StyleContext ctx;
   ctx.mode = mode_;
@@ -1597,8 +1807,9 @@ int AdMenu::rowHeightForType(ItemType type) const {
     return std::max(4, style.metrics.borderWidth + style.metrics.dividerMarginBlock * 2 + 2);
   }
   if (type == ItemType::Group) {
-    return std::max(style.metrics.groupTitleLineHeight,
-                    style.metrics.groupTitleVerticalPadding * 2 + style.metrics.groupTitleFontSize);
+    const int groupLineHeight =
+        std::max(style.metrics.groupTitleFontSize, style.metrics.groupTitleLineHeight);
+    return groupLineHeight + style.metrics.groupTitleVerticalPadding * 2;
   }
   return style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
 }
@@ -1753,6 +1964,7 @@ void AdMenu::applySelectedInternal(const QStringList& keys, bool emitSignals) {
     return;
   }
   selectedKeys_ = normalized;
+  rebuildSelectedSubMenuKeys();
   if (emitSignals) {
     emit selectedKeysChanged(selectedKeys_);
   }
@@ -1834,6 +2046,31 @@ void AdMenu::collectSubMenuKeysRecursive(const QVector<Item>& items,
       collectSubMenuKeysRecursive(item.children, keys, depth, parentKey);
     }
   }
+}
+
+bool AdMenu::collectSelectedSubMenuKeysRecursive(const QVector<Item>& items,
+                                                 const QSet<QString>& selectedItemKeys,
+                                                 QSet<QString>& selectedSubMenuKeys) const {
+  bool hasSelectedInSubtree = false;
+
+  for (const Item& item : items) {
+    const ItemType type = effectiveType(item);
+    const bool selfSelected = (type == ItemType::Item) && selectedItemKeys.contains(item.key);
+    bool childSelected = false;
+    if (!item.children.isEmpty()) {
+      childSelected =
+          collectSelectedSubMenuKeysRecursive(item.children, selectedItemKeys, selectedSubMenuKeys);
+    }
+
+    if (type == ItemType::SubMenu && childSelected) {
+      selectedSubMenuKeys.insert(item.key);
+    }
+    if (selfSelected || childSelected) {
+      hasSelectedInSubtree = true;
+    }
+  }
+
+  return hasSelectedInSubtree;
 }
 
 bool AdMenu::isDescendantSubMenuKey(const QString& candidateKey, const QString& parentKey) const {
@@ -1933,6 +2170,17 @@ void AdMenu::requestHoverOpen(const QString& key) {
   } else {
     hoverOpenTimer_.start(delay);
   }
+}
+
+void AdMenu::requestHoverClose() {
+  hoverCloseTimer_.stop();
+
+  const int delay = std::max(0, subMenuCloseDelayMs_);
+  if (delay == 0) {
+    clearDanglingPopups();
+    return;
+  }
+  hoverCloseTimer_.start(delay);
 }
 
 void AdMenu::showTooltipForEntry(const VisibleEntry& entry, const QPoint& globalPos) {
@@ -2096,7 +2344,7 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
     popupSize = popupRecord.popup->size();
   }
   if (!popupSize.isValid() || popupSize.isEmpty()) {
-    popupSize = QSize(220, 120);
+    popupSize = QSize(kAntdDropdownMinWidth, 120);
   }
 
   QPoint preferredPos;

@@ -9,18 +9,20 @@
 #include <QMap>
 #include <QPainter>
 #include <QPushButton>
-#include <QStyle>
 #include <QVBoxLayout>
 
 #include <memory>
 
+#include "icons.h"
+
 using adqt::widgets::AdMenu;
+namespace outlined_icons = adqt::icons::outlined;
 
 namespace {
 
 AdMenu::Item makeLeaf(const QString& key,
                       const QString& label,
-                      const QIcon& icon = QIcon(),
+                      const adqt::icons::IconToken& icon = {},
                       bool disabled = false) {
   AdMenu::Item item;
   item.key = key;
@@ -34,7 +36,7 @@ AdMenu::Item makeLeaf(const QString& key,
 AdMenu::Item makeSubMenu(const QString& key,
                          const QString& label,
                          const QVector<AdMenu::Item>& children,
-                         const QIcon& icon = QIcon()) {
+                         const adqt::icons::IconToken& icon = {}) {
   AdMenu::Item item;
   item.key = key;
   item.label = label;
@@ -77,7 +79,7 @@ MenuDocsPage::MenuDocsPage(QWidget* parent) : QWidget(parent) {
   root->setContentsMargins(16, 16, 16, 24);
   root->setSpacing(16);
 
-  auto* title = new QLabel("Menu 导航菜单");
+  auto* title = new QLabel("Menu Navigation");
   QFont titleFont = title->font();
   titleFont.setPointSize(titleFont.pointSize() + 8);
   titleFont.setBold(true);
@@ -85,28 +87,28 @@ MenuDocsPage::MenuDocsPage(QWidget* parent) : QWidget(parent) {
   root->addWidget(title);
 
   auto* subtitle = new QLabel(
-      "本页对齐 Ant Design Menu 全部示例，覆盖模式、主题、样式、语义和调试扩展能力。");
+      "This page mirrors the full set of Ant Design Menu examples, covering modes, themes, styling, semantic features, and debug extensions.");
   subtitle->setWordWrap(true);
   root->addWidget(subtitle);
 
-  addSection(root, "顶部导航", "对应 demo: horizontal.tsx", buildHorizontalDemo(false));
-  addSection(root, "顶部导航（暗色）", "对应 demo: horizontal-dark.tsx", buildHorizontalDemo(true));
-  addSection(root, "内嵌菜单", "对应 demo: inline.tsx", buildInlineDemo());
-  addSection(root, "折叠内嵌菜单", "对应 demo: inline-collapsed.tsx", buildInlineCollapsedDemo());
-  addSection(root, "折叠菜单 Tooltip", "对应 demo: tooltip.tsx", buildTooltipDemo());
-  addSection(root, "仅展开当前子菜单", "对应 demo: sider-current.tsx", buildSiderCurrentDemo());
-  addSection(root, "垂直弹出菜单", "对应 demo: vertical.tsx", buildVerticalDemo());
-  addSection(root, "主题切换", "对应 demo: theme.tsx", buildThemeDemo());
-  addSection(root, "子菜单主题", "对应 demo: submenu-theme.tsx", buildSubMenuThemeDemo());
-  addSection(root, "动态切换模式", "对应 demo: switch-mode.tsx", buildSwitchModeDemo());
-  addSection(root, "语义样式（styles/classNames）", "对应 demo: style-class.tsx", buildStyleClassDemo());
-  addSection(root, "样式调试", "对应 demo: style-debug.tsx", buildStyleDebugDemo());
-  addSection(root, "Menu v4 风格", "对应 demo: menu-v4.tsx", buildMenuV4Demo());
-  addSection(root, "组件 Token", "对应 demo: component-token.tsx", buildComponentTokenDemo());
-  addSection(root, "额外内容 / 危险项 / 分割线", "对应 demo: extra-style.tsx", buildExtraStyleDemo());
-  addSection(root, "自定义弹层渲染", "对应 demo: custom-popup-render.tsx", buildCustomPopupRenderDemo());
-  addSection(root, "Semantic DOM 对照", "对应 demo: _semantic.tsx", buildSemanticDemo());
-  addSection(root, "API 对照", "核心 API 与 AntD Menu 参数命名对齐。", buildApiOverview());
+  addSection(root, "Top Navigation", "Demo: horizontal.tsx", buildHorizontalDemo(false));
+  addSection(root, "Top Navigation (Dark)", "Demo: horizontal-dark.tsx", buildHorizontalDemo(true));
+  addSection(root, "Inline Menu", "Demo: inline.tsx", buildInlineDemo());
+  addSection(root, "Collapsed Inline Menu", "Demo: inline-collapsed.tsx", buildInlineCollapsedDemo());
+  addSection(root, "Collapsed Menu Tooltip", "Demo: tooltip.tsx", buildTooltipDemo());
+  addSection(root, "Open Current Submenu Only", "Demo: sider-current.tsx", buildSiderCurrentDemo());
+  addSection(root, "Vertical Popup Menu", "Demo: vertical.tsx", buildVerticalDemo());
+  addSection(root, "Theme Switch", "Demo: theme.tsx", buildThemeDemo());
+  addSection(root, "Submenu Theme", "Demo: submenu-theme.tsx", buildSubMenuThemeDemo());
+  addSection(root, "Dynamic Mode Switch", "Demo: switch-mode.tsx", buildSwitchModeDemo());
+  addSection(root, "Semantic Styling (styles/classNames)", "Demo: style-class.tsx", buildStyleClassDemo());
+  addSection(root, "Style Debugging", "Demo: style-debug.tsx", buildStyleDebugDemo());
+  addSection(root, "Menu v4 Style", "Demo: menu-v4.tsx", buildMenuV4Demo());
+  addSection(root, "Component Token", "Demo: component-token.tsx", buildComponentTokenDemo());
+  addSection(root, "Extra Content / Danger Item / Divider", "Demo: extra-style.tsx", buildExtraStyleDemo());
+  addSection(root, "Custom Popup Render", "Demo: custom-popup-render.tsx", buildCustomPopupRenderDemo());
+  addSection(root, "Semantic DOM Comparison", "Demo: _semantic.tsx", buildSemanticDemo());
+  addSection(root, "API Overview", "Core API names align with Ant Design Menu.", buildApiOverview());
 
   root->addStretch();
 }
@@ -144,9 +146,9 @@ void MenuDocsPage::addSection(QVBoxLayout* root,
 }
 
 QVector<AdMenu::Item> MenuDocsPage::itemsHorizontal() const {
-  const QIcon mail = style()->standardIcon(QStyle::SP_MessageBoxInformation);
-  const QIcon app = style()->standardIcon(QStyle::SP_DirIcon);
-  const QIcon setting = style()->standardIcon(QStyle::SP_FileDialogDetailedView);
+  const auto mail = outlined_icons::Mail();
+  const auto app = outlined_icons::Appstore();
+  const auto setting = outlined_icons::Setting();
 
   QVector<AdMenu::Item> items;
   items.append(makeLeaf("mail", "Navigation One", mail));
@@ -163,9 +165,9 @@ QVector<AdMenu::Item> MenuDocsPage::itemsHorizontal() const {
 }
 
 QVector<AdMenu::Item> MenuDocsPage::itemsInline() const {
-  const QIcon mail = style()->standardIcon(QStyle::SP_MessageBoxInformation);
-  const QIcon app = style()->standardIcon(QStyle::SP_DirIcon);
-  const QIcon setting = style()->standardIcon(QStyle::SP_FileDialogDetailedView);
+  const auto mail = outlined_icons::Mail();
+  const auto app = outlined_icons::Appstore();
+  const auto setting = outlined_icons::Setting();
 
   QVector<AdMenu::Item> items;
   items.append(makeSubMenu(
@@ -186,11 +188,11 @@ QVector<AdMenu::Item> MenuDocsPage::itemsInline() const {
 }
 
 QVector<AdMenu::Item> MenuDocsPage::itemsCollapsedInline() const {
-  const QIcon pie = style()->standardIcon(QStyle::SP_DriveHDIcon);
-  const QIcon desktop = style()->standardIcon(QStyle::SP_DesktopIcon);
-  const QIcon container = style()->standardIcon(QStyle::SP_DirHomeIcon);
-  const QIcon mail = style()->standardIcon(QStyle::SP_MessageBoxInformation);
-  const QIcon app = style()->standardIcon(QStyle::SP_DirIcon);
+  const auto pie = outlined_icons::PieChart();
+  const auto desktop = outlined_icons::Desktop();
+  const auto container = outlined_icons::Container();
+  const auto mail = outlined_icons::Mail();
+  const auto app = outlined_icons::Appstore();
 
   QVector<AdMenu::Item> items;
   items.append(makeLeaf("1", "Option 1", pie));
@@ -209,9 +211,9 @@ QVector<AdMenu::Item> MenuDocsPage::itemsCollapsedInline() const {
 }
 
 QVector<AdMenu::Item> MenuDocsPage::itemsSiderCurrent() const {
-  const QIcon mail = style()->standardIcon(QStyle::SP_MessageBoxInformation);
-  const QIcon app = style()->standardIcon(QStyle::SP_DirIcon);
-  const QIcon setting = style()->standardIcon(QStyle::SP_FileDialogDetailedView);
+  const auto mail = outlined_icons::Mail();
+  const auto app = outlined_icons::Appstore();
+  const auto setting = outlined_icons::Setting();
 
   return {
       makeSubMenu("1", "Navigation One",
@@ -235,11 +237,11 @@ QVector<AdMenu::Item> MenuDocsPage::itemsSiderCurrent() const {
 }
 
 QVector<AdMenu::Item> MenuDocsPage::itemsSwitchMode() const {
-  const QIcon mail = style()->standardIcon(QStyle::SP_MessageBoxInformation);
-  const QIcon calendar = style()->standardIcon(QStyle::SP_FileDialogContentsView);
-  const QIcon app = style()->standardIcon(QStyle::SP_DirIcon);
-  const QIcon setting = style()->standardIcon(QStyle::SP_FileDialogDetailedView);
-  const QIcon link = style()->standardIcon(QStyle::SP_DialogOpenButton);
+  const auto mail = outlined_icons::Mail();
+  const auto calendar = outlined_icons::Calendar();
+  const auto app = outlined_icons::Appstore();
+  const auto setting = outlined_icons::Setting();
+  const auto link = outlined_icons::Link();
 
   return {
       makeLeaf("1", "Navigation One", mail),
@@ -491,7 +493,7 @@ QWidget* MenuDocsPage::buildSubMenuThemeDemo() {
   menu->setFixedWidth(256);
 
   const auto rebuildItems = [this, menu, subThemeDark]() {
-    const QIcon mail = style()->standardIcon(QStyle::SP_MessageBoxInformation);
+    const auto mail = outlined_icons::Mail();
     AdMenu::Item sub1 = makeSubMenu(
         "sub1", "Navigation One",
         {makeLeaf("1", "Option 1"), makeLeaf("2", "Option 2"), makeLeaf("3", "Option 3")},
@@ -607,11 +609,11 @@ QWidget* MenuDocsPage::buildStyleDebugDemo() {
       makeSubMenu("sub1", "Navigation One Long Long Long Long",
                   {makeLeaf("1", "Option 1"), makeLeaf("2", "Option 2"), makeLeaf("3", "Option 3"),
                    makeLeaf("4", "Option 4")},
-                  style()->standardIcon(QStyle::SP_MessageBoxInformation)),
+                  outlined_icons::Mail()),
       makeSubMenu("sub2", "Navigation Two",
                   {makeLeaf("5", "Option 5"), makeLeaf("6", "Option 6"),
                    makeSubMenu("sub3", "Submenu", {makeLeaf("7", "Option 7"), makeLeaf("8", "Option 8")})},
-                  style()->standardIcon(QStyle::SP_DirIcon)),
+                  outlined_icons::Appstore()),
       makeLeaf("11", "Option 11"),
       makeLeaf("12", "Option 12"),
   });
@@ -773,8 +775,8 @@ QWidget* MenuDocsPage::buildExtraStyleDemo() {
 
   AdMenu::Item sub1 = makeSubMenu("sub1", "Navigation One",
                                   {makeLeaf("1", "Option 1 + icon"), makeLeaf("2", "Option 2"),
-                                   makeLeaf("3", "Link Option", QIcon(), true)},
-                                  style()->standardIcon(QStyle::SP_MessageBoxInformation));
+                                   makeLeaf("3", "Link Option", {}, true)},
+                                  outlined_icons::Mail());
   sub1.children[1].extra = QStringLiteral("Ctrl+P");
   QVector<AdMenu::Item> items1 = {sub1};
 
@@ -930,6 +932,8 @@ QWidget* MenuDocsPage::buildApiOverview() {
       {"mode", "vertical | horizontal | inline"},
       {"theme", "light | dark"},
       {"items", "QVector<AdMenu::Item>"},
+      {"items[].icon", "adqt::icons::IconToken"},
+      {"expandIcon", "adqt::icons::IconToken"},
       {"selectedKeys / defaultSelectedKeys", "controlled / uncontrolled selected items"},
       {"openKeys / defaultOpenKeys", "controlled / uncontrolled opened sub menus"},
       {"multiple", "enable multi selection"},

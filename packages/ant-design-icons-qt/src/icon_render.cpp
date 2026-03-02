@@ -25,6 +25,26 @@ void replaceRegex(QString& text, const QString& pattern, const QString& replacem
   text.replace(expr, replacement);
 }
 
+void ensureRootFillInheritsCurrentColor(QString& svg) {
+  const QRegularExpression svgTagExpr(QStringLiteral("<svg\\b([^>]*)>"),
+                                      QRegularExpression::CaseInsensitiveOption);
+  const QRegularExpression fillAttrExpr(QStringLiteral("\\bfill\\s*="),
+                                        QRegularExpression::CaseInsensitiveOption);
+
+  const QRegularExpressionMatch match = svgTagExpr.match(svg);
+  if (!match.hasMatch()) {
+    return;
+  }
+
+  const QString attrs = match.captured(1);
+  if (fillAttrExpr.match(attrs).hasMatch()) {
+    return;
+  }
+
+  const QString replacement = QStringLiteral("<svg%1 fill=\"currentColor\">").arg(attrs);
+  svg.replace(match.capturedStart(0), match.capturedLength(0), replacement);
+}
+
 }  // namespace
 
 QColor deriveSecondaryColor(const QColor& primary) {
@@ -52,6 +72,9 @@ QByteArray applyColorsToSvg(const QByteArray& source,
     replaceRegex(svg, QStringLiteral("#E6E6E6|#D9D9D9|#D8D8D8"), secondaryToken);
     replaceRegex(svg, QStringLiteral("currentColor"), primaryToken);
   } else {
+    // Upstream SVGs are not fully normalized: many paths omit `fill` and would stay black.
+    // Align with Ant Design behavior by making non-twotone icons inherit currentColor.
+    ensureRootFillInheritsCurrentColor(svg);
     replaceRegex(svg, QStringLiteral("currentColor"), primaryToken);
     replaceRegex(svg, QStringLiteral("#333333|#333"), primaryToken);
     replaceRegex(svg, QStringLiteral("#000000|#000"), primaryToken);

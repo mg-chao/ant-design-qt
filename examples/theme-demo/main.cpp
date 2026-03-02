@@ -85,48 +85,54 @@ class ButtonDocsPage final : public QWidget {
     root->setContentsMargins(16, 16, 16, 24);
     root->setSpacing(16);
 
-    auto* title = new QLabel("Button 按钮");
+    auto* title = new QLabel("Button");
     QFont titleFont = title->font();
     titleFont.setPointSize(titleFont.pointSize() + 8);
     titleFont.setBold(true);
     title->setFont(titleFont);
     root->addWidget(title);
 
-    auto* subtitle = new QLabel("按钮用于开始一个即时操作。");
+    auto* subtitle = new QLabel("Buttons are used to trigger an immediate action.");
     subtitle->setWordWrap(true);
     root->addWidget(subtitle);
 
-    addSection(root, "语法糖",
-               "通过 `type` 语法糖，使用预设的按钮样式：主按钮、次按钮、虚线按钮、文本按钮和链接按钮。推荐主按钮在同一个操作区域最多出现一次。",
+    addSection(root, "Button Types",
+               "Use `type` to switch among primary/default/dashed/text/link button styles.",
                buildBasicDemo());
-    addSection(root, "颜色与变体", "同时设置 `color` 和 `variant` 属性，可以衍生出更多的变体按钮。",
+    addSection(root, "Color & Variant",
+               "Set `color` and `variant` together to compose additional button appearances.",
                buildColorVariantDemo());
-    addSection(root, "按钮图标", "可以通过 `icon` 属性添加图标。", buildIconDemo());
-    addSection(root, "按钮图标位置",
-               "通过设置 `iconPlacement` 为 `start` 或 `end` 分别设置按钮图标的位置。",
+    addSection(root, "Button Icon", "Set `iconToken` to show an icon in the button.", buildIconDemo());
+    addSection(root, "Icon Placement",
+               "Set `iconPlacement` to `start` or `end` to control icon position.",
                buildIconPlacementDemo());
-    addSection(root, "按钮尺寸",
-               "按钮有大、中、小三种尺寸。\n通过设置 `size` 为 `large` `small` 分别把按钮设为大、小尺寸。若不设置 `size`，则尺寸默认为中。",
+    addSection(root, "Button Size",
+               "Buttons support large/middle/small sizes via the `size` property.",
                buildSizeDemo());
-    addSection(root, "不可用状态", "添加 `disabled` 属性即可让按钮处于不可用状态，同时按钮样式也会改变。",
+    addSection(root, "Disabled",
+               "Set `disabled` to make a button non-interactive and visually disabled.",
                buildDisabledDemo());
-    addSection(root, "加载中状态",
-               "添加 `loading` 属性即可让按钮处于加载状态，`loading.icon` 可以自定义加载图标，最后三个按钮演示点击后进入加载状态。",
+    addSection(root, "Loading",
+               "Set `loading` to show a spinner, or use `loadingIconToken` for a custom loading icon.",
                buildLoadingDemo());
-    addSection(root, "多个按钮组合",
-               "按钮组合使用时，推荐使用 1 个主操作 + n 个次操作，3 个以上操作时把更多操作放到 Dropdown 中组合使用。",
+    addSection(root, "Button Group",
+               "Group multiple related actions together using button group patterns.",
                buildMultipleDemo());
-    addSection(root, "幽灵按钮", "幽灵按钮将按钮的内容反色，背景变为透明，常用在有色背景上。", buildGhostDemo());
-    addSection(root, "危险按钮", "在 4.0 之后，危险成为一种按钮属性而不是按钮类型。", buildDangerDemo());
-    addSection(root, "Block 按钮", "`block` 属性将使按钮适合其父宽度。", buildBlockDemo());
-
+    addSection(root, "Ghost Button",
+               "Ghost buttons invert foreground and keep transparent background.",
+               buildGhostDemo());
+    addSection(root, "Danger Button",
+               "Use danger styling for destructive actions.", buildDangerDemo());
+    addSection(root, "Block Button",
+               "Set `block` so the button spans the parent width.", buildBlockDemo());
     root->addStretch();
   }
 
   const QVector<QWidget*>& sectionAnchors() const { return anchors_; }
+
   const QStringList& sectionTitles() const { return titles_; }
 
- private:
+
   void addSection(QVBoxLayout* root,
                   const QString& title,
                   const QString& description,
@@ -222,12 +228,12 @@ class ButtonDocsPage final : public QWidget {
 
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(8);
-    const QIcon search = outlined_icons::Search();
+    const auto search = outlined_icons::Search();
 
     auto* pCircle = new AdButton();
     pCircle->setType(AdButton::Type::Primary);
     pCircle->setShape(AdButton::Shape::Circle);
-    pCircle->setIcon(search);
+    pCircle->setIconToken(search);
     row1->addWidget(pCircle);
 
     auto* pCircleA = new AdButton("A");
@@ -237,16 +243,16 @@ class ButtonDocsPage final : public QWidget {
 
     auto* pIcon = new AdButton("Search");
     pIcon->setType(AdButton::Type::Primary);
-    pIcon->setIcon(search);
+    pIcon->setIconToken(search);
     row1->addWidget(pIcon);
 
     auto* defaultCircle = new AdButton();
     defaultCircle->setShape(AdButton::Shape::Circle);
-    defaultCircle->setIcon(search);
+    defaultCircle->setIconToken(search);
     row1->addWidget(defaultCircle);
 
     auto* defaultIcon = new AdButton("Search");
-    defaultIcon->setIcon(search);
+    defaultIcon->setIconToken(search);
     row1->addWidget(defaultIcon);
     row1->addStretch();
 
@@ -254,26 +260,26 @@ class ButtonDocsPage final : public QWidget {
     row2->setSpacing(8);
     auto* defaultCircle2 = new AdButton();
     defaultCircle2->setShape(AdButton::Shape::Circle);
-    defaultCircle2->setIcon(search);
+    defaultCircle2->setIconToken(search);
     row2->addWidget(defaultCircle2);
 
     auto* defaultIcon2 = new AdButton("Search");
-    defaultIcon2->setIcon(search);
+    defaultIcon2->setIconToken(search);
     row2->addWidget(defaultIcon2);
 
     auto* dashedCircle = new AdButton();
     dashedCircle->setType(AdButton::Type::Dashed);
     dashedCircle->setShape(AdButton::Shape::Circle);
-    dashedCircle->setIcon(search);
+    dashedCircle->setIconToken(search);
     row2->addWidget(dashedCircle);
 
     auto* dashedIcon = new AdButton("Search");
     dashedIcon->setType(AdButton::Type::Dashed);
-    dashedIcon->setIcon(search);
+    dashedIcon->setIconToken(search);
     row2->addWidget(dashedIcon);
 
     auto* defaultIconOnly = new AdButton();
-    defaultIconOnly->setIcon(search);
+    defaultIconOnly->setIconToken(search);
     row2->addWidget(defaultIconOnly);
     row2->addStretch();
 
@@ -299,7 +305,7 @@ class ButtonDocsPage final : public QWidget {
     layout->addLayout(switchRow);
 
     iconPlacementButtons_.clear();
-    const QIcon icon = outlined_icons::Search();
+    const auto icon = outlined_icons::Search();
 
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(8);
@@ -307,7 +313,7 @@ class ButtonDocsPage final : public QWidget {
     auto* primaryCircle = new AdButton();
     primaryCircle->setType(AdButton::Type::Primary);
     primaryCircle->setShape(AdButton::Shape::Circle);
-    primaryCircle->setIcon(icon);
+    primaryCircle->setIconToken(icon);
     row1->addWidget(primaryCircle);
 
     auto* primaryCircleText = new AdButton("A");
@@ -317,17 +323,17 @@ class ButtonDocsPage final : public QWidget {
 
     auto* primarySearch = new AdButton("Search");
     primarySearch->setType(AdButton::Type::Primary);
-    primarySearch->setIcon(icon);
+    primarySearch->setIconToken(icon);
     row1->addWidget(primarySearch);
     iconPlacementButtons_.append(primarySearch);
 
     auto* defaultCircle = new AdButton();
     defaultCircle->setShape(AdButton::Shape::Circle);
-    defaultCircle->setIcon(icon);
+    defaultCircle->setIconToken(icon);
     row1->addWidget(defaultCircle);
 
     auto* defaultSearch = new AdButton("Search");
-    defaultSearch->setIcon(icon);
+    defaultSearch->setIconToken(icon);
     row1->addWidget(defaultSearch);
     iconPlacementButtons_.append(defaultSearch);
 
@@ -339,29 +345,29 @@ class ButtonDocsPage final : public QWidget {
 
     auto* defaultCircle2 = new AdButton();
     defaultCircle2->setShape(AdButton::Shape::Circle);
-    defaultCircle2->setIcon(icon);
+    defaultCircle2->setIconToken(icon);
     row2->addWidget(defaultCircle2);
 
     auto* textSearch = new AdButton("Search");
     textSearch->setType(AdButton::Type::Text);
-    textSearch->setIcon(icon);
+    textSearch->setIconToken(icon);
     row2->addWidget(textSearch);
     iconPlacementButtons_.append(textSearch);
 
     auto* dashedCircle = new AdButton();
     dashedCircle->setType(AdButton::Type::Dashed);
     dashedCircle->setShape(AdButton::Shape::Circle);
-    dashedCircle->setIcon(icon);
+    dashedCircle->setIconToken(icon);
     row2->addWidget(dashedCircle);
 
     auto* dashedSearch = new AdButton("Search");
     dashedSearch->setType(AdButton::Type::Dashed);
-    dashedSearch->setIcon(icon);
+    dashedSearch->setIconToken(icon);
     row2->addWidget(dashedSearch);
     iconPlacementButtons_.append(dashedSearch);
 
     auto* iconOnly = new AdButton();
-    iconOnly->setIcon(icon);
+    iconOnly->setIconToken(icon);
     row2->addWidget(iconOnly);
     iconPlacementButtons_.append(iconOnly);
 
@@ -440,25 +446,25 @@ class ButtonDocsPage final : public QWidget {
     layout->addLayout(line2);
 
     auto* line3 = new QHBoxLayout();
-    const QIcon dl = outlined_icons::Download();
+    const auto dl = outlined_icons::Download();
     sizeIconOnly_ = new AdButton();
     sizeIconOnly_->setType(AdButton::Type::Primary);
-    sizeIconOnly_->setIcon(dl);
+    sizeIconOnly_->setIconToken(dl);
     sizeCircle_ = new AdButton();
     sizeCircle_->setType(AdButton::Type::Primary);
     sizeCircle_->setShape(AdButton::Shape::Circle);
-    sizeCircle_->setIcon(dl);
+    sizeCircle_->setIconToken(dl);
     sizeRoundIcon_ = new AdButton();
     sizeRoundIcon_->setType(AdButton::Type::Primary);
     sizeRoundIcon_->setShape(AdButton::Shape::Round);
-    sizeRoundIcon_->setIcon(dl);
+    sizeRoundIcon_->setIconToken(dl);
     sizeRoundText_ = new AdButton("Download");
     sizeRoundText_->setType(AdButton::Type::Primary);
     sizeRoundText_->setShape(AdButton::Shape::Round);
-    sizeRoundText_->setIcon(dl);
+    sizeRoundText_->setIconToken(dl);
     sizePlainText_ = new AdButton("Download");
     sizePlainText_->setType(AdButton::Type::Primary);
-    sizePlainText_->setIcon(dl);
+    sizePlainText_->setIconToken(dl);
     line3->addWidget(sizeIconOnly_);
     line3->addWidget(sizeCircle_);
     line3->addWidget(sizeRoundIcon_);
@@ -622,13 +628,13 @@ class ButtonDocsPage final : public QWidget {
 
     auto* loadingIcon = new AdButton();
     loadingIcon->setType(AdButton::Type::Primary);
-    loadingIcon->setIcon(outlined_icons::PlayCircle());
+    loadingIcon->setIconToken(outlined_icons::Poweroff());
     loadingIcon->setLoading(true);
     row1->addWidget(loadingIcon);
 
     auto* loadingCustom = new AdButton("Loading Icon");
     loadingCustom->setType(AdButton::Type::Primary);
-    loadingCustom->setLoadingIcon(outlined_icons::Reload());
+    loadingCustom->setLoadingIconToken(outlined_icons::Sync());
     loadingCustom->setLoading(true);
     row1->addWidget(loadingCustom);
     row1->addStretch();
@@ -645,18 +651,18 @@ class ButtonDocsPage final : public QWidget {
 
     auto* iconReplace = new AdButton("Icon Replace");
     iconReplace->setType(AdButton::Type::Primary);
-    const QIcon powerIcon = outlined_icons::PlayCircle();
-    const QIcon syncIcon = outlined_icons::Reload();
-    iconReplace->setIcon(powerIcon);
+    const auto powerIcon = outlined_icons::Poweroff();
+    const auto syncIcon = outlined_icons::Sync();
+    iconReplace->setIconToken(powerIcon);
 
     auto* iconOnly = new AdButton();
     iconOnly->setType(AdButton::Type::Primary);
-    iconOnly->setIcon(powerIcon);
+    iconOnly->setIconToken(powerIcon);
 
     auto* loadingIconButton = new AdButton("Loading Icon");
     loadingIconButton->setType(AdButton::Type::Primary);
-    loadingIconButton->setIcon(powerIcon);
-    loadingIconButton->setLoadingIcon(syncIcon);
+    loadingIconButton->setIconToken(powerIcon);
+    loadingIconButton->setLoadingIconToken(syncIcon);
 
     auto startLoadingFor = [](AdButton* button, int ms) {
       if (!button) {
@@ -982,7 +988,7 @@ class DemoWindow final : public QWidget {
       QVector<AdMenu::Item> sectionItems;
       const QStringList& titles = titlesFor(kind);
       sectionItems.reserve(titles.size());
-      const QIcon sectionIcon = outlined_icons::Right();
+      const auto sectionIcon = outlined_icons::Right();
       for (int i = 0; i < titles.size(); ++i) {
         AdMenu::Item item;
         item.key = sectionKey(kind, i);

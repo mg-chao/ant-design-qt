@@ -129,15 +129,11 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   metrics.subMenuItemBorderRadius = std::max(0, qRound(map.borderRadiusSM));
   metrics.inlineIndent = 24;
 
-  int baseFontSize = qRound(map.fontSize);
-  if (baseFont.pixelSize() > 0) {
-    baseFontSize = baseFont.pixelSize();
-  } else if (baseFont.pointSizeF() > 0.0) {
-    baseFontSize = qRound(baseFont.pointSizeF());
-  }
-  baseFontSize = std::max(12, baseFontSize);
+  const int itemFontSize = std::max(12, qRound(map.fontSize));
+  metrics.font = baseFont;
+  metrics.font.setPixelSize(itemFontSize);
 
-  metrics.iconSize = std::max(12, baseFontSize);
+  metrics.iconSize = std::max(12, itemFontSize);
   metrics.iconMarginInlineEnd = std::max(6, qRound(map.controlHeightSM - map.fontSize));
   metrics.activeBarWidth = 0;
 
@@ -155,9 +151,11 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   return metrics;
 }
 
-MenuVisualStyle makeLightStyle(const ThemeMapToken& map, const AdMenu::ComponentTokens& tokens) {
+MenuVisualStyle makeLightStyle(const ThemeMapToken& map,
+                               const QFont& baseFont,
+                               const AdMenu::ComponentTokens& tokens) {
   MenuVisualStyle style;
-  style.metrics = resolveMetrics(map, QFont(), tokens);
+  style.metrics = resolveMetrics(map, baseFont, tokens);
 
   style.menuBackground = toColor(map.colorBgContainer, QColor("#ffffff"));
   style.borderColor = toColor(map.colorBorderSecondary, QColor("#f0f0f0"));
@@ -181,7 +179,7 @@ MenuVisualStyle makeLightStyle(const ThemeMapToken& map, const AdMenu::Component
                                : toColor(map.colorFillSecondary, QColor("#f5f5f5"));
 
   style.active.text = toColor(map.colorText, QColor("#141414"));
-  style.active.background = toColor(map.colorFill, QColor("#f0f0f0"));
+  style.active.background = toColor(map.colorPrimaryBg, QColor("#e6f4ff"));
 
   style.selected.text = tokens.itemSelectedColor.has_value()
                             ? toColor(tokens.itemSelectedColor.value(), QColor("#1677ff"))
@@ -196,20 +194,19 @@ MenuVisualStyle makeLightStyle(const ThemeMapToken& map, const AdMenu::Component
   style.danger.text = toColor(map.colorError, QColor("#ff4d4f"));
   style.danger.background = QColor(0, 0, 0, 0);
 
-  style.dangerHover.text = toColor(map.colorErrorHover, QColor("#ff7875"));
-  style.dangerHover.background = toColor(map.colorErrorBgHover, QColor("#fff2f0"));
+  style.dangerHover.text = toColor(map.colorError, QColor("#ff4d4f"));
+  style.dangerHover.background = style.hover.background;
 
   style.dangerActive.text = toColor(map.colorError, QColor("#ff4d4f"));
-  style.dangerActive.background = toColor(map.colorErrorBgActive, QColor("#ffccc7"));
+  style.dangerActive.background = toColor(map.colorErrorBg, QColor("#fff2f0"));
 
   style.dangerSelected.text = toColor(map.colorError, QColor("#ff4d4f"));
   style.dangerSelected.background = toColor(map.colorErrorBg, QColor("#fff2f0"));
 
   style.horizontalNormal = style.normal;
   style.horizontalHover = style.hover;
-  style.horizontalActive = style.active;
-  const QColor horizontalHoverFallback =
-      toColor(map.colorPrimary, style.horizontalHover.text);
+  style.horizontalActive = style.horizontalHover;
+  const QColor horizontalHoverFallback = style.horizontalHover.text;
   style.horizontalHover.text = tokens.horizontalItemHoverColor.has_value()
                                    ? toColor(tokens.horizontalItemHoverColor.value(),
                                              horizontalHoverFallback)
@@ -233,9 +230,11 @@ MenuVisualStyle makeLightStyle(const ThemeMapToken& map, const AdMenu::Component
   return style;
 }
 
-MenuVisualStyle makeDarkStyle(const ThemeMapToken& map, const AdMenu::ComponentTokens& tokens) {
+MenuVisualStyle makeDarkStyle(const ThemeMapToken& map,
+                              const QFont& baseFont,
+                              const AdMenu::ComponentTokens& tokens) {
   MenuVisualStyle style;
-  style.metrics = resolveMetrics(map, QFont(), tokens);
+  style.metrics = resolveMetrics(map, baseFont, tokens);
 
   const QColor textDark = toColor(map.colorTextSecondary, withAlpha(QColor("#ffffff"), 0.65));
   const QColor textLight = toColor(map.colorWhite, QColor("#ffffff"));
@@ -322,8 +321,8 @@ MenuVisualStyle makeDarkStyle(const ThemeMapToken& map, const AdMenu::ComponentT
 MenuVisualStyle resolveMenuVisualStyle(const MenuStyleInput& input) {
   const ThemeMapToken& map = ThemeManager::instance().currentMapToken();
   MenuVisualStyle style = input.theme == AdMenu::MenuTheme::Dark
-                              ? makeDarkStyle(map, input.componentTokens)
-                              : makeLightStyle(map, input.componentTokens);
+                              ? makeDarkStyle(map, input.baseFont, input.componentTokens)
+                              : makeLightStyle(map, input.baseFont, input.componentTokens);
 
   style.metrics.inlineIndent = std::max(0, input.componentTokens.inlineIndent.value_or(style.metrics.inlineIndent));
 

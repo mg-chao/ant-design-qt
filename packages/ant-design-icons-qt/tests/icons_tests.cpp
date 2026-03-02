@@ -29,7 +29,9 @@ class IconsTests final : public QObject {
   }
 
   void outlinedApiReturnsIcon() {
-    const QIcon icon = adqt::icons::outlined::Search();
+    const adqt::icons::IconToken token = adqt::icons::outlined::Search();
+    QVERIFY(adqt::icons::isValid(token));
+    const QIcon icon = adqt::icons::makeIcon(token);
     QVERIFY(!icon.isNull());
     QVERIFY(QFile::exists(QStringLiteral(":/adqt/icons/outlined/search.svg")));
     QFile raw(QStringLiteral(":/adqt/icons/outlined/search.svg"));
@@ -39,20 +41,23 @@ class IconsTests final : public QObject {
   }
 
   void twotoneApiReturnsIcon() {
-    const QIcon icon = adqt::icons::twotone::Alert();
+    const adqt::icons::IconToken token = adqt::icons::twotone::Alert();
+    const QIcon icon = adqt::icons::makeIcon(token);
     QVERIFY(!icon.isNull());
   }
 
   void renderedPixmapHasExpectedSize() {
-    const QPixmap pm = adqt::icons::outlined::Download().pixmap(QSize(20, 20), QIcon::Normal, QIcon::Off);
+    const QPixmap pm =
+        adqt::icons::renderIconPixmap(adqt::icons::outlined::Download(), QSize(20, 20), 1.0,
+                                      QIcon::Normal, QIcon::Off);
     QVERIFY(!pm.isNull());
     QCOMPARE(pm.deviceIndependentSize().toSize(), QSize(20, 20));
     QVERIFY(pm.devicePixelRatioF() >= 1.0);
   }
 
   void explicitDevicePixelRatioProducesHiDpiPixmap() {
-    const QPixmap pm =
-        adqt::icons::outlined::Download().pixmap(QSize(18, 18), 2.0, QIcon::Normal, QIcon::Off);
+    const QPixmap pm = adqt::icons::renderIconPixmap(adqt::icons::outlined::Download(),
+                                                     QSize(18, 18), 2.0, QIcon::Normal, QIcon::Off);
     QVERIFY(!pm.isNull());
     QCOMPARE(pm.devicePixelRatioF(), 2.0);
     QCOMPARE(pm.deviceIndependentSize().toSize(), QSize(18, 18));
@@ -60,13 +65,32 @@ class IconsTests final : public QObject {
   }
 
   void disabledModeDiffersFromNormal() {
-    const QIcon icon = adqt::icons::outlined::Search();
+    const QIcon icon = adqt::icons::makeIcon(adqt::icons::outlined::Search());
     const QImage normal = icon.pixmap(QSize(24, 24), QIcon::Normal, QIcon::Off).toImage();
     const QImage disabled = icon.pixmap(QSize(24, 24), QIcon::Disabled, QIcon::Off).toImage();
 
     QVERIFY(!normal.isNull());
     QVERIFY(!disabled.isNull());
     QCOMPARE(normal.size(), disabled.size());
+  }
+
+  void outlinedIconRespectsExplicitPrimaryColor() {
+    adqt::icons::IconToken red = adqt::icons::outlined::Search();
+    red.style.primary = QColor(QStringLiteral("#ff4d4f"));
+    red.style.hasPrimary = true;
+
+    adqt::icons::IconToken blue = adqt::icons::outlined::Search();
+    blue.style.primary = QColor(QStringLiteral("#1677ff"));
+    blue.style.hasPrimary = true;
+
+    const QImage redImage =
+        adqt::icons::renderIconPixmap(red, QSize(24, 24), 1.0, QIcon::Normal, QIcon::Off).toImage();
+    const QImage blueImage =
+        adqt::icons::renderIconPixmap(blue, QSize(24, 24), 1.0, QIcon::Normal, QIcon::Off).toImage();
+
+    QVERIFY(!redImage.isNull());
+    QVERIFY(!blueImage.isNull());
+    QVERIFY(pngDigest(redImage) != pngDigest(blueImage));
   }
 
   void themeResolverAffectsTwotone() {
@@ -80,7 +104,7 @@ class IconsTests final : public QObject {
       return snapshot;
     });
 
-    const QImage first = adqt::icons::twotone::Alert().pixmap(QSize(24, 24)).toImage();
+    const QImage first = adqt::icons::makeIcon(adqt::icons::twotone::Alert()).pixmap(QSize(24, 24)).toImage();
 
     adqt::icons::setThemeResolver([] {
       adqt::icons::IconThemeSnapshot snapshot;
@@ -92,7 +116,8 @@ class IconsTests final : public QObject {
       return snapshot;
     });
 
-    const QImage second = adqt::icons::twotone::Alert().pixmap(QSize(24, 24)).toImage();
+    const QImage second =
+        adqt::icons::makeIcon(adqt::icons::twotone::Alert()).pixmap(QSize(24, 24)).toImage();
     QVERIFY(!first.isNull());
     QVERIFY(!second.isNull());
     QVERIFY(pngDigest(first) != pngDigest(second));

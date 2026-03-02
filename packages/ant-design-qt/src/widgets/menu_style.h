@@ -33,6 +33,7 @@ struct MenuMetrics {
   int groupTitleHorizontalPadding = 16;
   int groupTitleVerticalPadding = 8;
   int horizontalSpacing = 4;
+  QFont font;
 };
 
 struct MenuVisualStyle {

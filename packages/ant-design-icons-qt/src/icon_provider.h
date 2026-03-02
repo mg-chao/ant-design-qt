@@ -8,7 +8,9 @@
 
 namespace adqt::icons::detail {
 
+IconToken makeTokenByIndex(int index, const IconStyle& style);
 QIcon makeIconByIndex(int index, const IconStyle& style);
+QIcon makeIcon(const IconToken& token);
 
 QPixmap renderIconPixmapByIndex(int index,
                                 const IconStyle& style,
@@ -16,6 +18,11 @@ QPixmap renderIconPixmapByIndex(int index,
                                 qreal devicePixelRatio,
                                 QIcon::Mode mode,
                                 QIcon::State state);
+QPixmap renderIconPixmap(const IconToken& token,
+                         const QSize& logicalSize,
+                         qreal devicePixelRatio,
+                         QIcon::Mode mode,
+                         QIcon::State state);
 
 void setThemeResolver(IconThemeResolver resolver);
 void clearThemeResolver();

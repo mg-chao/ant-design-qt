@@ -3,12 +3,15 @@
 #include <QFont>
 #include <QFontMetrics>
 #include <QHideEvent>
+#include <QIcon>
 #include <QMoveEvent>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QTimer>
 #include <QtGlobal>
+
+#include "icons_types.h"
 
 namespace adqt::widgets {
 
@@ -131,8 +134,14 @@ class AdButton final : public QPushButton {
   bool autoInsertSpace() const;
   void setAutoInsertSpace(bool value);
 
-  QIcon loadingIcon() const;
-  void setLoadingIcon(const QIcon& value);
+  adqt::icons::IconToken iconToken() const;
+  void setIconToken(const adqt::icons::IconToken& value);
+
+  adqt::icons::IconToken loadingIconToken() const;
+  void setLoadingIconToken(const adqt::icons::IconToken& value);
+
+  void setIcon(const QIcon& value) = delete;
+  QIcon icon() const = delete;
 
   bool isLoadingVisible() const;
 
@@ -151,7 +160,8 @@ class AdButton final : public QPushButton {
   void loadingDelayChanged(int value);
   void iconPlacementChanged(IconPlacement value);
   void autoInsertSpaceChanged(bool value);
-  void loadingIconChanged(const QIcon& value);
+  void iconTokenChanged(const adqt::icons::IconToken& value);
+  void loadingIconTokenChanged(const adqt::icons::IconToken& value);
 
  protected:
   void paintEvent(QPaintEvent* event) override;
@@ -239,7 +249,8 @@ class AdButton final : public QPushButton {
   bool hovered_ = false;
   bool focusVisible_ = false;
 
-  QIcon loadingIcon_;
+  adqt::icons::IconToken iconToken_;
+  adqt::icons::IconToken loadingIconToken_;
   QTimer loadingDelayTimer_;
   bool spinnerSubscribed_ = false;
 

@@ -4,3334 +4,3334 @@
 #include "icon_provider.h"
 
 namespace adqt::icons::outlined {
-QIcon AccountBook(const IconStyle& style) {
-  return detail::makeIconByIndex(0, style);
+IconToken AccountBook(const IconStyle& style) {
+  return detail::makeTokenByIndex(0, style);
 }
 
-QIcon Aim(const IconStyle& style) {
-  return detail::makeIconByIndex(1, style);
+IconToken Aim(const IconStyle& style) {
+  return detail::makeTokenByIndex(1, style);
 }
 
-QIcon Alert(const IconStyle& style) {
-  return detail::makeIconByIndex(2, style);
+IconToken Alert(const IconStyle& style) {
+  return detail::makeTokenByIndex(2, style);
 }
 
-QIcon Alibaba(const IconStyle& style) {
-  return detail::makeIconByIndex(3, style);
+IconToken Alibaba(const IconStyle& style) {
+  return detail::makeTokenByIndex(3, style);
 }
 
-QIcon AlignCenter(const IconStyle& style) {
-  return detail::makeIconByIndex(4, style);
+IconToken AlignCenter(const IconStyle& style) {
+  return detail::makeTokenByIndex(4, style);
 }
 
-QIcon AlignLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(5, style);
+IconToken AlignLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(5, style);
 }
 
-QIcon AlignRight(const IconStyle& style) {
-  return detail::makeIconByIndex(6, style);
+IconToken AlignRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(6, style);
 }
 
-QIcon Alipay(const IconStyle& style) {
-  return detail::makeIconByIndex(7, style);
+IconToken Alipay(const IconStyle& style) {
+  return detail::makeTokenByIndex(7, style);
 }
 
-QIcon AlipayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(8, style);
+IconToken AlipayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(8, style);
 }
 
-QIcon Aliwangwang(const IconStyle& style) {
-  return detail::makeIconByIndex(9, style);
+IconToken Aliwangwang(const IconStyle& style) {
+  return detail::makeTokenByIndex(9, style);
 }
 
-QIcon Aliyun(const IconStyle& style) {
-  return detail::makeIconByIndex(10, style);
+IconToken Aliyun(const IconStyle& style) {
+  return detail::makeTokenByIndex(10, style);
 }
 
-QIcon Amazon(const IconStyle& style) {
-  return detail::makeIconByIndex(11, style);
+IconToken Amazon(const IconStyle& style) {
+  return detail::makeTokenByIndex(11, style);
 }
 
-QIcon Android(const IconStyle& style) {
-  return detail::makeIconByIndex(12, style);
+IconToken Android(const IconStyle& style) {
+  return detail::makeTokenByIndex(12, style);
 }
 
-QIcon AntCloud(const IconStyle& style) {
-  return detail::makeIconByIndex(13, style);
+IconToken AntCloud(const IconStyle& style) {
+  return detail::makeTokenByIndex(13, style);
 }
 
-QIcon AntDesign(const IconStyle& style) {
-  return detail::makeIconByIndex(14, style);
+IconToken AntDesign(const IconStyle& style) {
+  return detail::makeTokenByIndex(14, style);
 }
 
-QIcon Apartment(const IconStyle& style) {
-  return detail::makeIconByIndex(15, style);
+IconToken Apartment(const IconStyle& style) {
+  return detail::makeTokenByIndex(15, style);
 }
 
-QIcon Api(const IconStyle& style) {
-  return detail::makeIconByIndex(16, style);
+IconToken Api(const IconStyle& style) {
+  return detail::makeTokenByIndex(16, style);
 }
 
-QIcon Apple(const IconStyle& style) {
-  return detail::makeIconByIndex(17, style);
+IconToken Apple(const IconStyle& style) {
+  return detail::makeTokenByIndex(17, style);
 }
 
-QIcon Appstore(const IconStyle& style) {
-  return detail::makeIconByIndex(18, style);
+IconToken Appstore(const IconStyle& style) {
+  return detail::makeTokenByIndex(18, style);
 }
 
-QIcon AppstoreAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(19, style);
+IconToken AppstoreAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(19, style);
 }
 
-QIcon AreaChart(const IconStyle& style) {
-  return detail::makeIconByIndex(20, style);
+IconToken AreaChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(20, style);
 }
 
-QIcon ArrowDown(const IconStyle& style) {
-  return detail::makeIconByIndex(21, style);
+IconToken ArrowDown(const IconStyle& style) {
+  return detail::makeTokenByIndex(21, style);
 }
 
-QIcon ArrowLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(22, style);
+IconToken ArrowLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(22, style);
 }
 
-QIcon ArrowRight(const IconStyle& style) {
-  return detail::makeIconByIndex(23, style);
+IconToken ArrowRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(23, style);
 }
 
-QIcon ArrowUp(const IconStyle& style) {
-  return detail::makeIconByIndex(24, style);
+IconToken ArrowUp(const IconStyle& style) {
+  return detail::makeTokenByIndex(24, style);
 }
 
-QIcon ArrowsAlt(const IconStyle& style) {
-  return detail::makeIconByIndex(25, style);
+IconToken ArrowsAlt(const IconStyle& style) {
+  return detail::makeTokenByIndex(25, style);
 }
 
-QIcon Audio(const IconStyle& style) {
-  return detail::makeIconByIndex(26, style);
+IconToken Audio(const IconStyle& style) {
+  return detail::makeTokenByIndex(26, style);
 }
 
-QIcon AudioMuted(const IconStyle& style) {
-  return detail::makeIconByIndex(27, style);
+IconToken AudioMuted(const IconStyle& style) {
+  return detail::makeTokenByIndex(27, style);
 }
 
-QIcon Audit(const IconStyle& style) {
-  return detail::makeIconByIndex(28, style);
+IconToken Audit(const IconStyle& style) {
+  return detail::makeTokenByIndex(28, style);
 }
 
-QIcon Backward(const IconStyle& style) {
-  return detail::makeIconByIndex(29, style);
+IconToken Backward(const IconStyle& style) {
+  return detail::makeTokenByIndex(29, style);
 }
 
-QIcon Baidu(const IconStyle& style) {
-  return detail::makeIconByIndex(30, style);
+IconToken Baidu(const IconStyle& style) {
+  return detail::makeTokenByIndex(30, style);
 }
 
-QIcon Bank(const IconStyle& style) {
-  return detail::makeIconByIndex(31, style);
+IconToken Bank(const IconStyle& style) {
+  return detail::makeTokenByIndex(31, style);
 }
 
-QIcon BarChart(const IconStyle& style) {
-  return detail::makeIconByIndex(32, style);
+IconToken BarChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(32, style);
 }
 
-QIcon Barcode(const IconStyle& style) {
-  return detail::makeIconByIndex(33, style);
+IconToken Barcode(const IconStyle& style) {
+  return detail::makeTokenByIndex(33, style);
 }
 
-QIcon Bars(const IconStyle& style) {
-  return detail::makeIconByIndex(34, style);
+IconToken Bars(const IconStyle& style) {
+  return detail::makeTokenByIndex(34, style);
 }
 
-QIcon Behance(const IconStyle& style) {
-  return detail::makeIconByIndex(35, style);
+IconToken Behance(const IconStyle& style) {
+  return detail::makeTokenByIndex(35, style);
 }
 
-QIcon BehanceSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(36, style);
+IconToken BehanceSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(36, style);
 }
 
-QIcon Bell(const IconStyle& style) {
-  return detail::makeIconByIndex(37, style);
+IconToken Bell(const IconStyle& style) {
+  return detail::makeTokenByIndex(37, style);
 }
 
-QIcon BgColors(const IconStyle& style) {
-  return detail::makeIconByIndex(38, style);
+IconToken BgColors(const IconStyle& style) {
+  return detail::makeTokenByIndex(38, style);
 }
 
-QIcon Bilibili(const IconStyle& style) {
-  return detail::makeIconByIndex(39, style);
+IconToken Bilibili(const IconStyle& style) {
+  return detail::makeTokenByIndex(39, style);
 }
 
-QIcon Block(const IconStyle& style) {
-  return detail::makeIconByIndex(40, style);
+IconToken Block(const IconStyle& style) {
+  return detail::makeTokenByIndex(40, style);
 }
 
-QIcon Bold(const IconStyle& style) {
-  return detail::makeIconByIndex(41, style);
+IconToken Bold(const IconStyle& style) {
+  return detail::makeTokenByIndex(41, style);
 }
 
-QIcon Book(const IconStyle& style) {
-  return detail::makeIconByIndex(42, style);
+IconToken Book(const IconStyle& style) {
+  return detail::makeTokenByIndex(42, style);
 }
 
-QIcon Border(const IconStyle& style) {
-  return detail::makeIconByIndex(43, style);
+IconToken Border(const IconStyle& style) {
+  return detail::makeTokenByIndex(43, style);
 }
 
-QIcon BorderBottom(const IconStyle& style) {
-  return detail::makeIconByIndex(44, style);
+IconToken BorderBottom(const IconStyle& style) {
+  return detail::makeTokenByIndex(44, style);
 }
 
-QIcon BorderHorizontal(const IconStyle& style) {
-  return detail::makeIconByIndex(45, style);
+IconToken BorderHorizontal(const IconStyle& style) {
+  return detail::makeTokenByIndex(45, style);
 }
 
-QIcon BorderInner(const IconStyle& style) {
-  return detail::makeIconByIndex(46, style);
+IconToken BorderInner(const IconStyle& style) {
+  return detail::makeTokenByIndex(46, style);
 }
 
-QIcon BorderLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(47, style);
+IconToken BorderLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(47, style);
 }
 
-QIcon BorderOuter(const IconStyle& style) {
-  return detail::makeIconByIndex(48, style);
+IconToken BorderOuter(const IconStyle& style) {
+  return detail::makeTokenByIndex(48, style);
 }
 
-QIcon BorderRight(const IconStyle& style) {
-  return detail::makeIconByIndex(49, style);
+IconToken BorderRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(49, style);
 }
 
-QIcon BorderTop(const IconStyle& style) {
-  return detail::makeIconByIndex(50, style);
+IconToken BorderTop(const IconStyle& style) {
+  return detail::makeTokenByIndex(50, style);
 }
 
-QIcon BorderVerticle(const IconStyle& style) {
-  return detail::makeIconByIndex(51, style);
+IconToken BorderVerticle(const IconStyle& style) {
+  return detail::makeTokenByIndex(51, style);
 }
 
-QIcon BorderlessTable(const IconStyle& style) {
-  return detail::makeIconByIndex(52, style);
+IconToken BorderlessTable(const IconStyle& style) {
+  return detail::makeTokenByIndex(52, style);
 }
 
-QIcon BoxPlot(const IconStyle& style) {
-  return detail::makeIconByIndex(53, style);
+IconToken BoxPlot(const IconStyle& style) {
+  return detail::makeTokenByIndex(53, style);
 }
 
-QIcon Branches(const IconStyle& style) {
-  return detail::makeIconByIndex(54, style);
+IconToken Branches(const IconStyle& style) {
+  return detail::makeTokenByIndex(54, style);
 }
 
-QIcon Bug(const IconStyle& style) {
-  return detail::makeIconByIndex(55, style);
+IconToken Bug(const IconStyle& style) {
+  return detail::makeTokenByIndex(55, style);
 }
 
-QIcon Build(const IconStyle& style) {
-  return detail::makeIconByIndex(56, style);
+IconToken Build(const IconStyle& style) {
+  return detail::makeTokenByIndex(56, style);
 }
 
-QIcon Bulb(const IconStyle& style) {
-  return detail::makeIconByIndex(57, style);
+IconToken Bulb(const IconStyle& style) {
+  return detail::makeTokenByIndex(57, style);
 }
 
-QIcon Calculator(const IconStyle& style) {
-  return detail::makeIconByIndex(58, style);
+IconToken Calculator(const IconStyle& style) {
+  return detail::makeTokenByIndex(58, style);
 }
 
-QIcon Calendar(const IconStyle& style) {
-  return detail::makeIconByIndex(59, style);
+IconToken Calendar(const IconStyle& style) {
+  return detail::makeTokenByIndex(59, style);
 }
 
-QIcon Camera(const IconStyle& style) {
-  return detail::makeIconByIndex(60, style);
+IconToken Camera(const IconStyle& style) {
+  return detail::makeTokenByIndex(60, style);
 }
 
-QIcon Car(const IconStyle& style) {
-  return detail::makeIconByIndex(61, style);
+IconToken Car(const IconStyle& style) {
+  return detail::makeTokenByIndex(61, style);
 }
 
-QIcon CaretDown(const IconStyle& style) {
-  return detail::makeIconByIndex(62, style);
+IconToken CaretDown(const IconStyle& style) {
+  return detail::makeTokenByIndex(62, style);
 }
 
-QIcon CaretLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(63, style);
+IconToken CaretLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(63, style);
 }
 
-QIcon CaretRight(const IconStyle& style) {
-  return detail::makeIconByIndex(64, style);
+IconToken CaretRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(64, style);
 }
 
-QIcon CaretUp(const IconStyle& style) {
-  return detail::makeIconByIndex(65, style);
+IconToken CaretUp(const IconStyle& style) {
+  return detail::makeTokenByIndex(65, style);
 }
 
-QIcon CarryOut(const IconStyle& style) {
-  return detail::makeIconByIndex(66, style);
+IconToken CarryOut(const IconStyle& style) {
+  return detail::makeTokenByIndex(66, style);
 }
 
-QIcon Check(const IconStyle& style) {
-  return detail::makeIconByIndex(67, style);
+IconToken Check(const IconStyle& style) {
+  return detail::makeTokenByIndex(67, style);
 }
 
-QIcon CheckCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(68, style);
+IconToken CheckCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(68, style);
 }
 
-QIcon CheckSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(69, style);
+IconToken CheckSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(69, style);
 }
 
-QIcon Chrome(const IconStyle& style) {
-  return detail::makeIconByIndex(70, style);
+IconToken Chrome(const IconStyle& style) {
+  return detail::makeTokenByIndex(70, style);
 }
 
-QIcon Ci(const IconStyle& style) {
-  return detail::makeIconByIndex(71, style);
+IconToken Ci(const IconStyle& style) {
+  return detail::makeTokenByIndex(71, style);
 }
 
-QIcon CiCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(72, style);
+IconToken CiCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(72, style);
 }
 
-QIcon Clear(const IconStyle& style) {
-  return detail::makeIconByIndex(73, style);
+IconToken Clear(const IconStyle& style) {
+  return detail::makeTokenByIndex(73, style);
 }
 
-QIcon ClockCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(74, style);
+IconToken ClockCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(74, style);
 }
 
-QIcon Close(const IconStyle& style) {
-  return detail::makeIconByIndex(75, style);
+IconToken Close(const IconStyle& style) {
+  return detail::makeTokenByIndex(75, style);
 }
 
-QIcon CloseCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(76, style);
+IconToken CloseCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(76, style);
 }
 
-QIcon CloseSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(77, style);
+IconToken CloseSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(77, style);
 }
 
-QIcon Cloud(const IconStyle& style) {
-  return detail::makeIconByIndex(78, style);
+IconToken Cloud(const IconStyle& style) {
+  return detail::makeTokenByIndex(78, style);
 }
 
-QIcon CloudDownload(const IconStyle& style) {
-  return detail::makeIconByIndex(79, style);
+IconToken CloudDownload(const IconStyle& style) {
+  return detail::makeTokenByIndex(79, style);
 }
 
-QIcon CloudServer(const IconStyle& style) {
-  return detail::makeIconByIndex(80, style);
+IconToken CloudServer(const IconStyle& style) {
+  return detail::makeTokenByIndex(80, style);
 }
 
-QIcon CloudSync(const IconStyle& style) {
-  return detail::makeIconByIndex(81, style);
+IconToken CloudSync(const IconStyle& style) {
+  return detail::makeTokenByIndex(81, style);
 }
 
-QIcon CloudUpload(const IconStyle& style) {
-  return detail::makeIconByIndex(82, style);
+IconToken CloudUpload(const IconStyle& style) {
+  return detail::makeTokenByIndex(82, style);
 }
 
-QIcon Cluster(const IconStyle& style) {
-  return detail::makeIconByIndex(83, style);
+IconToken Cluster(const IconStyle& style) {
+  return detail::makeTokenByIndex(83, style);
 }
 
-QIcon Code(const IconStyle& style) {
-  return detail::makeIconByIndex(84, style);
+IconToken Code(const IconStyle& style) {
+  return detail::makeTokenByIndex(84, style);
 }
 
-QIcon CodeSandbox(const IconStyle& style) {
-  return detail::makeIconByIndex(85, style);
+IconToken CodeSandbox(const IconStyle& style) {
+  return detail::makeTokenByIndex(85, style);
 }
 
-QIcon Codepen(const IconStyle& style) {
-  return detail::makeIconByIndex(86, style);
+IconToken Codepen(const IconStyle& style) {
+  return detail::makeTokenByIndex(86, style);
 }
 
-QIcon CodepenCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(87, style);
+IconToken CodepenCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(87, style);
 }
 
-QIcon Coffee(const IconStyle& style) {
-  return detail::makeIconByIndex(88, style);
+IconToken Coffee(const IconStyle& style) {
+  return detail::makeTokenByIndex(88, style);
 }
 
-QIcon ColumnHeight(const IconStyle& style) {
-  return detail::makeIconByIndex(89, style);
+IconToken ColumnHeight(const IconStyle& style) {
+  return detail::makeTokenByIndex(89, style);
 }
 
-QIcon ColumnWidth(const IconStyle& style) {
-  return detail::makeIconByIndex(90, style);
+IconToken ColumnWidth(const IconStyle& style) {
+  return detail::makeTokenByIndex(90, style);
 }
 
-QIcon Comment(const IconStyle& style) {
-  return detail::makeIconByIndex(91, style);
+IconToken Comment(const IconStyle& style) {
+  return detail::makeTokenByIndex(91, style);
 }
 
-QIcon Compass(const IconStyle& style) {
-  return detail::makeIconByIndex(92, style);
+IconToken Compass(const IconStyle& style) {
+  return detail::makeTokenByIndex(92, style);
 }
 
-QIcon Compress(const IconStyle& style) {
-  return detail::makeIconByIndex(93, style);
+IconToken Compress(const IconStyle& style) {
+  return detail::makeTokenByIndex(93, style);
 }
 
-QIcon ConsoleSql(const IconStyle& style) {
-  return detail::makeIconByIndex(94, style);
+IconToken ConsoleSql(const IconStyle& style) {
+  return detail::makeTokenByIndex(94, style);
 }
 
-QIcon Contacts(const IconStyle& style) {
-  return detail::makeIconByIndex(95, style);
+IconToken Contacts(const IconStyle& style) {
+  return detail::makeTokenByIndex(95, style);
 }
 
-QIcon Container(const IconStyle& style) {
-  return detail::makeIconByIndex(96, style);
+IconToken Container(const IconStyle& style) {
+  return detail::makeTokenByIndex(96, style);
 }
 
-QIcon Control(const IconStyle& style) {
-  return detail::makeIconByIndex(97, style);
+IconToken Control(const IconStyle& style) {
+  return detail::makeTokenByIndex(97, style);
 }
 
-QIcon Copy(const IconStyle& style) {
-  return detail::makeIconByIndex(98, style);
+IconToken Copy(const IconStyle& style) {
+  return detail::makeTokenByIndex(98, style);
 }
 
-QIcon Copyright(const IconStyle& style) {
-  return detail::makeIconByIndex(99, style);
+IconToken Copyright(const IconStyle& style) {
+  return detail::makeTokenByIndex(99, style);
 }
 
-QIcon CopyrightCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(100, style);
+IconToken CopyrightCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(100, style);
 }
 
-QIcon CreditCard(const IconStyle& style) {
-  return detail::makeIconByIndex(101, style);
+IconToken CreditCard(const IconStyle& style) {
+  return detail::makeTokenByIndex(101, style);
 }
 
-QIcon Crown(const IconStyle& style) {
-  return detail::makeIconByIndex(102, style);
+IconToken Crown(const IconStyle& style) {
+  return detail::makeTokenByIndex(102, style);
 }
 
-QIcon CustomerService(const IconStyle& style) {
-  return detail::makeIconByIndex(103, style);
+IconToken CustomerService(const IconStyle& style) {
+  return detail::makeTokenByIndex(103, style);
 }
 
-QIcon Dash(const IconStyle& style) {
-  return detail::makeIconByIndex(104, style);
+IconToken Dash(const IconStyle& style) {
+  return detail::makeTokenByIndex(104, style);
 }
 
-QIcon Dashboard(const IconStyle& style) {
-  return detail::makeIconByIndex(105, style);
+IconToken Dashboard(const IconStyle& style) {
+  return detail::makeTokenByIndex(105, style);
 }
 
-QIcon Database(const IconStyle& style) {
-  return detail::makeIconByIndex(106, style);
+IconToken Database(const IconStyle& style) {
+  return detail::makeTokenByIndex(106, style);
 }
 
-QIcon Delete(const IconStyle& style) {
-  return detail::makeIconByIndex(107, style);
+IconToken Delete(const IconStyle& style) {
+  return detail::makeTokenByIndex(107, style);
 }
 
-QIcon DeleteColumn(const IconStyle& style) {
-  return detail::makeIconByIndex(108, style);
+IconToken DeleteColumn(const IconStyle& style) {
+  return detail::makeTokenByIndex(108, style);
 }
 
-QIcon DeleteRow(const IconStyle& style) {
-  return detail::makeIconByIndex(109, style);
+IconToken DeleteRow(const IconStyle& style) {
+  return detail::makeTokenByIndex(109, style);
 }
 
-QIcon DeliveredProcedure(const IconStyle& style) {
-  return detail::makeIconByIndex(110, style);
+IconToken DeliveredProcedure(const IconStyle& style) {
+  return detail::makeTokenByIndex(110, style);
 }
 
-QIcon DeploymentUnit(const IconStyle& style) {
-  return detail::makeIconByIndex(111, style);
+IconToken DeploymentUnit(const IconStyle& style) {
+  return detail::makeTokenByIndex(111, style);
 }
 
-QIcon Desktop(const IconStyle& style) {
-  return detail::makeIconByIndex(112, style);
+IconToken Desktop(const IconStyle& style) {
+  return detail::makeTokenByIndex(112, style);
 }
 
-QIcon Diff(const IconStyle& style) {
-  return detail::makeIconByIndex(113, style);
+IconToken Diff(const IconStyle& style) {
+  return detail::makeTokenByIndex(113, style);
 }
 
-QIcon Dingding(const IconStyle& style) {
-  return detail::makeIconByIndex(114, style);
+IconToken Dingding(const IconStyle& style) {
+  return detail::makeTokenByIndex(114, style);
 }
 
-QIcon Dingtalk(const IconStyle& style) {
-  return detail::makeIconByIndex(115, style);
+IconToken Dingtalk(const IconStyle& style) {
+  return detail::makeTokenByIndex(115, style);
 }
 
-QIcon Disconnect(const IconStyle& style) {
-  return detail::makeIconByIndex(116, style);
+IconToken Disconnect(const IconStyle& style) {
+  return detail::makeTokenByIndex(116, style);
 }
 
-QIcon Discord(const IconStyle& style) {
-  return detail::makeIconByIndex(117, style);
+IconToken Discord(const IconStyle& style) {
+  return detail::makeTokenByIndex(117, style);
 }
 
-QIcon Dislike(const IconStyle& style) {
-  return detail::makeIconByIndex(118, style);
+IconToken Dislike(const IconStyle& style) {
+  return detail::makeTokenByIndex(118, style);
 }
 
-QIcon Docker(const IconStyle& style) {
-  return detail::makeIconByIndex(119, style);
+IconToken Docker(const IconStyle& style) {
+  return detail::makeTokenByIndex(119, style);
 }
 
-QIcon Dollar(const IconStyle& style) {
-  return detail::makeIconByIndex(120, style);
+IconToken Dollar(const IconStyle& style) {
+  return detail::makeTokenByIndex(120, style);
 }
 
-QIcon DollarCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(121, style);
+IconToken DollarCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(121, style);
 }
 
-QIcon DotChart(const IconStyle& style) {
-  return detail::makeIconByIndex(122, style);
+IconToken DotChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(122, style);
 }
 
-QIcon DotNet(const IconStyle& style) {
-  return detail::makeIconByIndex(123, style);
+IconToken DotNet(const IconStyle& style) {
+  return detail::makeTokenByIndex(123, style);
 }
 
-QIcon DoubleLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(124, style);
+IconToken DoubleLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(124, style);
 }
 
-QIcon DoubleRight(const IconStyle& style) {
-  return detail::makeIconByIndex(125, style);
+IconToken DoubleRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(125, style);
 }
 
-QIcon Down(const IconStyle& style) {
-  return detail::makeIconByIndex(126, style);
+IconToken Down(const IconStyle& style) {
+  return detail::makeTokenByIndex(126, style);
 }
 
-QIcon DownCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(127, style);
+IconToken DownCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(127, style);
 }
 
-QIcon DownSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(128, style);
+IconToken DownSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(128, style);
 }
 
-QIcon Download(const IconStyle& style) {
-  return detail::makeIconByIndex(129, style);
+IconToken Download(const IconStyle& style) {
+  return detail::makeTokenByIndex(129, style);
 }
 
-QIcon Drag(const IconStyle& style) {
-  return detail::makeIconByIndex(130, style);
+IconToken Drag(const IconStyle& style) {
+  return detail::makeTokenByIndex(130, style);
 }
 
-QIcon Dribbble(const IconStyle& style) {
-  return detail::makeIconByIndex(131, style);
+IconToken Dribbble(const IconStyle& style) {
+  return detail::makeTokenByIndex(131, style);
 }
 
-QIcon DribbbleSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(132, style);
+IconToken DribbbleSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(132, style);
 }
 
-QIcon Dropbox(const IconStyle& style) {
-  return detail::makeIconByIndex(133, style);
+IconToken Dropbox(const IconStyle& style) {
+  return detail::makeTokenByIndex(133, style);
 }
 
-QIcon Edit(const IconStyle& style) {
-  return detail::makeIconByIndex(134, style);
+IconToken Edit(const IconStyle& style) {
+  return detail::makeTokenByIndex(134, style);
 }
 
-QIcon Ellipsis(const IconStyle& style) {
-  return detail::makeIconByIndex(135, style);
+IconToken Ellipsis(const IconStyle& style) {
+  return detail::makeTokenByIndex(135, style);
 }
 
-QIcon Enter(const IconStyle& style) {
-  return detail::makeIconByIndex(136, style);
+IconToken Enter(const IconStyle& style) {
+  return detail::makeTokenByIndex(136, style);
 }
 
-QIcon Environment(const IconStyle& style) {
-  return detail::makeIconByIndex(137, style);
+IconToken Environment(const IconStyle& style) {
+  return detail::makeTokenByIndex(137, style);
 }
 
-QIcon Euro(const IconStyle& style) {
-  return detail::makeIconByIndex(138, style);
+IconToken Euro(const IconStyle& style) {
+  return detail::makeTokenByIndex(138, style);
 }
 
-QIcon EuroCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(139, style);
+IconToken EuroCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(139, style);
 }
 
-QIcon Exception(const IconStyle& style) {
-  return detail::makeIconByIndex(140, style);
+IconToken Exception(const IconStyle& style) {
+  return detail::makeTokenByIndex(140, style);
 }
 
-QIcon Exclamation(const IconStyle& style) {
-  return detail::makeIconByIndex(141, style);
+IconToken Exclamation(const IconStyle& style) {
+  return detail::makeTokenByIndex(141, style);
 }
 
-QIcon ExclamationCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(142, style);
+IconToken ExclamationCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(142, style);
 }
 
-QIcon Expand(const IconStyle& style) {
-  return detail::makeIconByIndex(143, style);
+IconToken Expand(const IconStyle& style) {
+  return detail::makeTokenByIndex(143, style);
 }
 
-QIcon ExpandAlt(const IconStyle& style) {
-  return detail::makeIconByIndex(144, style);
+IconToken ExpandAlt(const IconStyle& style) {
+  return detail::makeTokenByIndex(144, style);
 }
 
-QIcon Experiment(const IconStyle& style) {
-  return detail::makeIconByIndex(145, style);
+IconToken Experiment(const IconStyle& style) {
+  return detail::makeTokenByIndex(145, style);
 }
 
-QIcon Export(const IconStyle& style) {
-  return detail::makeIconByIndex(146, style);
+IconToken Export(const IconStyle& style) {
+  return detail::makeTokenByIndex(146, style);
 }
 
-QIcon Eye(const IconStyle& style) {
-  return detail::makeIconByIndex(147, style);
+IconToken Eye(const IconStyle& style) {
+  return detail::makeTokenByIndex(147, style);
 }
 
-QIcon EyeInvisible(const IconStyle& style) {
-  return detail::makeIconByIndex(148, style);
+IconToken EyeInvisible(const IconStyle& style) {
+  return detail::makeTokenByIndex(148, style);
 }
 
-QIcon Facebook(const IconStyle& style) {
-  return detail::makeIconByIndex(149, style);
+IconToken Facebook(const IconStyle& style) {
+  return detail::makeTokenByIndex(149, style);
 }
 
-QIcon Fall(const IconStyle& style) {
-  return detail::makeIconByIndex(150, style);
+IconToken Fall(const IconStyle& style) {
+  return detail::makeTokenByIndex(150, style);
 }
 
-QIcon FastBackward(const IconStyle& style) {
-  return detail::makeIconByIndex(151, style);
+IconToken FastBackward(const IconStyle& style) {
+  return detail::makeTokenByIndex(151, style);
 }
 
-QIcon FastForward(const IconStyle& style) {
-  return detail::makeIconByIndex(152, style);
+IconToken FastForward(const IconStyle& style) {
+  return detail::makeTokenByIndex(152, style);
 }
 
-QIcon FieldBinary(const IconStyle& style) {
-  return detail::makeIconByIndex(153, style);
+IconToken FieldBinary(const IconStyle& style) {
+  return detail::makeTokenByIndex(153, style);
 }
 
-QIcon FieldNumber(const IconStyle& style) {
-  return detail::makeIconByIndex(154, style);
+IconToken FieldNumber(const IconStyle& style) {
+  return detail::makeTokenByIndex(154, style);
 }
 
-QIcon FieldString(const IconStyle& style) {
-  return detail::makeIconByIndex(155, style);
+IconToken FieldString(const IconStyle& style) {
+  return detail::makeTokenByIndex(155, style);
 }
 
-QIcon FieldTime(const IconStyle& style) {
-  return detail::makeIconByIndex(156, style);
+IconToken FieldTime(const IconStyle& style) {
+  return detail::makeTokenByIndex(156, style);
 }
 
-QIcon File(const IconStyle& style) {
-  return detail::makeIconByIndex(157, style);
+IconToken File(const IconStyle& style) {
+  return detail::makeTokenByIndex(157, style);
 }
 
-QIcon FileAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(158, style);
+IconToken FileAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(158, style);
 }
 
-QIcon FileDone(const IconStyle& style) {
-  return detail::makeIconByIndex(159, style);
+IconToken FileDone(const IconStyle& style) {
+  return detail::makeTokenByIndex(159, style);
 }
 
-QIcon FileExcel(const IconStyle& style) {
-  return detail::makeIconByIndex(160, style);
+IconToken FileExcel(const IconStyle& style) {
+  return detail::makeTokenByIndex(160, style);
 }
 
-QIcon FileExclamation(const IconStyle& style) {
-  return detail::makeIconByIndex(161, style);
+IconToken FileExclamation(const IconStyle& style) {
+  return detail::makeTokenByIndex(161, style);
 }
 
-QIcon FileGif(const IconStyle& style) {
-  return detail::makeIconByIndex(162, style);
+IconToken FileGif(const IconStyle& style) {
+  return detail::makeTokenByIndex(162, style);
 }
 
-QIcon FileImage(const IconStyle& style) {
-  return detail::makeIconByIndex(163, style);
+IconToken FileImage(const IconStyle& style) {
+  return detail::makeTokenByIndex(163, style);
 }
 
-QIcon FileJpg(const IconStyle& style) {
-  return detail::makeIconByIndex(164, style);
+IconToken FileJpg(const IconStyle& style) {
+  return detail::makeTokenByIndex(164, style);
 }
 
-QIcon FileMarkdown(const IconStyle& style) {
-  return detail::makeIconByIndex(165, style);
+IconToken FileMarkdown(const IconStyle& style) {
+  return detail::makeTokenByIndex(165, style);
 }
 
-QIcon FilePdf(const IconStyle& style) {
-  return detail::makeIconByIndex(166, style);
+IconToken FilePdf(const IconStyle& style) {
+  return detail::makeTokenByIndex(166, style);
 }
 
-QIcon FilePpt(const IconStyle& style) {
-  return detail::makeIconByIndex(167, style);
+IconToken FilePpt(const IconStyle& style) {
+  return detail::makeTokenByIndex(167, style);
 }
 
-QIcon FileProtect(const IconStyle& style) {
-  return detail::makeIconByIndex(168, style);
+IconToken FileProtect(const IconStyle& style) {
+  return detail::makeTokenByIndex(168, style);
 }
 
-QIcon FileSearch(const IconStyle& style) {
-  return detail::makeIconByIndex(169, style);
+IconToken FileSearch(const IconStyle& style) {
+  return detail::makeTokenByIndex(169, style);
 }
 
-QIcon FileSync(const IconStyle& style) {
-  return detail::makeIconByIndex(170, style);
+IconToken FileSync(const IconStyle& style) {
+  return detail::makeTokenByIndex(170, style);
 }
 
-QIcon FileText(const IconStyle& style) {
-  return detail::makeIconByIndex(171, style);
+IconToken FileText(const IconStyle& style) {
+  return detail::makeTokenByIndex(171, style);
 }
 
-QIcon FileUnknown(const IconStyle& style) {
-  return detail::makeIconByIndex(172, style);
+IconToken FileUnknown(const IconStyle& style) {
+  return detail::makeTokenByIndex(172, style);
 }
 
-QIcon FileWord(const IconStyle& style) {
-  return detail::makeIconByIndex(173, style);
+IconToken FileWord(const IconStyle& style) {
+  return detail::makeTokenByIndex(173, style);
 }
 
-QIcon FileZip(const IconStyle& style) {
-  return detail::makeIconByIndex(174, style);
+IconToken FileZip(const IconStyle& style) {
+  return detail::makeTokenByIndex(174, style);
 }
 
-QIcon Filter(const IconStyle& style) {
-  return detail::makeIconByIndex(175, style);
+IconToken Filter(const IconStyle& style) {
+  return detail::makeTokenByIndex(175, style);
 }
 
-QIcon Fire(const IconStyle& style) {
-  return detail::makeIconByIndex(176, style);
+IconToken Fire(const IconStyle& style) {
+  return detail::makeTokenByIndex(176, style);
 }
 
-QIcon Flag(const IconStyle& style) {
-  return detail::makeIconByIndex(177, style);
+IconToken Flag(const IconStyle& style) {
+  return detail::makeTokenByIndex(177, style);
 }
 
-QIcon Folder(const IconStyle& style) {
-  return detail::makeIconByIndex(178, style);
+IconToken Folder(const IconStyle& style) {
+  return detail::makeTokenByIndex(178, style);
 }
 
-QIcon FolderAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(179, style);
+IconToken FolderAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(179, style);
 }
 
-QIcon FolderOpen(const IconStyle& style) {
-  return detail::makeIconByIndex(180, style);
+IconToken FolderOpen(const IconStyle& style) {
+  return detail::makeTokenByIndex(180, style);
 }
 
-QIcon FolderView(const IconStyle& style) {
-  return detail::makeIconByIndex(181, style);
+IconToken FolderView(const IconStyle& style) {
+  return detail::makeTokenByIndex(181, style);
 }
 
-QIcon FontColors(const IconStyle& style) {
-  return detail::makeIconByIndex(182, style);
+IconToken FontColors(const IconStyle& style) {
+  return detail::makeTokenByIndex(182, style);
 }
 
-QIcon FontSize(const IconStyle& style) {
-  return detail::makeIconByIndex(183, style);
+IconToken FontSize(const IconStyle& style) {
+  return detail::makeTokenByIndex(183, style);
 }
 
-QIcon Fork(const IconStyle& style) {
-  return detail::makeIconByIndex(184, style);
+IconToken Fork(const IconStyle& style) {
+  return detail::makeTokenByIndex(184, style);
 }
 
-QIcon Form(const IconStyle& style) {
-  return detail::makeIconByIndex(185, style);
+IconToken Form(const IconStyle& style) {
+  return detail::makeTokenByIndex(185, style);
 }
 
-QIcon FormatPainter(const IconStyle& style) {
-  return detail::makeIconByIndex(186, style);
+IconToken FormatPainter(const IconStyle& style) {
+  return detail::makeTokenByIndex(186, style);
 }
 
-QIcon Forward(const IconStyle& style) {
-  return detail::makeIconByIndex(187, style);
+IconToken Forward(const IconStyle& style) {
+  return detail::makeTokenByIndex(187, style);
 }
 
-QIcon Frown(const IconStyle& style) {
-  return detail::makeIconByIndex(188, style);
+IconToken Frown(const IconStyle& style) {
+  return detail::makeTokenByIndex(188, style);
 }
 
-QIcon Fullscreen(const IconStyle& style) {
-  return detail::makeIconByIndex(189, style);
+IconToken Fullscreen(const IconStyle& style) {
+  return detail::makeTokenByIndex(189, style);
 }
 
-QIcon FullscreenExit(const IconStyle& style) {
-  return detail::makeIconByIndex(190, style);
+IconToken FullscreenExit(const IconStyle& style) {
+  return detail::makeTokenByIndex(190, style);
 }
 
-QIcon Function(const IconStyle& style) {
-  return detail::makeIconByIndex(191, style);
+IconToken Function(const IconStyle& style) {
+  return detail::makeTokenByIndex(191, style);
 }
 
-QIcon Fund(const IconStyle& style) {
-  return detail::makeIconByIndex(192, style);
+IconToken Fund(const IconStyle& style) {
+  return detail::makeTokenByIndex(192, style);
 }
 
-QIcon FundProjectionScreen(const IconStyle& style) {
-  return detail::makeIconByIndex(193, style);
+IconToken FundProjectionScreen(const IconStyle& style) {
+  return detail::makeTokenByIndex(193, style);
 }
 
-QIcon FundView(const IconStyle& style) {
-  return detail::makeIconByIndex(194, style);
+IconToken FundView(const IconStyle& style) {
+  return detail::makeTokenByIndex(194, style);
 }
 
-QIcon FunnelPlot(const IconStyle& style) {
-  return detail::makeIconByIndex(195, style);
+IconToken FunnelPlot(const IconStyle& style) {
+  return detail::makeTokenByIndex(195, style);
 }
 
-QIcon Gateway(const IconStyle& style) {
-  return detail::makeIconByIndex(196, style);
+IconToken Gateway(const IconStyle& style) {
+  return detail::makeTokenByIndex(196, style);
 }
 
-QIcon Gif(const IconStyle& style) {
-  return detail::makeIconByIndex(197, style);
+IconToken Gif(const IconStyle& style) {
+  return detail::makeTokenByIndex(197, style);
 }
 
-QIcon Gift(const IconStyle& style) {
-  return detail::makeIconByIndex(198, style);
+IconToken Gift(const IconStyle& style) {
+  return detail::makeTokenByIndex(198, style);
 }
 
-QIcon Github(const IconStyle& style) {
-  return detail::makeIconByIndex(199, style);
+IconToken Github(const IconStyle& style) {
+  return detail::makeTokenByIndex(199, style);
 }
 
-QIcon Gitlab(const IconStyle& style) {
-  return detail::makeIconByIndex(200, style);
+IconToken Gitlab(const IconStyle& style) {
+  return detail::makeTokenByIndex(200, style);
 }
 
-QIcon Global(const IconStyle& style) {
-  return detail::makeIconByIndex(201, style);
+IconToken Global(const IconStyle& style) {
+  return detail::makeTokenByIndex(201, style);
 }
 
-QIcon Gold(const IconStyle& style) {
-  return detail::makeIconByIndex(202, style);
+IconToken Gold(const IconStyle& style) {
+  return detail::makeTokenByIndex(202, style);
 }
 
-QIcon Google(const IconStyle& style) {
-  return detail::makeIconByIndex(203, style);
+IconToken Google(const IconStyle& style) {
+  return detail::makeTokenByIndex(203, style);
 }
 
-QIcon GooglePlus(const IconStyle& style) {
-  return detail::makeIconByIndex(204, style);
+IconToken GooglePlus(const IconStyle& style) {
+  return detail::makeTokenByIndex(204, style);
 }
 
-QIcon Group(const IconStyle& style) {
-  return detail::makeIconByIndex(205, style);
+IconToken Group(const IconStyle& style) {
+  return detail::makeTokenByIndex(205, style);
 }
 
-QIcon HarmonyOS(const IconStyle& style) {
-  return detail::makeIconByIndex(206, style);
+IconToken HarmonyOS(const IconStyle& style) {
+  return detail::makeTokenByIndex(206, style);
 }
 
-QIcon Hdd(const IconStyle& style) {
-  return detail::makeIconByIndex(207, style);
+IconToken Hdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(207, style);
 }
 
-QIcon Heart(const IconStyle& style) {
-  return detail::makeIconByIndex(208, style);
+IconToken Heart(const IconStyle& style) {
+  return detail::makeTokenByIndex(208, style);
 }
 
-QIcon HeatMap(const IconStyle& style) {
-  return detail::makeIconByIndex(209, style);
+IconToken HeatMap(const IconStyle& style) {
+  return detail::makeTokenByIndex(209, style);
 }
 
-QIcon Highlight(const IconStyle& style) {
-  return detail::makeIconByIndex(210, style);
+IconToken Highlight(const IconStyle& style) {
+  return detail::makeTokenByIndex(210, style);
 }
 
-QIcon History(const IconStyle& style) {
-  return detail::makeIconByIndex(211, style);
+IconToken History(const IconStyle& style) {
+  return detail::makeTokenByIndex(211, style);
 }
 
-QIcon Holder(const IconStyle& style) {
-  return detail::makeIconByIndex(212, style);
+IconToken Holder(const IconStyle& style) {
+  return detail::makeTokenByIndex(212, style);
 }
 
-QIcon Home(const IconStyle& style) {
-  return detail::makeIconByIndex(213, style);
+IconToken Home(const IconStyle& style) {
+  return detail::makeTokenByIndex(213, style);
 }
 
-QIcon Hourglass(const IconStyle& style) {
-  return detail::makeIconByIndex(214, style);
+IconToken Hourglass(const IconStyle& style) {
+  return detail::makeTokenByIndex(214, style);
 }
 
-QIcon Html5(const IconStyle& style) {
-  return detail::makeIconByIndex(215, style);
+IconToken Html5(const IconStyle& style) {
+  return detail::makeTokenByIndex(215, style);
 }
 
-QIcon Idcard(const IconStyle& style) {
-  return detail::makeIconByIndex(216, style);
+IconToken Idcard(const IconStyle& style) {
+  return detail::makeTokenByIndex(216, style);
 }
 
-QIcon Ie(const IconStyle& style) {
-  return detail::makeIconByIndex(217, style);
+IconToken Ie(const IconStyle& style) {
+  return detail::makeTokenByIndex(217, style);
 }
 
-QIcon Import(const IconStyle& style) {
-  return detail::makeIconByIndex(218, style);
+IconToken Import(const IconStyle& style) {
+  return detail::makeTokenByIndex(218, style);
 }
 
-QIcon Inbox(const IconStyle& style) {
-  return detail::makeIconByIndex(219, style);
+IconToken Inbox(const IconStyle& style) {
+  return detail::makeTokenByIndex(219, style);
 }
 
-QIcon Info(const IconStyle& style) {
-  return detail::makeIconByIndex(220, style);
+IconToken Info(const IconStyle& style) {
+  return detail::makeTokenByIndex(220, style);
 }
 
-QIcon InfoCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(221, style);
+IconToken InfoCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(221, style);
 }
 
-QIcon InsertRowAbove(const IconStyle& style) {
-  return detail::makeIconByIndex(222, style);
+IconToken InsertRowAbove(const IconStyle& style) {
+  return detail::makeTokenByIndex(222, style);
 }
 
-QIcon InsertRowBelow(const IconStyle& style) {
-  return detail::makeIconByIndex(223, style);
+IconToken InsertRowBelow(const IconStyle& style) {
+  return detail::makeTokenByIndex(223, style);
 }
 
-QIcon InsertRowLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(224, style);
+IconToken InsertRowLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(224, style);
 }
 
-QIcon InsertRowRight(const IconStyle& style) {
-  return detail::makeIconByIndex(225, style);
+IconToken InsertRowRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(225, style);
 }
 
-QIcon Instagram(const IconStyle& style) {
-  return detail::makeIconByIndex(226, style);
+IconToken Instagram(const IconStyle& style) {
+  return detail::makeTokenByIndex(226, style);
 }
 
-QIcon Insurance(const IconStyle& style) {
-  return detail::makeIconByIndex(227, style);
+IconToken Insurance(const IconStyle& style) {
+  return detail::makeTokenByIndex(227, style);
 }
 
-QIcon Interaction(const IconStyle& style) {
-  return detail::makeIconByIndex(228, style);
+IconToken Interaction(const IconStyle& style) {
+  return detail::makeTokenByIndex(228, style);
 }
 
-QIcon IssuesClose(const IconStyle& style) {
-  return detail::makeIconByIndex(229, style);
+IconToken IssuesClose(const IconStyle& style) {
+  return detail::makeTokenByIndex(229, style);
 }
 
-QIcon Italic(const IconStyle& style) {
-  return detail::makeIconByIndex(230, style);
+IconToken Italic(const IconStyle& style) {
+  return detail::makeTokenByIndex(230, style);
 }
 
-QIcon Java(const IconStyle& style) {
-  return detail::makeIconByIndex(231, style);
+IconToken Java(const IconStyle& style) {
+  return detail::makeTokenByIndex(231, style);
 }
 
-QIcon JavaScript(const IconStyle& style) {
-  return detail::makeIconByIndex(232, style);
+IconToken JavaScript(const IconStyle& style) {
+  return detail::makeTokenByIndex(232, style);
 }
 
-QIcon Key(const IconStyle& style) {
-  return detail::makeIconByIndex(233, style);
+IconToken Key(const IconStyle& style) {
+  return detail::makeTokenByIndex(233, style);
 }
 
-QIcon Kubernetes(const IconStyle& style) {
-  return detail::makeIconByIndex(234, style);
+IconToken Kubernetes(const IconStyle& style) {
+  return detail::makeTokenByIndex(234, style);
 }
 
-QIcon Laptop(const IconStyle& style) {
-  return detail::makeIconByIndex(235, style);
+IconToken Laptop(const IconStyle& style) {
+  return detail::makeTokenByIndex(235, style);
 }
 
-QIcon Layout(const IconStyle& style) {
-  return detail::makeIconByIndex(236, style);
+IconToken Layout(const IconStyle& style) {
+  return detail::makeTokenByIndex(236, style);
 }
 
-QIcon Left(const IconStyle& style) {
-  return detail::makeIconByIndex(237, style);
+IconToken Left(const IconStyle& style) {
+  return detail::makeTokenByIndex(237, style);
 }
 
-QIcon LeftCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(238, style);
+IconToken LeftCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(238, style);
 }
 
-QIcon LeftSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(239, style);
+IconToken LeftSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(239, style);
 }
 
-QIcon Like(const IconStyle& style) {
-  return detail::makeIconByIndex(240, style);
+IconToken Like(const IconStyle& style) {
+  return detail::makeTokenByIndex(240, style);
 }
 
-QIcon Line(const IconStyle& style) {
-  return detail::makeIconByIndex(241, style);
+IconToken Line(const IconStyle& style) {
+  return detail::makeTokenByIndex(241, style);
 }
 
-QIcon LineChart(const IconStyle& style) {
-  return detail::makeIconByIndex(242, style);
+IconToken LineChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(242, style);
 }
 
-QIcon LineHeight(const IconStyle& style) {
-  return detail::makeIconByIndex(243, style);
+IconToken LineHeight(const IconStyle& style) {
+  return detail::makeTokenByIndex(243, style);
 }
 
-QIcon Link(const IconStyle& style) {
-  return detail::makeIconByIndex(244, style);
+IconToken Link(const IconStyle& style) {
+  return detail::makeTokenByIndex(244, style);
 }
 
-QIcon Linkedin(const IconStyle& style) {
-  return detail::makeIconByIndex(245, style);
+IconToken Linkedin(const IconStyle& style) {
+  return detail::makeTokenByIndex(245, style);
 }
 
-QIcon Linux(const IconStyle& style) {
-  return detail::makeIconByIndex(246, style);
+IconToken Linux(const IconStyle& style) {
+  return detail::makeTokenByIndex(246, style);
 }
 
-QIcon Loading(const IconStyle& style) {
-  return detail::makeIconByIndex(247, style);
+IconToken Loading(const IconStyle& style) {
+  return detail::makeTokenByIndex(247, style);
 }
 
-QIcon Loading3Quarters(const IconStyle& style) {
-  return detail::makeIconByIndex(248, style);
+IconToken Loading3Quarters(const IconStyle& style) {
+  return detail::makeTokenByIndex(248, style);
 }
 
-QIcon Lock(const IconStyle& style) {
-  return detail::makeIconByIndex(249, style);
+IconToken Lock(const IconStyle& style) {
+  return detail::makeTokenByIndex(249, style);
 }
 
-QIcon Login(const IconStyle& style) {
-  return detail::makeIconByIndex(250, style);
+IconToken Login(const IconStyle& style) {
+  return detail::makeTokenByIndex(250, style);
 }
 
-QIcon Logout(const IconStyle& style) {
-  return detail::makeIconByIndex(251, style);
+IconToken Logout(const IconStyle& style) {
+  return detail::makeTokenByIndex(251, style);
 }
 
-QIcon MacCommand(const IconStyle& style) {
-  return detail::makeIconByIndex(252, style);
+IconToken MacCommand(const IconStyle& style) {
+  return detail::makeTokenByIndex(252, style);
 }
 
-QIcon Mail(const IconStyle& style) {
-  return detail::makeIconByIndex(253, style);
+IconToken Mail(const IconStyle& style) {
+  return detail::makeTokenByIndex(253, style);
 }
 
-QIcon Man(const IconStyle& style) {
-  return detail::makeIconByIndex(254, style);
+IconToken Man(const IconStyle& style) {
+  return detail::makeTokenByIndex(254, style);
 }
 
-QIcon MedicineBox(const IconStyle& style) {
-  return detail::makeIconByIndex(255, style);
+IconToken MedicineBox(const IconStyle& style) {
+  return detail::makeTokenByIndex(255, style);
 }
 
-QIcon Medium(const IconStyle& style) {
-  return detail::makeIconByIndex(256, style);
+IconToken Medium(const IconStyle& style) {
+  return detail::makeTokenByIndex(256, style);
 }
 
-QIcon MediumWorkmark(const IconStyle& style) {
-  return detail::makeIconByIndex(257, style);
+IconToken MediumWorkmark(const IconStyle& style) {
+  return detail::makeTokenByIndex(257, style);
 }
 
-QIcon Meh(const IconStyle& style) {
-  return detail::makeIconByIndex(258, style);
+IconToken Meh(const IconStyle& style) {
+  return detail::makeTokenByIndex(258, style);
 }
 
-QIcon Menu(const IconStyle& style) {
-  return detail::makeIconByIndex(259, style);
+IconToken Menu(const IconStyle& style) {
+  return detail::makeTokenByIndex(259, style);
 }
 
-QIcon MenuFold(const IconStyle& style) {
-  return detail::makeIconByIndex(260, style);
+IconToken MenuFold(const IconStyle& style) {
+  return detail::makeTokenByIndex(260, style);
 }
 
-QIcon MenuUnfold(const IconStyle& style) {
-  return detail::makeIconByIndex(261, style);
+IconToken MenuUnfold(const IconStyle& style) {
+  return detail::makeTokenByIndex(261, style);
 }
 
-QIcon Merge(const IconStyle& style) {
-  return detail::makeIconByIndex(262, style);
+IconToken Merge(const IconStyle& style) {
+  return detail::makeTokenByIndex(262, style);
 }
 
-QIcon MergeCells(const IconStyle& style) {
-  return detail::makeIconByIndex(263, style);
+IconToken MergeCells(const IconStyle& style) {
+  return detail::makeTokenByIndex(263, style);
 }
 
-QIcon Message(const IconStyle& style) {
-  return detail::makeIconByIndex(264, style);
+IconToken Message(const IconStyle& style) {
+  return detail::makeTokenByIndex(264, style);
 }
 
-QIcon Minus(const IconStyle& style) {
-  return detail::makeIconByIndex(265, style);
+IconToken Minus(const IconStyle& style) {
+  return detail::makeTokenByIndex(265, style);
 }
 
-QIcon MinusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(266, style);
+IconToken MinusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(266, style);
 }
 
-QIcon MinusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(267, style);
+IconToken MinusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(267, style);
 }
 
-QIcon Mobile(const IconStyle& style) {
-  return detail::makeIconByIndex(268, style);
+IconToken Mobile(const IconStyle& style) {
+  return detail::makeTokenByIndex(268, style);
 }
 
-QIcon MoneyCollect(const IconStyle& style) {
-  return detail::makeIconByIndex(269, style);
+IconToken MoneyCollect(const IconStyle& style) {
+  return detail::makeTokenByIndex(269, style);
 }
 
-QIcon Monitor(const IconStyle& style) {
-  return detail::makeIconByIndex(270, style);
+IconToken Monitor(const IconStyle& style) {
+  return detail::makeTokenByIndex(270, style);
 }
 
-QIcon Moon(const IconStyle& style) {
-  return detail::makeIconByIndex(271, style);
+IconToken Moon(const IconStyle& style) {
+  return detail::makeTokenByIndex(271, style);
 }
 
-QIcon More(const IconStyle& style) {
-  return detail::makeIconByIndex(272, style);
+IconToken More(const IconStyle& style) {
+  return detail::makeTokenByIndex(272, style);
 }
 
-QIcon Muted(const IconStyle& style) {
-  return detail::makeIconByIndex(273, style);
+IconToken Muted(const IconStyle& style) {
+  return detail::makeTokenByIndex(273, style);
 }
 
-QIcon NodeCollapse(const IconStyle& style) {
-  return detail::makeIconByIndex(274, style);
+IconToken NodeCollapse(const IconStyle& style) {
+  return detail::makeTokenByIndex(274, style);
 }
 
-QIcon NodeExpand(const IconStyle& style) {
-  return detail::makeIconByIndex(275, style);
+IconToken NodeExpand(const IconStyle& style) {
+  return detail::makeTokenByIndex(275, style);
 }
 
-QIcon NodeIndex(const IconStyle& style) {
-  return detail::makeIconByIndex(276, style);
+IconToken NodeIndex(const IconStyle& style) {
+  return detail::makeTokenByIndex(276, style);
 }
 
-QIcon Notification(const IconStyle& style) {
-  return detail::makeIconByIndex(277, style);
+IconToken Notification(const IconStyle& style) {
+  return detail::makeTokenByIndex(277, style);
 }
 
-QIcon Number(const IconStyle& style) {
-  return detail::makeIconByIndex(278, style);
+IconToken Number(const IconStyle& style) {
+  return detail::makeTokenByIndex(278, style);
 }
 
-QIcon OneToOne(const IconStyle& style) {
-  return detail::makeIconByIndex(279, style);
+IconToken OneToOne(const IconStyle& style) {
+  return detail::makeTokenByIndex(279, style);
 }
 
-QIcon OpenAI(const IconStyle& style) {
-  return detail::makeIconByIndex(280, style);
+IconToken OpenAI(const IconStyle& style) {
+  return detail::makeTokenByIndex(280, style);
 }
 
-QIcon OrderedList(const IconStyle& style) {
-  return detail::makeIconByIndex(281, style);
+IconToken OrderedList(const IconStyle& style) {
+  return detail::makeTokenByIndex(281, style);
 }
 
-QIcon PaperClip(const IconStyle& style) {
-  return detail::makeIconByIndex(282, style);
+IconToken PaperClip(const IconStyle& style) {
+  return detail::makeTokenByIndex(282, style);
 }
 
-QIcon Partition(const IconStyle& style) {
-  return detail::makeIconByIndex(283, style);
+IconToken Partition(const IconStyle& style) {
+  return detail::makeTokenByIndex(283, style);
 }
 
-QIcon Pause(const IconStyle& style) {
-  return detail::makeIconByIndex(284, style);
+IconToken Pause(const IconStyle& style) {
+  return detail::makeTokenByIndex(284, style);
 }
 
-QIcon PauseCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(285, style);
+IconToken PauseCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(285, style);
 }
 
-QIcon PayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(286, style);
+IconToken PayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(286, style);
 }
 
-QIcon Percentage(const IconStyle& style) {
-  return detail::makeIconByIndex(287, style);
+IconToken Percentage(const IconStyle& style) {
+  return detail::makeTokenByIndex(287, style);
 }
 
-QIcon Phone(const IconStyle& style) {
-  return detail::makeIconByIndex(288, style);
+IconToken Phone(const IconStyle& style) {
+  return detail::makeTokenByIndex(288, style);
 }
 
-QIcon PicCenter(const IconStyle& style) {
-  return detail::makeIconByIndex(289, style);
+IconToken PicCenter(const IconStyle& style) {
+  return detail::makeTokenByIndex(289, style);
 }
 
-QIcon PicLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(290, style);
+IconToken PicLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(290, style);
 }
 
-QIcon PicRight(const IconStyle& style) {
-  return detail::makeIconByIndex(291, style);
+IconToken PicRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(291, style);
 }
 
-QIcon Picture(const IconStyle& style) {
-  return detail::makeIconByIndex(292, style);
+IconToken Picture(const IconStyle& style) {
+  return detail::makeTokenByIndex(292, style);
 }
 
-QIcon PieChart(const IconStyle& style) {
-  return detail::makeIconByIndex(293, style);
+IconToken PieChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(293, style);
 }
 
-QIcon Pinterest(const IconStyle& style) {
-  return detail::makeIconByIndex(294, style);
+IconToken Pinterest(const IconStyle& style) {
+  return detail::makeTokenByIndex(294, style);
 }
 
-QIcon PlayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(295, style);
+IconToken PlayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(295, style);
 }
 
-QIcon PlaySquare(const IconStyle& style) {
-  return detail::makeIconByIndex(296, style);
+IconToken PlaySquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(296, style);
 }
 
-QIcon Plus(const IconStyle& style) {
-  return detail::makeIconByIndex(297, style);
+IconToken Plus(const IconStyle& style) {
+  return detail::makeTokenByIndex(297, style);
 }
 
-QIcon PlusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(298, style);
+IconToken PlusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(298, style);
 }
 
-QIcon PlusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(299, style);
+IconToken PlusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(299, style);
 }
 
-QIcon Pound(const IconStyle& style) {
-  return detail::makeIconByIndex(300, style);
+IconToken Pound(const IconStyle& style) {
+  return detail::makeTokenByIndex(300, style);
 }
 
-QIcon PoundCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(301, style);
+IconToken PoundCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(301, style);
 }
 
-QIcon Poweroff(const IconStyle& style) {
-  return detail::makeIconByIndex(302, style);
+IconToken Poweroff(const IconStyle& style) {
+  return detail::makeTokenByIndex(302, style);
 }
 
-QIcon Printer(const IconStyle& style) {
-  return detail::makeIconByIndex(303, style);
+IconToken Printer(const IconStyle& style) {
+  return detail::makeTokenByIndex(303, style);
 }
 
-QIcon Product(const IconStyle& style) {
-  return detail::makeIconByIndex(304, style);
+IconToken Product(const IconStyle& style) {
+  return detail::makeTokenByIndex(304, style);
 }
 
-QIcon Profile(const IconStyle& style) {
-  return detail::makeIconByIndex(305, style);
+IconToken Profile(const IconStyle& style) {
+  return detail::makeTokenByIndex(305, style);
 }
 
-QIcon Project(const IconStyle& style) {
-  return detail::makeIconByIndex(306, style);
+IconToken Project(const IconStyle& style) {
+  return detail::makeTokenByIndex(306, style);
 }
 
-QIcon PropertySafety(const IconStyle& style) {
-  return detail::makeIconByIndex(307, style);
+IconToken PropertySafety(const IconStyle& style) {
+  return detail::makeTokenByIndex(307, style);
 }
 
-QIcon PullRequest(const IconStyle& style) {
-  return detail::makeIconByIndex(308, style);
+IconToken PullRequest(const IconStyle& style) {
+  return detail::makeTokenByIndex(308, style);
 }
 
-QIcon Pushpin(const IconStyle& style) {
-  return detail::makeIconByIndex(309, style);
+IconToken Pushpin(const IconStyle& style) {
+  return detail::makeTokenByIndex(309, style);
 }
 
-QIcon Python(const IconStyle& style) {
-  return detail::makeIconByIndex(310, style);
+IconToken Python(const IconStyle& style) {
+  return detail::makeTokenByIndex(310, style);
 }
 
-QIcon Qq(const IconStyle& style) {
-  return detail::makeIconByIndex(311, style);
+IconToken Qq(const IconStyle& style) {
+  return detail::makeTokenByIndex(311, style);
 }
 
-QIcon Qrcode(const IconStyle& style) {
-  return detail::makeIconByIndex(312, style);
+IconToken Qrcode(const IconStyle& style) {
+  return detail::makeTokenByIndex(312, style);
 }
 
-QIcon Question(const IconStyle& style) {
-  return detail::makeIconByIndex(313, style);
+IconToken Question(const IconStyle& style) {
+  return detail::makeTokenByIndex(313, style);
 }
 
-QIcon QuestionCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(314, style);
+IconToken QuestionCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(314, style);
 }
 
-QIcon RadarChart(const IconStyle& style) {
-  return detail::makeIconByIndex(315, style);
+IconToken RadarChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(315, style);
 }
 
-QIcon RadiusBottomleft(const IconStyle& style) {
-  return detail::makeIconByIndex(316, style);
+IconToken RadiusBottomleft(const IconStyle& style) {
+  return detail::makeTokenByIndex(316, style);
 }
 
-QIcon RadiusBottomright(const IconStyle& style) {
-  return detail::makeIconByIndex(317, style);
+IconToken RadiusBottomright(const IconStyle& style) {
+  return detail::makeTokenByIndex(317, style);
 }
 
-QIcon RadiusSetting(const IconStyle& style) {
-  return detail::makeIconByIndex(318, style);
+IconToken RadiusSetting(const IconStyle& style) {
+  return detail::makeTokenByIndex(318, style);
 }
 
-QIcon RadiusUpleft(const IconStyle& style) {
-  return detail::makeIconByIndex(319, style);
+IconToken RadiusUpleft(const IconStyle& style) {
+  return detail::makeTokenByIndex(319, style);
 }
 
-QIcon RadiusUpright(const IconStyle& style) {
-  return detail::makeIconByIndex(320, style);
+IconToken RadiusUpright(const IconStyle& style) {
+  return detail::makeTokenByIndex(320, style);
 }
 
-QIcon Read(const IconStyle& style) {
-  return detail::makeIconByIndex(321, style);
+IconToken Read(const IconStyle& style) {
+  return detail::makeTokenByIndex(321, style);
 }
 
-QIcon Reconciliation(const IconStyle& style) {
-  return detail::makeIconByIndex(322, style);
+IconToken Reconciliation(const IconStyle& style) {
+  return detail::makeTokenByIndex(322, style);
 }
 
-QIcon RedEnvelope(const IconStyle& style) {
-  return detail::makeIconByIndex(323, style);
+IconToken RedEnvelope(const IconStyle& style) {
+  return detail::makeTokenByIndex(323, style);
 }
 
-QIcon Reddit(const IconStyle& style) {
-  return detail::makeIconByIndex(324, style);
+IconToken Reddit(const IconStyle& style) {
+  return detail::makeTokenByIndex(324, style);
 }
 
-QIcon Redo(const IconStyle& style) {
-  return detail::makeIconByIndex(325, style);
+IconToken Redo(const IconStyle& style) {
+  return detail::makeTokenByIndex(325, style);
 }
 
-QIcon Reload(const IconStyle& style) {
-  return detail::makeIconByIndex(326, style);
+IconToken Reload(const IconStyle& style) {
+  return detail::makeTokenByIndex(326, style);
 }
 
-QIcon Rest(const IconStyle& style) {
-  return detail::makeIconByIndex(327, style);
+IconToken Rest(const IconStyle& style) {
+  return detail::makeTokenByIndex(327, style);
 }
 
-QIcon Retweet(const IconStyle& style) {
-  return detail::makeIconByIndex(328, style);
+IconToken Retweet(const IconStyle& style) {
+  return detail::makeTokenByIndex(328, style);
 }
 
-QIcon Right(const IconStyle& style) {
-  return detail::makeIconByIndex(329, style);
+IconToken Right(const IconStyle& style) {
+  return detail::makeTokenByIndex(329, style);
 }
 
-QIcon RightCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(330, style);
+IconToken RightCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(330, style);
 }
 
-QIcon RightSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(331, style);
+IconToken RightSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(331, style);
 }
 
-QIcon Rise(const IconStyle& style) {
-  return detail::makeIconByIndex(332, style);
+IconToken Rise(const IconStyle& style) {
+  return detail::makeTokenByIndex(332, style);
 }
 
-QIcon Robot(const IconStyle& style) {
-  return detail::makeIconByIndex(333, style);
+IconToken Robot(const IconStyle& style) {
+  return detail::makeTokenByIndex(333, style);
 }
 
-QIcon Rocket(const IconStyle& style) {
-  return detail::makeIconByIndex(334, style);
+IconToken Rocket(const IconStyle& style) {
+  return detail::makeTokenByIndex(334, style);
 }
 
-QIcon Rollback(const IconStyle& style) {
-  return detail::makeIconByIndex(335, style);
+IconToken Rollback(const IconStyle& style) {
+  return detail::makeTokenByIndex(335, style);
 }
 
-QIcon RotateLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(336, style);
+IconToken RotateLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(336, style);
 }
 
-QIcon RotateRight(const IconStyle& style) {
-  return detail::makeIconByIndex(337, style);
+IconToken RotateRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(337, style);
 }
 
-QIcon Ruby(const IconStyle& style) {
-  return detail::makeIconByIndex(338, style);
+IconToken Ruby(const IconStyle& style) {
+  return detail::makeTokenByIndex(338, style);
 }
 
-QIcon Safety(const IconStyle& style) {
-  return detail::makeIconByIndex(339, style);
+IconToken Safety(const IconStyle& style) {
+  return detail::makeTokenByIndex(339, style);
 }
 
-QIcon SafetyCertificate(const IconStyle& style) {
-  return detail::makeIconByIndex(340, style);
+IconToken SafetyCertificate(const IconStyle& style) {
+  return detail::makeTokenByIndex(340, style);
 }
 
-QIcon Save(const IconStyle& style) {
-  return detail::makeIconByIndex(341, style);
+IconToken Save(const IconStyle& style) {
+  return detail::makeTokenByIndex(341, style);
 }
 
-QIcon Scan(const IconStyle& style) {
-  return detail::makeIconByIndex(342, style);
+IconToken Scan(const IconStyle& style) {
+  return detail::makeTokenByIndex(342, style);
 }
 
-QIcon Schedule(const IconStyle& style) {
-  return detail::makeIconByIndex(343, style);
+IconToken Schedule(const IconStyle& style) {
+  return detail::makeTokenByIndex(343, style);
 }
 
-QIcon Scissor(const IconStyle& style) {
-  return detail::makeIconByIndex(344, style);
+IconToken Scissor(const IconStyle& style) {
+  return detail::makeTokenByIndex(344, style);
 }
 
-QIcon Search(const IconStyle& style) {
-  return detail::makeIconByIndex(345, style);
+IconToken Search(const IconStyle& style) {
+  return detail::makeTokenByIndex(345, style);
 }
 
-QIcon SecurityScan(const IconStyle& style) {
-  return detail::makeIconByIndex(346, style);
+IconToken SecurityScan(const IconStyle& style) {
+  return detail::makeTokenByIndex(346, style);
 }
 
-QIcon Select(const IconStyle& style) {
-  return detail::makeIconByIndex(347, style);
+IconToken Select(const IconStyle& style) {
+  return detail::makeTokenByIndex(347, style);
 }
 
-QIcon Send(const IconStyle& style) {
-  return detail::makeIconByIndex(348, style);
+IconToken Send(const IconStyle& style) {
+  return detail::makeTokenByIndex(348, style);
 }
 
-QIcon Setting(const IconStyle& style) {
-  return detail::makeIconByIndex(349, style);
+IconToken Setting(const IconStyle& style) {
+  return detail::makeTokenByIndex(349, style);
 }
 
-QIcon Shake(const IconStyle& style) {
-  return detail::makeIconByIndex(350, style);
+IconToken Shake(const IconStyle& style) {
+  return detail::makeTokenByIndex(350, style);
 }
 
-QIcon ShareAlt(const IconStyle& style) {
-  return detail::makeIconByIndex(351, style);
+IconToken ShareAlt(const IconStyle& style) {
+  return detail::makeTokenByIndex(351, style);
 }
 
-QIcon Shop(const IconStyle& style) {
-  return detail::makeIconByIndex(352, style);
+IconToken Shop(const IconStyle& style) {
+  return detail::makeTokenByIndex(352, style);
 }
 
-QIcon Shopping(const IconStyle& style) {
-  return detail::makeIconByIndex(353, style);
+IconToken Shopping(const IconStyle& style) {
+  return detail::makeTokenByIndex(353, style);
 }
 
-QIcon ShoppingCart(const IconStyle& style) {
-  return detail::makeIconByIndex(354, style);
+IconToken ShoppingCart(const IconStyle& style) {
+  return detail::makeTokenByIndex(354, style);
 }
 
-QIcon Shrink(const IconStyle& style) {
-  return detail::makeIconByIndex(355, style);
+IconToken Shrink(const IconStyle& style) {
+  return detail::makeTokenByIndex(355, style);
 }
 
-QIcon Signature(const IconStyle& style) {
-  return detail::makeIconByIndex(356, style);
+IconToken Signature(const IconStyle& style) {
+  return detail::makeTokenByIndex(356, style);
 }
 
-QIcon Sisternode(const IconStyle& style) {
-  return detail::makeIconByIndex(357, style);
+IconToken Sisternode(const IconStyle& style) {
+  return detail::makeTokenByIndex(357, style);
 }
 
-QIcon Sketch(const IconStyle& style) {
-  return detail::makeIconByIndex(358, style);
+IconToken Sketch(const IconStyle& style) {
+  return detail::makeTokenByIndex(358, style);
 }
 
-QIcon Skin(const IconStyle& style) {
-  return detail::makeIconByIndex(359, style);
+IconToken Skin(const IconStyle& style) {
+  return detail::makeTokenByIndex(359, style);
 }
 
-QIcon Skype(const IconStyle& style) {
-  return detail::makeIconByIndex(360, style);
+IconToken Skype(const IconStyle& style) {
+  return detail::makeTokenByIndex(360, style);
 }
 
-QIcon Slack(const IconStyle& style) {
-  return detail::makeIconByIndex(361, style);
+IconToken Slack(const IconStyle& style) {
+  return detail::makeTokenByIndex(361, style);
 }
 
-QIcon SlackSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(362, style);
+IconToken SlackSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(362, style);
 }
 
-QIcon Sliders(const IconStyle& style) {
-  return detail::makeIconByIndex(363, style);
+IconToken Sliders(const IconStyle& style) {
+  return detail::makeTokenByIndex(363, style);
 }
 
-QIcon SmallDash(const IconStyle& style) {
-  return detail::makeIconByIndex(364, style);
+IconToken SmallDash(const IconStyle& style) {
+  return detail::makeTokenByIndex(364, style);
 }
 
-QIcon Smile(const IconStyle& style) {
-  return detail::makeIconByIndex(365, style);
+IconToken Smile(const IconStyle& style) {
+  return detail::makeTokenByIndex(365, style);
 }
 
-QIcon Snippets(const IconStyle& style) {
-  return detail::makeIconByIndex(366, style);
+IconToken Snippets(const IconStyle& style) {
+  return detail::makeTokenByIndex(366, style);
 }
 
-QIcon Solution(const IconStyle& style) {
-  return detail::makeIconByIndex(367, style);
+IconToken Solution(const IconStyle& style) {
+  return detail::makeTokenByIndex(367, style);
 }
 
-QIcon SortAscending(const IconStyle& style) {
-  return detail::makeIconByIndex(368, style);
+IconToken SortAscending(const IconStyle& style) {
+  return detail::makeTokenByIndex(368, style);
 }
 
-QIcon SortDescending(const IconStyle& style) {
-  return detail::makeIconByIndex(369, style);
+IconToken SortDescending(const IconStyle& style) {
+  return detail::makeTokenByIndex(369, style);
 }
 
-QIcon Sound(const IconStyle& style) {
-  return detail::makeIconByIndex(370, style);
+IconToken Sound(const IconStyle& style) {
+  return detail::makeTokenByIndex(370, style);
 }
 
-QIcon SplitCells(const IconStyle& style) {
-  return detail::makeIconByIndex(371, style);
+IconToken SplitCells(const IconStyle& style) {
+  return detail::makeTokenByIndex(371, style);
 }
 
-QIcon Spotify(const IconStyle& style) {
-  return detail::makeIconByIndex(372, style);
+IconToken Spotify(const IconStyle& style) {
+  return detail::makeTokenByIndex(372, style);
 }
 
-QIcon Star(const IconStyle& style) {
-  return detail::makeIconByIndex(373, style);
+IconToken Star(const IconStyle& style) {
+  return detail::makeTokenByIndex(373, style);
 }
 
-QIcon StepBackward(const IconStyle& style) {
-  return detail::makeIconByIndex(374, style);
+IconToken StepBackward(const IconStyle& style) {
+  return detail::makeTokenByIndex(374, style);
 }
 
-QIcon StepForward(const IconStyle& style) {
-  return detail::makeIconByIndex(375, style);
+IconToken StepForward(const IconStyle& style) {
+  return detail::makeTokenByIndex(375, style);
 }
 
-QIcon Stock(const IconStyle& style) {
-  return detail::makeIconByIndex(376, style);
+IconToken Stock(const IconStyle& style) {
+  return detail::makeTokenByIndex(376, style);
 }
 
-QIcon Stop(const IconStyle& style) {
-  return detail::makeIconByIndex(377, style);
+IconToken Stop(const IconStyle& style) {
+  return detail::makeTokenByIndex(377, style);
 }
 
-QIcon Strikethrough(const IconStyle& style) {
-  return detail::makeIconByIndex(378, style);
+IconToken Strikethrough(const IconStyle& style) {
+  return detail::makeTokenByIndex(378, style);
 }
 
-QIcon Subnode(const IconStyle& style) {
-  return detail::makeIconByIndex(379, style);
+IconToken Subnode(const IconStyle& style) {
+  return detail::makeTokenByIndex(379, style);
 }
 
-QIcon Sun(const IconStyle& style) {
-  return detail::makeIconByIndex(380, style);
+IconToken Sun(const IconStyle& style) {
+  return detail::makeTokenByIndex(380, style);
 }
 
-QIcon Swap(const IconStyle& style) {
-  return detail::makeIconByIndex(381, style);
+IconToken Swap(const IconStyle& style) {
+  return detail::makeTokenByIndex(381, style);
 }
 
-QIcon SwapLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(382, style);
+IconToken SwapLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(382, style);
 }
 
-QIcon SwapRight(const IconStyle& style) {
-  return detail::makeIconByIndex(383, style);
+IconToken SwapRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(383, style);
 }
 
-QIcon Switcher(const IconStyle& style) {
-  return detail::makeIconByIndex(384, style);
+IconToken Switcher(const IconStyle& style) {
+  return detail::makeTokenByIndex(384, style);
 }
 
-QIcon Sync(const IconStyle& style) {
-  return detail::makeIconByIndex(385, style);
+IconToken Sync(const IconStyle& style) {
+  return detail::makeTokenByIndex(385, style);
 }
 
-QIcon Table(const IconStyle& style) {
-  return detail::makeIconByIndex(386, style);
+IconToken Table(const IconStyle& style) {
+  return detail::makeTokenByIndex(386, style);
 }
 
-QIcon Tablet(const IconStyle& style) {
-  return detail::makeIconByIndex(387, style);
+IconToken Tablet(const IconStyle& style) {
+  return detail::makeTokenByIndex(387, style);
 }
 
-QIcon Tag(const IconStyle& style) {
-  return detail::makeIconByIndex(388, style);
+IconToken Tag(const IconStyle& style) {
+  return detail::makeTokenByIndex(388, style);
 }
 
-QIcon Tags(const IconStyle& style) {
-  return detail::makeIconByIndex(389, style);
+IconToken Tags(const IconStyle& style) {
+  return detail::makeTokenByIndex(389, style);
 }
 
-QIcon Taobao(const IconStyle& style) {
-  return detail::makeIconByIndex(390, style);
+IconToken Taobao(const IconStyle& style) {
+  return detail::makeTokenByIndex(390, style);
 }
 
-QIcon TaobaoCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(391, style);
+IconToken TaobaoCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(391, style);
 }
 
-QIcon Team(const IconStyle& style) {
-  return detail::makeIconByIndex(392, style);
+IconToken Team(const IconStyle& style) {
+  return detail::makeTokenByIndex(392, style);
 }
 
-QIcon Thunderbolt(const IconStyle& style) {
-  return detail::makeIconByIndex(393, style);
+IconToken Thunderbolt(const IconStyle& style) {
+  return detail::makeTokenByIndex(393, style);
 }
 
-QIcon TikTok(const IconStyle& style) {
-  return detail::makeIconByIndex(394, style);
+IconToken TikTok(const IconStyle& style) {
+  return detail::makeTokenByIndex(394, style);
 }
 
-QIcon ToTop(const IconStyle& style) {
-  return detail::makeIconByIndex(395, style);
+IconToken ToTop(const IconStyle& style) {
+  return detail::makeTokenByIndex(395, style);
 }
 
-QIcon Tool(const IconStyle& style) {
-  return detail::makeIconByIndex(396, style);
+IconToken Tool(const IconStyle& style) {
+  return detail::makeTokenByIndex(396, style);
 }
 
-QIcon Trademark(const IconStyle& style) {
-  return detail::makeIconByIndex(397, style);
+IconToken Trademark(const IconStyle& style) {
+  return detail::makeTokenByIndex(397, style);
 }
 
-QIcon TrademarkCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(398, style);
+IconToken TrademarkCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(398, style);
 }
 
-QIcon Transaction(const IconStyle& style) {
-  return detail::makeIconByIndex(399, style);
+IconToken Transaction(const IconStyle& style) {
+  return detail::makeTokenByIndex(399, style);
 }
 
-QIcon Translation(const IconStyle& style) {
-  return detail::makeIconByIndex(400, style);
+IconToken Translation(const IconStyle& style) {
+  return detail::makeTokenByIndex(400, style);
 }
 
-QIcon Trophy(const IconStyle& style) {
-  return detail::makeIconByIndex(401, style);
+IconToken Trophy(const IconStyle& style) {
+  return detail::makeTokenByIndex(401, style);
 }
 
-QIcon Truck(const IconStyle& style) {
-  return detail::makeIconByIndex(402, style);
+IconToken Truck(const IconStyle& style) {
+  return detail::makeTokenByIndex(402, style);
 }
 
-QIcon Twitch(const IconStyle& style) {
-  return detail::makeIconByIndex(403, style);
+IconToken Twitch(const IconStyle& style) {
+  return detail::makeTokenByIndex(403, style);
 }
 
-QIcon Twitter(const IconStyle& style) {
-  return detail::makeIconByIndex(404, style);
+IconToken Twitter(const IconStyle& style) {
+  return detail::makeTokenByIndex(404, style);
 }
 
-QIcon Underline(const IconStyle& style) {
-  return detail::makeIconByIndex(405, style);
+IconToken Underline(const IconStyle& style) {
+  return detail::makeTokenByIndex(405, style);
 }
 
-QIcon Undo(const IconStyle& style) {
-  return detail::makeIconByIndex(406, style);
+IconToken Undo(const IconStyle& style) {
+  return detail::makeTokenByIndex(406, style);
 }
 
-QIcon Ungroup(const IconStyle& style) {
-  return detail::makeIconByIndex(407, style);
+IconToken Ungroup(const IconStyle& style) {
+  return detail::makeTokenByIndex(407, style);
 }
 
-QIcon Unlock(const IconStyle& style) {
-  return detail::makeIconByIndex(408, style);
+IconToken Unlock(const IconStyle& style) {
+  return detail::makeTokenByIndex(408, style);
 }
 
-QIcon UnorderedList(const IconStyle& style) {
-  return detail::makeIconByIndex(409, style);
+IconToken UnorderedList(const IconStyle& style) {
+  return detail::makeTokenByIndex(409, style);
 }
 
-QIcon Up(const IconStyle& style) {
-  return detail::makeIconByIndex(410, style);
+IconToken Up(const IconStyle& style) {
+  return detail::makeTokenByIndex(410, style);
 }
 
-QIcon UpCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(411, style);
+IconToken UpCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(411, style);
 }
 
-QIcon UpSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(412, style);
+IconToken UpSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(412, style);
 }
 
-QIcon Upload(const IconStyle& style) {
-  return detail::makeIconByIndex(413, style);
+IconToken Upload(const IconStyle& style) {
+  return detail::makeTokenByIndex(413, style);
 }
 
-QIcon Usb(const IconStyle& style) {
-  return detail::makeIconByIndex(414, style);
+IconToken Usb(const IconStyle& style) {
+  return detail::makeTokenByIndex(414, style);
 }
 
-QIcon User(const IconStyle& style) {
-  return detail::makeIconByIndex(415, style);
+IconToken User(const IconStyle& style) {
+  return detail::makeTokenByIndex(415, style);
 }
 
-QIcon UserAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(416, style);
+IconToken UserAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(416, style);
 }
 
-QIcon UserDelete(const IconStyle& style) {
-  return detail::makeIconByIndex(417, style);
+IconToken UserDelete(const IconStyle& style) {
+  return detail::makeTokenByIndex(417, style);
 }
 
-QIcon UserSwitch(const IconStyle& style) {
-  return detail::makeIconByIndex(418, style);
+IconToken UserSwitch(const IconStyle& style) {
+  return detail::makeTokenByIndex(418, style);
 }
 
-QIcon UsergroupAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(419, style);
+IconToken UsergroupAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(419, style);
 }
 
-QIcon UsergroupDelete(const IconStyle& style) {
-  return detail::makeIconByIndex(420, style);
+IconToken UsergroupDelete(const IconStyle& style) {
+  return detail::makeTokenByIndex(420, style);
 }
 
-QIcon Verified(const IconStyle& style) {
-  return detail::makeIconByIndex(421, style);
+IconToken Verified(const IconStyle& style) {
+  return detail::makeTokenByIndex(421, style);
 }
 
-QIcon VerticalAlignBottom(const IconStyle& style) {
-  return detail::makeIconByIndex(422, style);
+IconToken VerticalAlignBottom(const IconStyle& style) {
+  return detail::makeTokenByIndex(422, style);
 }
 
-QIcon VerticalAlignMiddle(const IconStyle& style) {
-  return detail::makeIconByIndex(423, style);
+IconToken VerticalAlignMiddle(const IconStyle& style) {
+  return detail::makeTokenByIndex(423, style);
 }
 
-QIcon VerticalAlignTop(const IconStyle& style) {
-  return detail::makeIconByIndex(424, style);
+IconToken VerticalAlignTop(const IconStyle& style) {
+  return detail::makeTokenByIndex(424, style);
 }
 
-QIcon VerticalLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(425, style);
+IconToken VerticalLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(425, style);
 }
 
-QIcon VerticalRight(const IconStyle& style) {
-  return detail::makeIconByIndex(426, style);
+IconToken VerticalRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(426, style);
 }
 
-QIcon VideoCamera(const IconStyle& style) {
-  return detail::makeIconByIndex(427, style);
+IconToken VideoCamera(const IconStyle& style) {
+  return detail::makeTokenByIndex(427, style);
 }
 
-QIcon VideoCameraAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(428, style);
+IconToken VideoCameraAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(428, style);
 }
 
-QIcon Wallet(const IconStyle& style) {
-  return detail::makeIconByIndex(429, style);
+IconToken Wallet(const IconStyle& style) {
+  return detail::makeTokenByIndex(429, style);
 }
 
-QIcon Warning(const IconStyle& style) {
-  return detail::makeIconByIndex(430, style);
+IconToken Warning(const IconStyle& style) {
+  return detail::makeTokenByIndex(430, style);
 }
 
-QIcon Wechat(const IconStyle& style) {
-  return detail::makeIconByIndex(431, style);
+IconToken Wechat(const IconStyle& style) {
+  return detail::makeTokenByIndex(431, style);
 }
 
-QIcon WechatWork(const IconStyle& style) {
-  return detail::makeIconByIndex(432, style);
+IconToken WechatWork(const IconStyle& style) {
+  return detail::makeTokenByIndex(432, style);
 }
 
-QIcon Weibo(const IconStyle& style) {
-  return detail::makeIconByIndex(433, style);
+IconToken Weibo(const IconStyle& style) {
+  return detail::makeTokenByIndex(433, style);
 }
 
-QIcon WeiboCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(434, style);
+IconToken WeiboCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(434, style);
 }
 
-QIcon WeiboSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(435, style);
+IconToken WeiboSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(435, style);
 }
 
-QIcon WhatsApp(const IconStyle& style) {
-  return detail::makeIconByIndex(436, style);
+IconToken WhatsApp(const IconStyle& style) {
+  return detail::makeTokenByIndex(436, style);
 }
 
-QIcon Wifi(const IconStyle& style) {
-  return detail::makeIconByIndex(437, style);
+IconToken Wifi(const IconStyle& style) {
+  return detail::makeTokenByIndex(437, style);
 }
 
-QIcon Windows(const IconStyle& style) {
-  return detail::makeIconByIndex(438, style);
+IconToken Windows(const IconStyle& style) {
+  return detail::makeTokenByIndex(438, style);
 }
 
-QIcon Woman(const IconStyle& style) {
-  return detail::makeIconByIndex(439, style);
+IconToken Woman(const IconStyle& style) {
+  return detail::makeTokenByIndex(439, style);
 }
 
-QIcon X(const IconStyle& style) {
-  return detail::makeIconByIndex(440, style);
+IconToken X(const IconStyle& style) {
+  return detail::makeTokenByIndex(440, style);
 }
 
-QIcon Yahoo(const IconStyle& style) {
-  return detail::makeIconByIndex(441, style);
+IconToken Yahoo(const IconStyle& style) {
+  return detail::makeTokenByIndex(441, style);
 }
 
-QIcon Youtube(const IconStyle& style) {
-  return detail::makeIconByIndex(442, style);
+IconToken Youtube(const IconStyle& style) {
+  return detail::makeTokenByIndex(442, style);
 }
 
-QIcon Yuque(const IconStyle& style) {
-  return detail::makeIconByIndex(443, style);
+IconToken Yuque(const IconStyle& style) {
+  return detail::makeTokenByIndex(443, style);
 }
 
-QIcon Zhihu(const IconStyle& style) {
-  return detail::makeIconByIndex(444, style);
+IconToken Zhihu(const IconStyle& style) {
+  return detail::makeTokenByIndex(444, style);
 }
 
-QIcon ZoomIn(const IconStyle& style) {
-  return detail::makeIconByIndex(445, style);
+IconToken ZoomIn(const IconStyle& style) {
+  return detail::makeTokenByIndex(445, style);
 }
 
-QIcon ZoomOut(const IconStyle& style) {
-  return detail::makeIconByIndex(446, style);
+IconToken ZoomOut(const IconStyle& style) {
+  return detail::makeTokenByIndex(446, style);
 }
 
 }  // namespace adqt::icons::outlined
 
 namespace adqt::icons::filled {
-QIcon AccountBook(const IconStyle& style) {
-  return detail::makeIconByIndex(447, style);
+IconToken AccountBook(const IconStyle& style) {
+  return detail::makeTokenByIndex(447, style);
 }
 
-QIcon Alert(const IconStyle& style) {
-  return detail::makeIconByIndex(448, style);
+IconToken Alert(const IconStyle& style) {
+  return detail::makeTokenByIndex(448, style);
 }
 
-QIcon AlipayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(449, style);
+IconToken AlipayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(449, style);
 }
 
-QIcon AlipaySquare(const IconStyle& style) {
-  return detail::makeIconByIndex(450, style);
+IconToken AlipaySquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(450, style);
 }
 
-QIcon Aliwangwang(const IconStyle& style) {
-  return detail::makeIconByIndex(451, style);
+IconToken Aliwangwang(const IconStyle& style) {
+  return detail::makeTokenByIndex(451, style);
 }
 
-QIcon AmazonCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(452, style);
+IconToken AmazonCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(452, style);
 }
 
-QIcon AmazonSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(453, style);
+IconToken AmazonSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(453, style);
 }
 
-QIcon Android(const IconStyle& style) {
-  return detail::makeIconByIndex(454, style);
+IconToken Android(const IconStyle& style) {
+  return detail::makeTokenByIndex(454, style);
 }
 
-QIcon Api(const IconStyle& style) {
-  return detail::makeIconByIndex(455, style);
+IconToken Api(const IconStyle& style) {
+  return detail::makeTokenByIndex(455, style);
 }
 
-QIcon Apple(const IconStyle& style) {
-  return detail::makeIconByIndex(456, style);
+IconToken Apple(const IconStyle& style) {
+  return detail::makeTokenByIndex(456, style);
 }
 
-QIcon Appstore(const IconStyle& style) {
-  return detail::makeIconByIndex(457, style);
+IconToken Appstore(const IconStyle& style) {
+  return detail::makeTokenByIndex(457, style);
 }
 
-QIcon Audio(const IconStyle& style) {
-  return detail::makeIconByIndex(458, style);
+IconToken Audio(const IconStyle& style) {
+  return detail::makeTokenByIndex(458, style);
 }
 
-QIcon Backward(const IconStyle& style) {
-  return detail::makeIconByIndex(459, style);
+IconToken Backward(const IconStyle& style) {
+  return detail::makeTokenByIndex(459, style);
 }
 
-QIcon Bank(const IconStyle& style) {
-  return detail::makeIconByIndex(460, style);
+IconToken Bank(const IconStyle& style) {
+  return detail::makeTokenByIndex(460, style);
 }
 
-QIcon BehanceCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(461, style);
+IconToken BehanceCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(461, style);
 }
 
-QIcon BehanceSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(462, style);
+IconToken BehanceSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(462, style);
 }
 
-QIcon Bell(const IconStyle& style) {
-  return detail::makeIconByIndex(463, style);
+IconToken Bell(const IconStyle& style) {
+  return detail::makeTokenByIndex(463, style);
 }
 
-QIcon Bilibili(const IconStyle& style) {
-  return detail::makeIconByIndex(464, style);
+IconToken Bilibili(const IconStyle& style) {
+  return detail::makeTokenByIndex(464, style);
 }
 
-QIcon Book(const IconStyle& style) {
-  return detail::makeIconByIndex(465, style);
+IconToken Book(const IconStyle& style) {
+  return detail::makeTokenByIndex(465, style);
 }
 
-QIcon BoxPlot(const IconStyle& style) {
-  return detail::makeIconByIndex(466, style);
+IconToken BoxPlot(const IconStyle& style) {
+  return detail::makeTokenByIndex(466, style);
 }
 
-QIcon Bug(const IconStyle& style) {
-  return detail::makeIconByIndex(467, style);
+IconToken Bug(const IconStyle& style) {
+  return detail::makeTokenByIndex(467, style);
 }
 
-QIcon Build(const IconStyle& style) {
-  return detail::makeIconByIndex(468, style);
+IconToken Build(const IconStyle& style) {
+  return detail::makeTokenByIndex(468, style);
 }
 
-QIcon Bulb(const IconStyle& style) {
-  return detail::makeIconByIndex(469, style);
+IconToken Bulb(const IconStyle& style) {
+  return detail::makeTokenByIndex(469, style);
 }
 
-QIcon Calculator(const IconStyle& style) {
-  return detail::makeIconByIndex(470, style);
+IconToken Calculator(const IconStyle& style) {
+  return detail::makeTokenByIndex(470, style);
 }
 
-QIcon Calendar(const IconStyle& style) {
-  return detail::makeIconByIndex(471, style);
+IconToken Calendar(const IconStyle& style) {
+  return detail::makeTokenByIndex(471, style);
 }
 
-QIcon Camera(const IconStyle& style) {
-  return detail::makeIconByIndex(472, style);
+IconToken Camera(const IconStyle& style) {
+  return detail::makeTokenByIndex(472, style);
 }
 
-QIcon Car(const IconStyle& style) {
-  return detail::makeIconByIndex(473, style);
+IconToken Car(const IconStyle& style) {
+  return detail::makeTokenByIndex(473, style);
 }
 
-QIcon CaretDown(const IconStyle& style) {
-  return detail::makeIconByIndex(474, style);
+IconToken CaretDown(const IconStyle& style) {
+  return detail::makeTokenByIndex(474, style);
 }
 
-QIcon CaretLeft(const IconStyle& style) {
-  return detail::makeIconByIndex(475, style);
+IconToken CaretLeft(const IconStyle& style) {
+  return detail::makeTokenByIndex(475, style);
 }
 
-QIcon CaretRight(const IconStyle& style) {
-  return detail::makeIconByIndex(476, style);
+IconToken CaretRight(const IconStyle& style) {
+  return detail::makeTokenByIndex(476, style);
 }
 
-QIcon CaretUp(const IconStyle& style) {
-  return detail::makeIconByIndex(477, style);
+IconToken CaretUp(const IconStyle& style) {
+  return detail::makeTokenByIndex(477, style);
 }
 
-QIcon CarryOut(const IconStyle& style) {
-  return detail::makeIconByIndex(478, style);
+IconToken CarryOut(const IconStyle& style) {
+  return detail::makeTokenByIndex(478, style);
 }
 
-QIcon CheckCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(479, style);
+IconToken CheckCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(479, style);
 }
 
-QIcon CheckSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(480, style);
+IconToken CheckSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(480, style);
 }
 
-QIcon Chrome(const IconStyle& style) {
-  return detail::makeIconByIndex(481, style);
+IconToken Chrome(const IconStyle& style) {
+  return detail::makeTokenByIndex(481, style);
 }
 
-QIcon CiCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(482, style);
+IconToken CiCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(482, style);
 }
 
-QIcon ClockCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(483, style);
+IconToken ClockCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(483, style);
 }
 
-QIcon CloseCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(484, style);
+IconToken CloseCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(484, style);
 }
 
-QIcon CloseSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(485, style);
+IconToken CloseSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(485, style);
 }
 
-QIcon Cloud(const IconStyle& style) {
-  return detail::makeIconByIndex(486, style);
+IconToken Cloud(const IconStyle& style) {
+  return detail::makeTokenByIndex(486, style);
 }
 
-QIcon Code(const IconStyle& style) {
-  return detail::makeIconByIndex(487, style);
+IconToken Code(const IconStyle& style) {
+  return detail::makeTokenByIndex(487, style);
 }
 
-QIcon CodeSandboxCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(488, style);
+IconToken CodeSandboxCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(488, style);
 }
 
-QIcon CodeSandboxSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(489, style);
+IconToken CodeSandboxSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(489, style);
 }
 
-QIcon CodepenCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(490, style);
+IconToken CodepenCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(490, style);
 }
 
-QIcon CodepenSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(491, style);
+IconToken CodepenSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(491, style);
 }
 
-QIcon Compass(const IconStyle& style) {
-  return detail::makeIconByIndex(492, style);
+IconToken Compass(const IconStyle& style) {
+  return detail::makeTokenByIndex(492, style);
 }
 
-QIcon Contacts(const IconStyle& style) {
-  return detail::makeIconByIndex(493, style);
+IconToken Contacts(const IconStyle& style) {
+  return detail::makeTokenByIndex(493, style);
 }
 
-QIcon Container(const IconStyle& style) {
-  return detail::makeIconByIndex(494, style);
+IconToken Container(const IconStyle& style) {
+  return detail::makeTokenByIndex(494, style);
 }
 
-QIcon Control(const IconStyle& style) {
-  return detail::makeIconByIndex(495, style);
+IconToken Control(const IconStyle& style) {
+  return detail::makeTokenByIndex(495, style);
 }
 
-QIcon Copy(const IconStyle& style) {
-  return detail::makeIconByIndex(496, style);
+IconToken Copy(const IconStyle& style) {
+  return detail::makeTokenByIndex(496, style);
 }
 
-QIcon CopyrightCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(497, style);
+IconToken CopyrightCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(497, style);
 }
 
-QIcon CreditCard(const IconStyle& style) {
-  return detail::makeIconByIndex(498, style);
+IconToken CreditCard(const IconStyle& style) {
+  return detail::makeTokenByIndex(498, style);
 }
 
-QIcon Crown(const IconStyle& style) {
-  return detail::makeIconByIndex(499, style);
+IconToken Crown(const IconStyle& style) {
+  return detail::makeTokenByIndex(499, style);
 }
 
-QIcon CustomerService(const IconStyle& style) {
-  return detail::makeIconByIndex(500, style);
+IconToken CustomerService(const IconStyle& style) {
+  return detail::makeTokenByIndex(500, style);
 }
 
-QIcon Dashboard(const IconStyle& style) {
-  return detail::makeIconByIndex(501, style);
+IconToken Dashboard(const IconStyle& style) {
+  return detail::makeTokenByIndex(501, style);
 }
 
-QIcon Database(const IconStyle& style) {
-  return detail::makeIconByIndex(502, style);
+IconToken Database(const IconStyle& style) {
+  return detail::makeTokenByIndex(502, style);
 }
 
-QIcon Delete(const IconStyle& style) {
-  return detail::makeIconByIndex(503, style);
+IconToken Delete(const IconStyle& style) {
+  return detail::makeTokenByIndex(503, style);
 }
 
-QIcon Diff(const IconStyle& style) {
-  return detail::makeIconByIndex(504, style);
+IconToken Diff(const IconStyle& style) {
+  return detail::makeTokenByIndex(504, style);
 }
 
-QIcon DingtalkCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(505, style);
+IconToken DingtalkCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(505, style);
 }
 
-QIcon DingtalkSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(506, style);
+IconToken DingtalkSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(506, style);
 }
 
-QIcon Discord(const IconStyle& style) {
-  return detail::makeIconByIndex(507, style);
+IconToken Discord(const IconStyle& style) {
+  return detail::makeTokenByIndex(507, style);
 }
 
-QIcon Dislike(const IconStyle& style) {
-  return detail::makeIconByIndex(508, style);
+IconToken Dislike(const IconStyle& style) {
+  return detail::makeTokenByIndex(508, style);
 }
 
-QIcon DollarCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(509, style);
+IconToken DollarCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(509, style);
 }
 
-QIcon DownCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(510, style);
+IconToken DownCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(510, style);
 }
 
-QIcon DownSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(511, style);
+IconToken DownSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(511, style);
 }
 
-QIcon DribbbleCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(512, style);
+IconToken DribbbleCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(512, style);
 }
 
-QIcon DribbbleSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(513, style);
+IconToken DribbbleSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(513, style);
 }
 
-QIcon DropboxCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(514, style);
+IconToken DropboxCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(514, style);
 }
 
-QIcon DropboxSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(515, style);
+IconToken DropboxSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(515, style);
 }
 
-QIcon Edit(const IconStyle& style) {
-  return detail::makeIconByIndex(516, style);
+IconToken Edit(const IconStyle& style) {
+  return detail::makeTokenByIndex(516, style);
 }
 
-QIcon Environment(const IconStyle& style) {
-  return detail::makeIconByIndex(517, style);
+IconToken Environment(const IconStyle& style) {
+  return detail::makeTokenByIndex(517, style);
 }
 
-QIcon EuroCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(518, style);
+IconToken EuroCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(518, style);
 }
 
-QIcon ExclamationCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(519, style);
+IconToken ExclamationCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(519, style);
 }
 
-QIcon Experiment(const IconStyle& style) {
-  return detail::makeIconByIndex(520, style);
+IconToken Experiment(const IconStyle& style) {
+  return detail::makeTokenByIndex(520, style);
 }
 
-QIcon Eye(const IconStyle& style) {
-  return detail::makeIconByIndex(521, style);
+IconToken Eye(const IconStyle& style) {
+  return detail::makeTokenByIndex(521, style);
 }
 
-QIcon EyeInvisible(const IconStyle& style) {
-  return detail::makeIconByIndex(522, style);
+IconToken EyeInvisible(const IconStyle& style) {
+  return detail::makeTokenByIndex(522, style);
 }
 
-QIcon Facebook(const IconStyle& style) {
-  return detail::makeIconByIndex(523, style);
+IconToken Facebook(const IconStyle& style) {
+  return detail::makeTokenByIndex(523, style);
 }
 
-QIcon FastBackward(const IconStyle& style) {
-  return detail::makeIconByIndex(524, style);
+IconToken FastBackward(const IconStyle& style) {
+  return detail::makeTokenByIndex(524, style);
 }
 
-QIcon FastForward(const IconStyle& style) {
-  return detail::makeIconByIndex(525, style);
+IconToken FastForward(const IconStyle& style) {
+  return detail::makeTokenByIndex(525, style);
 }
 
-QIcon File(const IconStyle& style) {
-  return detail::makeIconByIndex(526, style);
+IconToken File(const IconStyle& style) {
+  return detail::makeTokenByIndex(526, style);
 }
 
-QIcon FileAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(527, style);
+IconToken FileAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(527, style);
 }
 
-QIcon FileExcel(const IconStyle& style) {
-  return detail::makeIconByIndex(528, style);
+IconToken FileExcel(const IconStyle& style) {
+  return detail::makeTokenByIndex(528, style);
 }
 
-QIcon FileExclamation(const IconStyle& style) {
-  return detail::makeIconByIndex(529, style);
+IconToken FileExclamation(const IconStyle& style) {
+  return detail::makeTokenByIndex(529, style);
 }
 
-QIcon FileImage(const IconStyle& style) {
-  return detail::makeIconByIndex(530, style);
+IconToken FileImage(const IconStyle& style) {
+  return detail::makeTokenByIndex(530, style);
 }
 
-QIcon FileMarkdown(const IconStyle& style) {
-  return detail::makeIconByIndex(531, style);
+IconToken FileMarkdown(const IconStyle& style) {
+  return detail::makeTokenByIndex(531, style);
 }
 
-QIcon FilePdf(const IconStyle& style) {
-  return detail::makeIconByIndex(532, style);
+IconToken FilePdf(const IconStyle& style) {
+  return detail::makeTokenByIndex(532, style);
 }
 
-QIcon FilePpt(const IconStyle& style) {
-  return detail::makeIconByIndex(533, style);
+IconToken FilePpt(const IconStyle& style) {
+  return detail::makeTokenByIndex(533, style);
 }
 
-QIcon FileText(const IconStyle& style) {
-  return detail::makeIconByIndex(534, style);
+IconToken FileText(const IconStyle& style) {
+  return detail::makeTokenByIndex(534, style);
 }
 
-QIcon FileUnknown(const IconStyle& style) {
-  return detail::makeIconByIndex(535, style);
+IconToken FileUnknown(const IconStyle& style) {
+  return detail::makeTokenByIndex(535, style);
 }
 
-QIcon FileWord(const IconStyle& style) {
-  return detail::makeIconByIndex(536, style);
+IconToken FileWord(const IconStyle& style) {
+  return detail::makeTokenByIndex(536, style);
 }
 
-QIcon FileZip(const IconStyle& style) {
-  return detail::makeIconByIndex(537, style);
+IconToken FileZip(const IconStyle& style) {
+  return detail::makeTokenByIndex(537, style);
 }
 
-QIcon Filter(const IconStyle& style) {
-  return detail::makeIconByIndex(538, style);
+IconToken Filter(const IconStyle& style) {
+  return detail::makeTokenByIndex(538, style);
 }
 
-QIcon Fire(const IconStyle& style) {
-  return detail::makeIconByIndex(539, style);
+IconToken Fire(const IconStyle& style) {
+  return detail::makeTokenByIndex(539, style);
 }
 
-QIcon Flag(const IconStyle& style) {
-  return detail::makeIconByIndex(540, style);
+IconToken Flag(const IconStyle& style) {
+  return detail::makeTokenByIndex(540, style);
 }
 
-QIcon Folder(const IconStyle& style) {
-  return detail::makeIconByIndex(541, style);
+IconToken Folder(const IconStyle& style) {
+  return detail::makeTokenByIndex(541, style);
 }
 
-QIcon FolderAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(542, style);
+IconToken FolderAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(542, style);
 }
 
-QIcon FolderOpen(const IconStyle& style) {
-  return detail::makeIconByIndex(543, style);
+IconToken FolderOpen(const IconStyle& style) {
+  return detail::makeTokenByIndex(543, style);
 }
 
-QIcon FormatPainter(const IconStyle& style) {
-  return detail::makeIconByIndex(544, style);
+IconToken FormatPainter(const IconStyle& style) {
+  return detail::makeTokenByIndex(544, style);
 }
 
-QIcon Forward(const IconStyle& style) {
-  return detail::makeIconByIndex(545, style);
+IconToken Forward(const IconStyle& style) {
+  return detail::makeTokenByIndex(545, style);
 }
 
-QIcon Frown(const IconStyle& style) {
-  return detail::makeIconByIndex(546, style);
+IconToken Frown(const IconStyle& style) {
+  return detail::makeTokenByIndex(546, style);
 }
 
-QIcon Fund(const IconStyle& style) {
-  return detail::makeIconByIndex(547, style);
+IconToken Fund(const IconStyle& style) {
+  return detail::makeTokenByIndex(547, style);
 }
 
-QIcon FunnelPlot(const IconStyle& style) {
-  return detail::makeIconByIndex(548, style);
+IconToken FunnelPlot(const IconStyle& style) {
+  return detail::makeTokenByIndex(548, style);
 }
 
-QIcon Gift(const IconStyle& style) {
-  return detail::makeIconByIndex(549, style);
+IconToken Gift(const IconStyle& style) {
+  return detail::makeTokenByIndex(549, style);
 }
 
-QIcon Github(const IconStyle& style) {
-  return detail::makeIconByIndex(550, style);
+IconToken Github(const IconStyle& style) {
+  return detail::makeTokenByIndex(550, style);
 }
 
-QIcon Gitlab(const IconStyle& style) {
-  return detail::makeIconByIndex(551, style);
+IconToken Gitlab(const IconStyle& style) {
+  return detail::makeTokenByIndex(551, style);
 }
 
-QIcon Gold(const IconStyle& style) {
-  return detail::makeIconByIndex(552, style);
+IconToken Gold(const IconStyle& style) {
+  return detail::makeTokenByIndex(552, style);
 }
 
-QIcon Golden(const IconStyle& style) {
-  return detail::makeIconByIndex(553, style);
+IconToken Golden(const IconStyle& style) {
+  return detail::makeTokenByIndex(553, style);
 }
 
-QIcon GoogleCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(554, style);
+IconToken GoogleCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(554, style);
 }
 
-QIcon GooglePlusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(555, style);
+IconToken GooglePlusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(555, style);
 }
 
-QIcon GooglePlusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(556, style);
+IconToken GooglePlusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(556, style);
 }
 
-QIcon GoogleSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(557, style);
+IconToken GoogleSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(557, style);
 }
 
-QIcon Hdd(const IconStyle& style) {
-  return detail::makeIconByIndex(558, style);
+IconToken Hdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(558, style);
 }
 
-QIcon Heart(const IconStyle& style) {
-  return detail::makeIconByIndex(559, style);
+IconToken Heart(const IconStyle& style) {
+  return detail::makeTokenByIndex(559, style);
 }
 
-QIcon Highlight(const IconStyle& style) {
-  return detail::makeIconByIndex(560, style);
+IconToken Highlight(const IconStyle& style) {
+  return detail::makeTokenByIndex(560, style);
 }
 
-QIcon Home(const IconStyle& style) {
-  return detail::makeIconByIndex(561, style);
+IconToken Home(const IconStyle& style) {
+  return detail::makeTokenByIndex(561, style);
 }
 
-QIcon Hourglass(const IconStyle& style) {
-  return detail::makeIconByIndex(562, style);
+IconToken Hourglass(const IconStyle& style) {
+  return detail::makeTokenByIndex(562, style);
 }
 
-QIcon Html5(const IconStyle& style) {
-  return detail::makeIconByIndex(563, style);
+IconToken Html5(const IconStyle& style) {
+  return detail::makeTokenByIndex(563, style);
 }
 
-QIcon Idcard(const IconStyle& style) {
-  return detail::makeIconByIndex(564, style);
+IconToken Idcard(const IconStyle& style) {
+  return detail::makeTokenByIndex(564, style);
 }
 
-QIcon IeCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(565, style);
+IconToken IeCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(565, style);
 }
 
-QIcon IeSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(566, style);
+IconToken IeSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(566, style);
 }
 
-QIcon InfoCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(567, style);
+IconToken InfoCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(567, style);
 }
 
-QIcon Instagram(const IconStyle& style) {
-  return detail::makeIconByIndex(568, style);
+IconToken Instagram(const IconStyle& style) {
+  return detail::makeTokenByIndex(568, style);
 }
 
-QIcon Insurance(const IconStyle& style) {
-  return detail::makeIconByIndex(569, style);
+IconToken Insurance(const IconStyle& style) {
+  return detail::makeTokenByIndex(569, style);
 }
 
-QIcon Interaction(const IconStyle& style) {
-  return detail::makeIconByIndex(570, style);
+IconToken Interaction(const IconStyle& style) {
+  return detail::makeTokenByIndex(570, style);
 }
 
-QIcon Layout(const IconStyle& style) {
-  return detail::makeIconByIndex(571, style);
+IconToken Layout(const IconStyle& style) {
+  return detail::makeTokenByIndex(571, style);
 }
 
-QIcon LeftCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(572, style);
+IconToken LeftCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(572, style);
 }
 
-QIcon LeftSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(573, style);
+IconToken LeftSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(573, style);
 }
 
-QIcon Like(const IconStyle& style) {
-  return detail::makeIconByIndex(574, style);
+IconToken Like(const IconStyle& style) {
+  return detail::makeTokenByIndex(574, style);
 }
 
-QIcon Linkedin(const IconStyle& style) {
-  return detail::makeIconByIndex(575, style);
+IconToken Linkedin(const IconStyle& style) {
+  return detail::makeTokenByIndex(575, style);
 }
 
-QIcon Lock(const IconStyle& style) {
-  return detail::makeIconByIndex(576, style);
+IconToken Lock(const IconStyle& style) {
+  return detail::makeTokenByIndex(576, style);
 }
 
-QIcon MacCommand(const IconStyle& style) {
-  return detail::makeIconByIndex(577, style);
+IconToken MacCommand(const IconStyle& style) {
+  return detail::makeTokenByIndex(577, style);
 }
 
-QIcon Mail(const IconStyle& style) {
-  return detail::makeIconByIndex(578, style);
+IconToken Mail(const IconStyle& style) {
+  return detail::makeTokenByIndex(578, style);
 }
 
-QIcon MedicineBox(const IconStyle& style) {
-  return detail::makeIconByIndex(579, style);
+IconToken MedicineBox(const IconStyle& style) {
+  return detail::makeTokenByIndex(579, style);
 }
 
-QIcon MediumCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(580, style);
+IconToken MediumCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(580, style);
 }
 
-QIcon MediumSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(581, style);
+IconToken MediumSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(581, style);
 }
 
-QIcon Meh(const IconStyle& style) {
-  return detail::makeIconByIndex(582, style);
+IconToken Meh(const IconStyle& style) {
+  return detail::makeTokenByIndex(582, style);
 }
 
-QIcon Merge(const IconStyle& style) {
-  return detail::makeIconByIndex(583, style);
+IconToken Merge(const IconStyle& style) {
+  return detail::makeTokenByIndex(583, style);
 }
 
-QIcon Message(const IconStyle& style) {
-  return detail::makeIconByIndex(584, style);
+IconToken Message(const IconStyle& style) {
+  return detail::makeTokenByIndex(584, style);
 }
 
-QIcon MinusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(585, style);
+IconToken MinusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(585, style);
 }
 
-QIcon MinusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(586, style);
+IconToken MinusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(586, style);
 }
 
-QIcon Mobile(const IconStyle& style) {
-  return detail::makeIconByIndex(587, style);
+IconToken Mobile(const IconStyle& style) {
+  return detail::makeTokenByIndex(587, style);
 }
 
-QIcon MoneyCollect(const IconStyle& style) {
-  return detail::makeIconByIndex(588, style);
+IconToken MoneyCollect(const IconStyle& style) {
+  return detail::makeTokenByIndex(588, style);
 }
 
-QIcon Moon(const IconStyle& style) {
-  return detail::makeIconByIndex(589, style);
+IconToken Moon(const IconStyle& style) {
+  return detail::makeTokenByIndex(589, style);
 }
 
-QIcon Muted(const IconStyle& style) {
-  return detail::makeIconByIndex(590, style);
+IconToken Muted(const IconStyle& style) {
+  return detail::makeTokenByIndex(590, style);
 }
 
-QIcon Notification(const IconStyle& style) {
-  return detail::makeIconByIndex(591, style);
+IconToken Notification(const IconStyle& style) {
+  return detail::makeTokenByIndex(591, style);
 }
 
-QIcon OpenAI(const IconStyle& style) {
-  return detail::makeIconByIndex(592, style);
+IconToken OpenAI(const IconStyle& style) {
+  return detail::makeTokenByIndex(592, style);
 }
 
-QIcon PauseCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(593, style);
+IconToken PauseCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(593, style);
 }
 
-QIcon PayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(594, style);
+IconToken PayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(594, style);
 }
 
-QIcon Phone(const IconStyle& style) {
-  return detail::makeIconByIndex(595, style);
+IconToken Phone(const IconStyle& style) {
+  return detail::makeTokenByIndex(595, style);
 }
 
-QIcon Picture(const IconStyle& style) {
-  return detail::makeIconByIndex(596, style);
+IconToken Picture(const IconStyle& style) {
+  return detail::makeTokenByIndex(596, style);
 }
 
-QIcon PieChart(const IconStyle& style) {
-  return detail::makeIconByIndex(597, style);
+IconToken PieChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(597, style);
 }
 
-QIcon Pinterest(const IconStyle& style) {
-  return detail::makeIconByIndex(598, style);
+IconToken Pinterest(const IconStyle& style) {
+  return detail::makeTokenByIndex(598, style);
 }
 
-QIcon PlayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(599, style);
+IconToken PlayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(599, style);
 }
 
-QIcon PlaySquare(const IconStyle& style) {
-  return detail::makeIconByIndex(600, style);
+IconToken PlaySquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(600, style);
 }
 
-QIcon PlusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(601, style);
+IconToken PlusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(601, style);
 }
 
-QIcon PlusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(602, style);
+IconToken PlusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(602, style);
 }
 
-QIcon PoundCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(603, style);
+IconToken PoundCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(603, style);
 }
 
-QIcon Printer(const IconStyle& style) {
-  return detail::makeIconByIndex(604, style);
+IconToken Printer(const IconStyle& style) {
+  return detail::makeTokenByIndex(604, style);
 }
 
-QIcon Product(const IconStyle& style) {
-  return detail::makeIconByIndex(605, style);
+IconToken Product(const IconStyle& style) {
+  return detail::makeTokenByIndex(605, style);
 }
 
-QIcon Profile(const IconStyle& style) {
-  return detail::makeIconByIndex(606, style);
+IconToken Profile(const IconStyle& style) {
+  return detail::makeTokenByIndex(606, style);
 }
 
-QIcon Project(const IconStyle& style) {
-  return detail::makeIconByIndex(607, style);
+IconToken Project(const IconStyle& style) {
+  return detail::makeTokenByIndex(607, style);
 }
 
-QIcon PropertySafety(const IconStyle& style) {
-  return detail::makeIconByIndex(608, style);
+IconToken PropertySafety(const IconStyle& style) {
+  return detail::makeTokenByIndex(608, style);
 }
 
-QIcon Pushpin(const IconStyle& style) {
-  return detail::makeIconByIndex(609, style);
+IconToken Pushpin(const IconStyle& style) {
+  return detail::makeTokenByIndex(609, style);
 }
 
-QIcon QqCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(610, style);
+IconToken QqCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(610, style);
 }
 
-QIcon QqSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(611, style);
+IconToken QqSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(611, style);
 }
 
-QIcon QuestionCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(612, style);
+IconToken QuestionCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(612, style);
 }
 
-QIcon Read(const IconStyle& style) {
-  return detail::makeIconByIndex(613, style);
+IconToken Read(const IconStyle& style) {
+  return detail::makeTokenByIndex(613, style);
 }
 
-QIcon Reconciliation(const IconStyle& style) {
-  return detail::makeIconByIndex(614, style);
+IconToken Reconciliation(const IconStyle& style) {
+  return detail::makeTokenByIndex(614, style);
 }
 
-QIcon RedEnvelope(const IconStyle& style) {
-  return detail::makeIconByIndex(615, style);
+IconToken RedEnvelope(const IconStyle& style) {
+  return detail::makeTokenByIndex(615, style);
 }
 
-QIcon RedditCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(616, style);
+IconToken RedditCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(616, style);
 }
 
-QIcon RedditSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(617, style);
+IconToken RedditSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(617, style);
 }
 
-QIcon Rest(const IconStyle& style) {
-  return detail::makeIconByIndex(618, style);
+IconToken Rest(const IconStyle& style) {
+  return detail::makeTokenByIndex(618, style);
 }
 
-QIcon RightCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(619, style);
+IconToken RightCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(619, style);
 }
 
-QIcon RightSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(620, style);
+IconToken RightSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(620, style);
 }
 
-QIcon Robot(const IconStyle& style) {
-  return detail::makeIconByIndex(621, style);
+IconToken Robot(const IconStyle& style) {
+  return detail::makeTokenByIndex(621, style);
 }
 
-QIcon Rocket(const IconStyle& style) {
-  return detail::makeIconByIndex(622, style);
+IconToken Rocket(const IconStyle& style) {
+  return detail::makeTokenByIndex(622, style);
 }
 
-QIcon SafetyCertificate(const IconStyle& style) {
-  return detail::makeIconByIndex(623, style);
+IconToken SafetyCertificate(const IconStyle& style) {
+  return detail::makeTokenByIndex(623, style);
 }
 
-QIcon Save(const IconStyle& style) {
-  return detail::makeIconByIndex(624, style);
+IconToken Save(const IconStyle& style) {
+  return detail::makeTokenByIndex(624, style);
 }
 
-QIcon Schedule(const IconStyle& style) {
-  return detail::makeIconByIndex(625, style);
+IconToken Schedule(const IconStyle& style) {
+  return detail::makeTokenByIndex(625, style);
 }
 
-QIcon SecurityScan(const IconStyle& style) {
-  return detail::makeIconByIndex(626, style);
+IconToken SecurityScan(const IconStyle& style) {
+  return detail::makeTokenByIndex(626, style);
 }
 
-QIcon Setting(const IconStyle& style) {
-  return detail::makeIconByIndex(627, style);
+IconToken Setting(const IconStyle& style) {
+  return detail::makeTokenByIndex(627, style);
 }
 
-QIcon Shop(const IconStyle& style) {
-  return detail::makeIconByIndex(628, style);
+IconToken Shop(const IconStyle& style) {
+  return detail::makeTokenByIndex(628, style);
 }
 
-QIcon Shopping(const IconStyle& style) {
-  return detail::makeIconByIndex(629, style);
+IconToken Shopping(const IconStyle& style) {
+  return detail::makeTokenByIndex(629, style);
 }
 
-QIcon Signal(const IconStyle& style) {
-  return detail::makeIconByIndex(630, style);
+IconToken Signal(const IconStyle& style) {
+  return detail::makeTokenByIndex(630, style);
 }
 
-QIcon Signature(const IconStyle& style) {
-  return detail::makeIconByIndex(631, style);
+IconToken Signature(const IconStyle& style) {
+  return detail::makeTokenByIndex(631, style);
 }
 
-QIcon SketchCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(632, style);
+IconToken SketchCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(632, style);
 }
 
-QIcon SketchSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(633, style);
+IconToken SketchSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(633, style);
 }
 
-QIcon Skin(const IconStyle& style) {
-  return detail::makeIconByIndex(634, style);
+IconToken Skin(const IconStyle& style) {
+  return detail::makeTokenByIndex(634, style);
 }
 
-QIcon Skype(const IconStyle& style) {
-  return detail::makeIconByIndex(635, style);
+IconToken Skype(const IconStyle& style) {
+  return detail::makeTokenByIndex(635, style);
 }
 
-QIcon SlackCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(636, style);
+IconToken SlackCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(636, style);
 }
 
-QIcon SlackSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(637, style);
+IconToken SlackSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(637, style);
 }
 
-QIcon Sliders(const IconStyle& style) {
-  return detail::makeIconByIndex(638, style);
+IconToken Sliders(const IconStyle& style) {
+  return detail::makeTokenByIndex(638, style);
 }
 
-QIcon Smile(const IconStyle& style) {
-  return detail::makeIconByIndex(639, style);
+IconToken Smile(const IconStyle& style) {
+  return detail::makeTokenByIndex(639, style);
 }
 
-QIcon Snippets(const IconStyle& style) {
-  return detail::makeIconByIndex(640, style);
+IconToken Snippets(const IconStyle& style) {
+  return detail::makeTokenByIndex(640, style);
 }
 
-QIcon Sound(const IconStyle& style) {
-  return detail::makeIconByIndex(641, style);
+IconToken Sound(const IconStyle& style) {
+  return detail::makeTokenByIndex(641, style);
 }
 
-QIcon Spotify(const IconStyle& style) {
-  return detail::makeIconByIndex(642, style);
+IconToken Spotify(const IconStyle& style) {
+  return detail::makeTokenByIndex(642, style);
 }
 
-QIcon Star(const IconStyle& style) {
-  return detail::makeIconByIndex(643, style);
+IconToken Star(const IconStyle& style) {
+  return detail::makeTokenByIndex(643, style);
 }
 
-QIcon StepBackward(const IconStyle& style) {
-  return detail::makeIconByIndex(644, style);
+IconToken StepBackward(const IconStyle& style) {
+  return detail::makeTokenByIndex(644, style);
 }
 
-QIcon StepForward(const IconStyle& style) {
-  return detail::makeIconByIndex(645, style);
+IconToken StepForward(const IconStyle& style) {
+  return detail::makeTokenByIndex(645, style);
 }
 
-QIcon Stop(const IconStyle& style) {
-  return detail::makeIconByIndex(646, style);
+IconToken Stop(const IconStyle& style) {
+  return detail::makeTokenByIndex(646, style);
 }
 
-QIcon Sun(const IconStyle& style) {
-  return detail::makeIconByIndex(647, style);
+IconToken Sun(const IconStyle& style) {
+  return detail::makeTokenByIndex(647, style);
 }
 
-QIcon Switcher(const IconStyle& style) {
-  return detail::makeIconByIndex(648, style);
+IconToken Switcher(const IconStyle& style) {
+  return detail::makeTokenByIndex(648, style);
 }
 
-QIcon Tablet(const IconStyle& style) {
-  return detail::makeIconByIndex(649, style);
+IconToken Tablet(const IconStyle& style) {
+  return detail::makeTokenByIndex(649, style);
 }
 
-QIcon Tag(const IconStyle& style) {
-  return detail::makeIconByIndex(650, style);
+IconToken Tag(const IconStyle& style) {
+  return detail::makeTokenByIndex(650, style);
 }
 
-QIcon Tags(const IconStyle& style) {
-  return detail::makeIconByIndex(651, style);
+IconToken Tags(const IconStyle& style) {
+  return detail::makeTokenByIndex(651, style);
 }
 
-QIcon TaobaoCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(652, style);
+IconToken TaobaoCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(652, style);
 }
 
-QIcon TaobaoSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(653, style);
+IconToken TaobaoSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(653, style);
 }
 
-QIcon Thunderbolt(const IconStyle& style) {
-  return detail::makeIconByIndex(654, style);
+IconToken Thunderbolt(const IconStyle& style) {
+  return detail::makeTokenByIndex(654, style);
 }
 
-QIcon TikTok(const IconStyle& style) {
-  return detail::makeIconByIndex(655, style);
+IconToken TikTok(const IconStyle& style) {
+  return detail::makeTokenByIndex(655, style);
 }
 
-QIcon Tool(const IconStyle& style) {
-  return detail::makeIconByIndex(656, style);
+IconToken Tool(const IconStyle& style) {
+  return detail::makeTokenByIndex(656, style);
 }
 
-QIcon TrademarkCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(657, style);
+IconToken TrademarkCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(657, style);
 }
 
-QIcon Trophy(const IconStyle& style) {
-  return detail::makeIconByIndex(658, style);
+IconToken Trophy(const IconStyle& style) {
+  return detail::makeTokenByIndex(658, style);
 }
 
-QIcon Truck(const IconStyle& style) {
-  return detail::makeIconByIndex(659, style);
+IconToken Truck(const IconStyle& style) {
+  return detail::makeTokenByIndex(659, style);
 }
 
-QIcon Twitch(const IconStyle& style) {
-  return detail::makeIconByIndex(660, style);
+IconToken Twitch(const IconStyle& style) {
+  return detail::makeTokenByIndex(660, style);
 }
 
-QIcon TwitterCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(661, style);
+IconToken TwitterCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(661, style);
 }
 
-QIcon TwitterSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(662, style);
+IconToken TwitterSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(662, style);
 }
 
-QIcon Unlock(const IconStyle& style) {
-  return detail::makeIconByIndex(663, style);
+IconToken Unlock(const IconStyle& style) {
+  return detail::makeTokenByIndex(663, style);
 }
 
-QIcon UpCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(664, style);
+IconToken UpCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(664, style);
 }
 
-QIcon UpSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(665, style);
+IconToken UpSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(665, style);
 }
 
-QIcon Usb(const IconStyle& style) {
-  return detail::makeIconByIndex(666, style);
+IconToken Usb(const IconStyle& style) {
+  return detail::makeTokenByIndex(666, style);
 }
 
-QIcon VideoCamera(const IconStyle& style) {
-  return detail::makeIconByIndex(667, style);
+IconToken VideoCamera(const IconStyle& style) {
+  return detail::makeTokenByIndex(667, style);
 }
 
-QIcon Wallet(const IconStyle& style) {
-  return detail::makeIconByIndex(668, style);
+IconToken Wallet(const IconStyle& style) {
+  return detail::makeTokenByIndex(668, style);
 }
 
-QIcon Warning(const IconStyle& style) {
-  return detail::makeIconByIndex(669, style);
+IconToken Warning(const IconStyle& style) {
+  return detail::makeTokenByIndex(669, style);
 }
 
-QIcon Wechat(const IconStyle& style) {
-  return detail::makeIconByIndex(670, style);
+IconToken Wechat(const IconStyle& style) {
+  return detail::makeTokenByIndex(670, style);
 }
 
-QIcon WechatWork(const IconStyle& style) {
-  return detail::makeIconByIndex(671, style);
+IconToken WechatWork(const IconStyle& style) {
+  return detail::makeTokenByIndex(671, style);
 }
 
-QIcon WeiboCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(672, style);
+IconToken WeiboCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(672, style);
 }
 
-QIcon WeiboSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(673, style);
+IconToken WeiboSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(673, style);
 }
 
-QIcon Windows(const IconStyle& style) {
-  return detail::makeIconByIndex(674, style);
+IconToken Windows(const IconStyle& style) {
+  return detail::makeTokenByIndex(674, style);
 }
 
-QIcon X(const IconStyle& style) {
-  return detail::makeIconByIndex(675, style);
+IconToken X(const IconStyle& style) {
+  return detail::makeTokenByIndex(675, style);
 }
 
-QIcon Yahoo(const IconStyle& style) {
-  return detail::makeIconByIndex(676, style);
+IconToken Yahoo(const IconStyle& style) {
+  return detail::makeTokenByIndex(676, style);
 }
 
-QIcon Youtube(const IconStyle& style) {
-  return detail::makeIconByIndex(677, style);
+IconToken Youtube(const IconStyle& style) {
+  return detail::makeTokenByIndex(677, style);
 }
 
-QIcon Yuque(const IconStyle& style) {
-  return detail::makeIconByIndex(678, style);
+IconToken Yuque(const IconStyle& style) {
+  return detail::makeTokenByIndex(678, style);
 }
 
-QIcon ZhihuCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(679, style);
+IconToken ZhihuCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(679, style);
 }
 
-QIcon ZhihuSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(680, style);
+IconToken ZhihuSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(680, style);
 }
 
 }  // namespace adqt::icons::filled
 
 namespace adqt::icons::twotone {
-QIcon AccountBook(const IconStyle& style) {
-  return detail::makeIconByIndex(681, style);
+IconToken AccountBook(const IconStyle& style) {
+  return detail::makeTokenByIndex(681, style);
 }
 
-QIcon Alert(const IconStyle& style) {
-  return detail::makeIconByIndex(682, style);
+IconToken Alert(const IconStyle& style) {
+  return detail::makeTokenByIndex(682, style);
 }
 
-QIcon Api(const IconStyle& style) {
-  return detail::makeIconByIndex(683, style);
+IconToken Api(const IconStyle& style) {
+  return detail::makeTokenByIndex(683, style);
 }
 
-QIcon Appstore(const IconStyle& style) {
-  return detail::makeIconByIndex(684, style);
+IconToken Appstore(const IconStyle& style) {
+  return detail::makeTokenByIndex(684, style);
 }
 
-QIcon Audio(const IconStyle& style) {
-  return detail::makeIconByIndex(685, style);
+IconToken Audio(const IconStyle& style) {
+  return detail::makeTokenByIndex(685, style);
 }
 
-QIcon Bank(const IconStyle& style) {
-  return detail::makeIconByIndex(686, style);
+IconToken Bank(const IconStyle& style) {
+  return detail::makeTokenByIndex(686, style);
 }
 
-QIcon Bell(const IconStyle& style) {
-  return detail::makeIconByIndex(687, style);
+IconToken Bell(const IconStyle& style) {
+  return detail::makeTokenByIndex(687, style);
 }
 
-QIcon Book(const IconStyle& style) {
-  return detail::makeIconByIndex(688, style);
+IconToken Book(const IconStyle& style) {
+  return detail::makeTokenByIndex(688, style);
 }
 
-QIcon BoxPlot(const IconStyle& style) {
-  return detail::makeIconByIndex(689, style);
+IconToken BoxPlot(const IconStyle& style) {
+  return detail::makeTokenByIndex(689, style);
 }
 
-QIcon Bug(const IconStyle& style) {
-  return detail::makeIconByIndex(690, style);
+IconToken Bug(const IconStyle& style) {
+  return detail::makeTokenByIndex(690, style);
 }
 
-QIcon Build(const IconStyle& style) {
-  return detail::makeIconByIndex(691, style);
+IconToken Build(const IconStyle& style) {
+  return detail::makeTokenByIndex(691, style);
 }
 
-QIcon Bulb(const IconStyle& style) {
-  return detail::makeIconByIndex(692, style);
+IconToken Bulb(const IconStyle& style) {
+  return detail::makeTokenByIndex(692, style);
 }
 
-QIcon Calculator(const IconStyle& style) {
-  return detail::makeIconByIndex(693, style);
+IconToken Calculator(const IconStyle& style) {
+  return detail::makeTokenByIndex(693, style);
 }
 
-QIcon Calendar(const IconStyle& style) {
-  return detail::makeIconByIndex(694, style);
+IconToken Calendar(const IconStyle& style) {
+  return detail::makeTokenByIndex(694, style);
 }
 
-QIcon Camera(const IconStyle& style) {
-  return detail::makeIconByIndex(695, style);
+IconToken Camera(const IconStyle& style) {
+  return detail::makeTokenByIndex(695, style);
 }
 
-QIcon Car(const IconStyle& style) {
-  return detail::makeIconByIndex(696, style);
+IconToken Car(const IconStyle& style) {
+  return detail::makeTokenByIndex(696, style);
 }
 
-QIcon CarryOut(const IconStyle& style) {
-  return detail::makeIconByIndex(697, style);
+IconToken CarryOut(const IconStyle& style) {
+  return detail::makeTokenByIndex(697, style);
 }
 
-QIcon CheckCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(698, style);
+IconToken CheckCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(698, style);
 }
 
-QIcon CheckSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(699, style);
+IconToken CheckSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(699, style);
 }
 
-QIcon Ci(const IconStyle& style) {
-  return detail::makeIconByIndex(700, style);
+IconToken Ci(const IconStyle& style) {
+  return detail::makeTokenByIndex(700, style);
 }
 
-QIcon CiCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(701, style);
+IconToken CiCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(701, style);
 }
 
-QIcon ClockCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(702, style);
+IconToken ClockCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(702, style);
 }
 
-QIcon CloseCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(703, style);
+IconToken CloseCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(703, style);
 }
 
-QIcon CloseSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(704, style);
+IconToken CloseSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(704, style);
 }
 
-QIcon Cloud(const IconStyle& style) {
-  return detail::makeIconByIndex(705, style);
+IconToken Cloud(const IconStyle& style) {
+  return detail::makeTokenByIndex(705, style);
 }
 
-QIcon Code(const IconStyle& style) {
-  return detail::makeIconByIndex(706, style);
+IconToken Code(const IconStyle& style) {
+  return detail::makeTokenByIndex(706, style);
 }
 
-QIcon Compass(const IconStyle& style) {
-  return detail::makeIconByIndex(707, style);
+IconToken Compass(const IconStyle& style) {
+  return detail::makeTokenByIndex(707, style);
 }
 
-QIcon Contacts(const IconStyle& style) {
-  return detail::makeIconByIndex(708, style);
+IconToken Contacts(const IconStyle& style) {
+  return detail::makeTokenByIndex(708, style);
 }
 
-QIcon Container(const IconStyle& style) {
-  return detail::makeIconByIndex(709, style);
+IconToken Container(const IconStyle& style) {
+  return detail::makeTokenByIndex(709, style);
 }
 
-QIcon Control(const IconStyle& style) {
-  return detail::makeIconByIndex(710, style);
+IconToken Control(const IconStyle& style) {
+  return detail::makeTokenByIndex(710, style);
 }
 
-QIcon Copy(const IconStyle& style) {
-  return detail::makeIconByIndex(711, style);
+IconToken Copy(const IconStyle& style) {
+  return detail::makeTokenByIndex(711, style);
 }
 
-QIcon Copyright(const IconStyle& style) {
-  return detail::makeIconByIndex(712, style);
+IconToken Copyright(const IconStyle& style) {
+  return detail::makeTokenByIndex(712, style);
 }
 
-QIcon CopyrightCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(713, style);
+IconToken CopyrightCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(713, style);
 }
 
-QIcon CreditCard(const IconStyle& style) {
-  return detail::makeIconByIndex(714, style);
+IconToken CreditCard(const IconStyle& style) {
+  return detail::makeTokenByIndex(714, style);
 }
 
-QIcon Crown(const IconStyle& style) {
-  return detail::makeIconByIndex(715, style);
+IconToken Crown(const IconStyle& style) {
+  return detail::makeTokenByIndex(715, style);
 }
 
-QIcon CustomerService(const IconStyle& style) {
-  return detail::makeIconByIndex(716, style);
+IconToken CustomerService(const IconStyle& style) {
+  return detail::makeTokenByIndex(716, style);
 }
 
-QIcon Dashboard(const IconStyle& style) {
-  return detail::makeIconByIndex(717, style);
+IconToken Dashboard(const IconStyle& style) {
+  return detail::makeTokenByIndex(717, style);
 }
 
-QIcon Database(const IconStyle& style) {
-  return detail::makeIconByIndex(718, style);
+IconToken Database(const IconStyle& style) {
+  return detail::makeTokenByIndex(718, style);
 }
 
-QIcon Delete(const IconStyle& style) {
-  return detail::makeIconByIndex(719, style);
+IconToken Delete(const IconStyle& style) {
+  return detail::makeTokenByIndex(719, style);
 }
 
-QIcon Diff(const IconStyle& style) {
-  return detail::makeIconByIndex(720, style);
+IconToken Diff(const IconStyle& style) {
+  return detail::makeTokenByIndex(720, style);
 }
 
-QIcon Dislike(const IconStyle& style) {
-  return detail::makeIconByIndex(721, style);
+IconToken Dislike(const IconStyle& style) {
+  return detail::makeTokenByIndex(721, style);
 }
 
-QIcon Dollar(const IconStyle& style) {
-  return detail::makeIconByIndex(722, style);
+IconToken Dollar(const IconStyle& style) {
+  return detail::makeTokenByIndex(722, style);
 }
 
-QIcon DollarCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(723, style);
+IconToken DollarCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(723, style);
 }
 
-QIcon DownCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(724, style);
+IconToken DownCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(724, style);
 }
 
-QIcon DownSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(725, style);
+IconToken DownSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(725, style);
 }
 
-QIcon Edit(const IconStyle& style) {
-  return detail::makeIconByIndex(726, style);
+IconToken Edit(const IconStyle& style) {
+  return detail::makeTokenByIndex(726, style);
 }
 
-QIcon Environment(const IconStyle& style) {
-  return detail::makeIconByIndex(727, style);
+IconToken Environment(const IconStyle& style) {
+  return detail::makeTokenByIndex(727, style);
 }
 
-QIcon Euro(const IconStyle& style) {
-  return detail::makeIconByIndex(728, style);
+IconToken Euro(const IconStyle& style) {
+  return detail::makeTokenByIndex(728, style);
 }
 
-QIcon EuroCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(729, style);
+IconToken EuroCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(729, style);
 }
 
-QIcon ExclamationCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(730, style);
+IconToken ExclamationCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(730, style);
 }
 
-QIcon Experiment(const IconStyle& style) {
-  return detail::makeIconByIndex(731, style);
+IconToken Experiment(const IconStyle& style) {
+  return detail::makeTokenByIndex(731, style);
 }
 
-QIcon Eye(const IconStyle& style) {
-  return detail::makeIconByIndex(732, style);
+IconToken Eye(const IconStyle& style) {
+  return detail::makeTokenByIndex(732, style);
 }
 
-QIcon EyeInvisible(const IconStyle& style) {
-  return detail::makeIconByIndex(733, style);
+IconToken EyeInvisible(const IconStyle& style) {
+  return detail::makeTokenByIndex(733, style);
 }
 
-QIcon File(const IconStyle& style) {
-  return detail::makeIconByIndex(734, style);
+IconToken File(const IconStyle& style) {
+  return detail::makeTokenByIndex(734, style);
 }
 
-QIcon FileAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(735, style);
+IconToken FileAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(735, style);
 }
 
-QIcon FileExcel(const IconStyle& style) {
-  return detail::makeIconByIndex(736, style);
+IconToken FileExcel(const IconStyle& style) {
+  return detail::makeTokenByIndex(736, style);
 }
 
-QIcon FileExclamation(const IconStyle& style) {
-  return detail::makeIconByIndex(737, style);
+IconToken FileExclamation(const IconStyle& style) {
+  return detail::makeTokenByIndex(737, style);
 }
 
-QIcon FileImage(const IconStyle& style) {
-  return detail::makeIconByIndex(738, style);
+IconToken FileImage(const IconStyle& style) {
+  return detail::makeTokenByIndex(738, style);
 }
 
-QIcon FileMarkdown(const IconStyle& style) {
-  return detail::makeIconByIndex(739, style);
+IconToken FileMarkdown(const IconStyle& style) {
+  return detail::makeTokenByIndex(739, style);
 }
 
-QIcon FilePdf(const IconStyle& style) {
-  return detail::makeIconByIndex(740, style);
+IconToken FilePdf(const IconStyle& style) {
+  return detail::makeTokenByIndex(740, style);
 }
 
-QIcon FilePpt(const IconStyle& style) {
-  return detail::makeIconByIndex(741, style);
+IconToken FilePpt(const IconStyle& style) {
+  return detail::makeTokenByIndex(741, style);
 }
 
-QIcon FileText(const IconStyle& style) {
-  return detail::makeIconByIndex(742, style);
+IconToken FileText(const IconStyle& style) {
+  return detail::makeTokenByIndex(742, style);
 }
 
-QIcon FileUnknown(const IconStyle& style) {
-  return detail::makeIconByIndex(743, style);
+IconToken FileUnknown(const IconStyle& style) {
+  return detail::makeTokenByIndex(743, style);
 }
 
-QIcon FileWord(const IconStyle& style) {
-  return detail::makeIconByIndex(744, style);
+IconToken FileWord(const IconStyle& style) {
+  return detail::makeTokenByIndex(744, style);
 }
 
-QIcon FileZip(const IconStyle& style) {
-  return detail::makeIconByIndex(745, style);
+IconToken FileZip(const IconStyle& style) {
+  return detail::makeTokenByIndex(745, style);
 }
 
-QIcon Filter(const IconStyle& style) {
-  return detail::makeIconByIndex(746, style);
+IconToken Filter(const IconStyle& style) {
+  return detail::makeTokenByIndex(746, style);
 }
 
-QIcon Fire(const IconStyle& style) {
-  return detail::makeIconByIndex(747, style);
+IconToken Fire(const IconStyle& style) {
+  return detail::makeTokenByIndex(747, style);
 }
 
-QIcon Flag(const IconStyle& style) {
-  return detail::makeIconByIndex(748, style);
+IconToken Flag(const IconStyle& style) {
+  return detail::makeTokenByIndex(748, style);
 }
 
-QIcon Folder(const IconStyle& style) {
-  return detail::makeIconByIndex(749, style);
+IconToken Folder(const IconStyle& style) {
+  return detail::makeTokenByIndex(749, style);
 }
 
-QIcon FolderAdd(const IconStyle& style) {
-  return detail::makeIconByIndex(750, style);
+IconToken FolderAdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(750, style);
 }
 
-QIcon FolderOpen(const IconStyle& style) {
-  return detail::makeIconByIndex(751, style);
+IconToken FolderOpen(const IconStyle& style) {
+  return detail::makeTokenByIndex(751, style);
 }
 
-QIcon Frown(const IconStyle& style) {
-  return detail::makeIconByIndex(752, style);
+IconToken Frown(const IconStyle& style) {
+  return detail::makeTokenByIndex(752, style);
 }
 
-QIcon Fund(const IconStyle& style) {
-  return detail::makeIconByIndex(753, style);
+IconToken Fund(const IconStyle& style) {
+  return detail::makeTokenByIndex(753, style);
 }
 
-QIcon FunnelPlot(const IconStyle& style) {
-  return detail::makeIconByIndex(754, style);
+IconToken FunnelPlot(const IconStyle& style) {
+  return detail::makeTokenByIndex(754, style);
 }
 
-QIcon Gift(const IconStyle& style) {
-  return detail::makeIconByIndex(755, style);
+IconToken Gift(const IconStyle& style) {
+  return detail::makeTokenByIndex(755, style);
 }
 
-QIcon Gold(const IconStyle& style) {
-  return detail::makeIconByIndex(756, style);
+IconToken Gold(const IconStyle& style) {
+  return detail::makeTokenByIndex(756, style);
 }
 
-QIcon Hdd(const IconStyle& style) {
-  return detail::makeIconByIndex(757, style);
+IconToken Hdd(const IconStyle& style) {
+  return detail::makeTokenByIndex(757, style);
 }
 
-QIcon Heart(const IconStyle& style) {
-  return detail::makeIconByIndex(758, style);
+IconToken Heart(const IconStyle& style) {
+  return detail::makeTokenByIndex(758, style);
 }
 
-QIcon Highlight(const IconStyle& style) {
-  return detail::makeIconByIndex(759, style);
+IconToken Highlight(const IconStyle& style) {
+  return detail::makeTokenByIndex(759, style);
 }
 
-QIcon Home(const IconStyle& style) {
-  return detail::makeIconByIndex(760, style);
+IconToken Home(const IconStyle& style) {
+  return detail::makeTokenByIndex(760, style);
 }
 
-QIcon Hourglass(const IconStyle& style) {
-  return detail::makeIconByIndex(761, style);
+IconToken Hourglass(const IconStyle& style) {
+  return detail::makeTokenByIndex(761, style);
 }
 
-QIcon Html5(const IconStyle& style) {
-  return detail::makeIconByIndex(762, style);
+IconToken Html5(const IconStyle& style) {
+  return detail::makeTokenByIndex(762, style);
 }
 
-QIcon Idcard(const IconStyle& style) {
-  return detail::makeIconByIndex(763, style);
+IconToken Idcard(const IconStyle& style) {
+  return detail::makeTokenByIndex(763, style);
 }
 
-QIcon InfoCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(764, style);
+IconToken InfoCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(764, style);
 }
 
-QIcon Insurance(const IconStyle& style) {
-  return detail::makeIconByIndex(765, style);
+IconToken Insurance(const IconStyle& style) {
+  return detail::makeTokenByIndex(765, style);
 }
 
-QIcon Interaction(const IconStyle& style) {
-  return detail::makeIconByIndex(766, style);
+IconToken Interaction(const IconStyle& style) {
+  return detail::makeTokenByIndex(766, style);
 }
 
-QIcon Layout(const IconStyle& style) {
-  return detail::makeIconByIndex(767, style);
+IconToken Layout(const IconStyle& style) {
+  return detail::makeTokenByIndex(767, style);
 }
 
-QIcon LeftCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(768, style);
+IconToken LeftCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(768, style);
 }
 
-QIcon LeftSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(769, style);
+IconToken LeftSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(769, style);
 }
 
-QIcon Like(const IconStyle& style) {
-  return detail::makeIconByIndex(770, style);
+IconToken Like(const IconStyle& style) {
+  return detail::makeTokenByIndex(770, style);
 }
 
-QIcon Lock(const IconStyle& style) {
-  return detail::makeIconByIndex(771, style);
+IconToken Lock(const IconStyle& style) {
+  return detail::makeTokenByIndex(771, style);
 }
 
-QIcon Mail(const IconStyle& style) {
-  return detail::makeIconByIndex(772, style);
+IconToken Mail(const IconStyle& style) {
+  return detail::makeTokenByIndex(772, style);
 }
 
-QIcon MedicineBox(const IconStyle& style) {
-  return detail::makeIconByIndex(773, style);
+IconToken MedicineBox(const IconStyle& style) {
+  return detail::makeTokenByIndex(773, style);
 }
 
-QIcon Meh(const IconStyle& style) {
-  return detail::makeIconByIndex(774, style);
+IconToken Meh(const IconStyle& style) {
+  return detail::makeTokenByIndex(774, style);
 }
 
-QIcon Message(const IconStyle& style) {
-  return detail::makeIconByIndex(775, style);
+IconToken Message(const IconStyle& style) {
+  return detail::makeTokenByIndex(775, style);
 }
 
-QIcon MinusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(776, style);
+IconToken MinusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(776, style);
 }
 
-QIcon MinusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(777, style);
+IconToken MinusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(777, style);
 }
 
-QIcon Mobile(const IconStyle& style) {
-  return detail::makeIconByIndex(778, style);
+IconToken Mobile(const IconStyle& style) {
+  return detail::makeTokenByIndex(778, style);
 }
 
-QIcon MoneyCollect(const IconStyle& style) {
-  return detail::makeIconByIndex(779, style);
+IconToken MoneyCollect(const IconStyle& style) {
+  return detail::makeTokenByIndex(779, style);
 }
 
-QIcon Notification(const IconStyle& style) {
-  return detail::makeIconByIndex(780, style);
+IconToken Notification(const IconStyle& style) {
+  return detail::makeTokenByIndex(780, style);
 }
 
-QIcon PauseCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(781, style);
+IconToken PauseCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(781, style);
 }
 
-QIcon Phone(const IconStyle& style) {
-  return detail::makeIconByIndex(782, style);
+IconToken Phone(const IconStyle& style) {
+  return detail::makeTokenByIndex(782, style);
 }
 
-QIcon Picture(const IconStyle& style) {
-  return detail::makeIconByIndex(783, style);
+IconToken Picture(const IconStyle& style) {
+  return detail::makeTokenByIndex(783, style);
 }
 
-QIcon PieChart(const IconStyle& style) {
-  return detail::makeIconByIndex(784, style);
+IconToken PieChart(const IconStyle& style) {
+  return detail::makeTokenByIndex(784, style);
 }
 
-QIcon PlayCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(785, style);
+IconToken PlayCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(785, style);
 }
 
-QIcon PlaySquare(const IconStyle& style) {
-  return detail::makeIconByIndex(786, style);
+IconToken PlaySquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(786, style);
 }
 
-QIcon PlusCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(787, style);
+IconToken PlusCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(787, style);
 }
 
-QIcon PlusSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(788, style);
+IconToken PlusSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(788, style);
 }
 
-QIcon PoundCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(789, style);
+IconToken PoundCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(789, style);
 }
 
-QIcon Printer(const IconStyle& style) {
-  return detail::makeIconByIndex(790, style);
+IconToken Printer(const IconStyle& style) {
+  return detail::makeTokenByIndex(790, style);
 }
 
-QIcon Profile(const IconStyle& style) {
-  return detail::makeIconByIndex(791, style);
+IconToken Profile(const IconStyle& style) {
+  return detail::makeTokenByIndex(791, style);
 }
 
-QIcon Project(const IconStyle& style) {
-  return detail::makeIconByIndex(792, style);
+IconToken Project(const IconStyle& style) {
+  return detail::makeTokenByIndex(792, style);
 }
 
-QIcon PropertySafety(const IconStyle& style) {
-  return detail::makeIconByIndex(793, style);
+IconToken PropertySafety(const IconStyle& style) {
+  return detail::makeTokenByIndex(793, style);
 }
 
-QIcon Pushpin(const IconStyle& style) {
-  return detail::makeIconByIndex(794, style);
+IconToken Pushpin(const IconStyle& style) {
+  return detail::makeTokenByIndex(794, style);
 }
 
-QIcon QuestionCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(795, style);
+IconToken QuestionCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(795, style);
 }
 
-QIcon Reconciliation(const IconStyle& style) {
-  return detail::makeIconByIndex(796, style);
+IconToken Reconciliation(const IconStyle& style) {
+  return detail::makeTokenByIndex(796, style);
 }
 
-QIcon RedEnvelope(const IconStyle& style) {
-  return detail::makeIconByIndex(797, style);
+IconToken RedEnvelope(const IconStyle& style) {
+  return detail::makeTokenByIndex(797, style);
 }
 
-QIcon Rest(const IconStyle& style) {
-  return detail::makeIconByIndex(798, style);
+IconToken Rest(const IconStyle& style) {
+  return detail::makeTokenByIndex(798, style);
 }
 
-QIcon RightCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(799, style);
+IconToken RightCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(799, style);
 }
 
-QIcon RightSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(800, style);
+IconToken RightSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(800, style);
 }
 
-QIcon Rocket(const IconStyle& style) {
-  return detail::makeIconByIndex(801, style);
+IconToken Rocket(const IconStyle& style) {
+  return detail::makeTokenByIndex(801, style);
 }
 
-QIcon SafetyCertificate(const IconStyle& style) {
-  return detail::makeIconByIndex(802, style);
+IconToken SafetyCertificate(const IconStyle& style) {
+  return detail::makeTokenByIndex(802, style);
 }
 
-QIcon Save(const IconStyle& style) {
-  return detail::makeIconByIndex(803, style);
+IconToken Save(const IconStyle& style) {
+  return detail::makeTokenByIndex(803, style);
 }
 
-QIcon Schedule(const IconStyle& style) {
-  return detail::makeIconByIndex(804, style);
+IconToken Schedule(const IconStyle& style) {
+  return detail::makeTokenByIndex(804, style);
 }
 
-QIcon SecurityScan(const IconStyle& style) {
-  return detail::makeIconByIndex(805, style);
+IconToken SecurityScan(const IconStyle& style) {
+  return detail::makeTokenByIndex(805, style);
 }
 
-QIcon Setting(const IconStyle& style) {
-  return detail::makeIconByIndex(806, style);
+IconToken Setting(const IconStyle& style) {
+  return detail::makeTokenByIndex(806, style);
 }
 
-QIcon Shop(const IconStyle& style) {
-  return detail::makeIconByIndex(807, style);
+IconToken Shop(const IconStyle& style) {
+  return detail::makeTokenByIndex(807, style);
 }
 
-QIcon Shopping(const IconStyle& style) {
-  return detail::makeIconByIndex(808, style);
+IconToken Shopping(const IconStyle& style) {
+  return detail::makeTokenByIndex(808, style);
 }
 
-QIcon Skin(const IconStyle& style) {
-  return detail::makeIconByIndex(809, style);
+IconToken Skin(const IconStyle& style) {
+  return detail::makeTokenByIndex(809, style);
 }
 
-QIcon Sliders(const IconStyle& style) {
-  return detail::makeIconByIndex(810, style);
+IconToken Sliders(const IconStyle& style) {
+  return detail::makeTokenByIndex(810, style);
 }
 
-QIcon Smile(const IconStyle& style) {
-  return detail::makeIconByIndex(811, style);
+IconToken Smile(const IconStyle& style) {
+  return detail::makeTokenByIndex(811, style);
 }
 
-QIcon Snippets(const IconStyle& style) {
-  return detail::makeIconByIndex(812, style);
+IconToken Snippets(const IconStyle& style) {
+  return detail::makeTokenByIndex(812, style);
 }
 
-QIcon Sound(const IconStyle& style) {
-  return detail::makeIconByIndex(813, style);
+IconToken Sound(const IconStyle& style) {
+  return detail::makeTokenByIndex(813, style);
 }
 
-QIcon Star(const IconStyle& style) {
-  return detail::makeIconByIndex(814, style);
+IconToken Star(const IconStyle& style) {
+  return detail::makeTokenByIndex(814, style);
 }
 
-QIcon Stop(const IconStyle& style) {
-  return detail::makeIconByIndex(815, style);
+IconToken Stop(const IconStyle& style) {
+  return detail::makeTokenByIndex(815, style);
 }
 
-QIcon Switcher(const IconStyle& style) {
-  return detail::makeIconByIndex(816, style);
+IconToken Switcher(const IconStyle& style) {
+  return detail::makeTokenByIndex(816, style);
 }
 
-QIcon Tablet(const IconStyle& style) {
-  return detail::makeIconByIndex(817, style);
+IconToken Tablet(const IconStyle& style) {
+  return detail::makeTokenByIndex(817, style);
 }
 
-QIcon Tag(const IconStyle& style) {
-  return detail::makeIconByIndex(818, style);
+IconToken Tag(const IconStyle& style) {
+  return detail::makeTokenByIndex(818, style);
 }
 
-QIcon Tags(const IconStyle& style) {
-  return detail::makeIconByIndex(819, style);
+IconToken Tags(const IconStyle& style) {
+  return detail::makeTokenByIndex(819, style);
 }
 
-QIcon Thunderbolt(const IconStyle& style) {
-  return detail::makeIconByIndex(820, style);
+IconToken Thunderbolt(const IconStyle& style) {
+  return detail::makeTokenByIndex(820, style);
 }
 
-QIcon Tool(const IconStyle& style) {
-  return detail::makeIconByIndex(821, style);
+IconToken Tool(const IconStyle& style) {
+  return detail::makeTokenByIndex(821, style);
 }
 
-QIcon TrademarkCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(822, style);
+IconToken TrademarkCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(822, style);
 }
 
-QIcon Trophy(const IconStyle& style) {
-  return detail::makeIconByIndex(823, style);
+IconToken Trophy(const IconStyle& style) {
+  return detail::makeTokenByIndex(823, style);
 }
 
-QIcon Unlock(const IconStyle& style) {
-  return detail::makeIconByIndex(824, style);
+IconToken Unlock(const IconStyle& style) {
+  return detail::makeTokenByIndex(824, style);
 }
 
-QIcon UpCircle(const IconStyle& style) {
-  return detail::makeIconByIndex(825, style);
+IconToken UpCircle(const IconStyle& style) {
+  return detail::makeTokenByIndex(825, style);
 }
 
-QIcon UpSquare(const IconStyle& style) {
-  return detail::makeIconByIndex(826, style);
+IconToken UpSquare(const IconStyle& style) {
+  return detail::makeTokenByIndex(826, style);
 }
 
-QIcon Usb(const IconStyle& style) {
-  return detail::makeIconByIndex(827, style);
+IconToken Usb(const IconStyle& style) {
+  return detail::makeTokenByIndex(827, style);
 }
 
-QIcon VideoCamera(const IconStyle& style) {
-  return detail::makeIconByIndex(828, style);
+IconToken VideoCamera(const IconStyle& style) {
+  return detail::makeTokenByIndex(828, style);
 }
 
-QIcon Wallet(const IconStyle& style) {
-  return detail::makeIconByIndex(829, style);
+IconToken Wallet(const IconStyle& style) {
+  return detail::makeTokenByIndex(829, style);
 }
 
-QIcon Warning(const IconStyle& style) {
-  return detail::makeIconByIndex(830, style);
+IconToken Warning(const IconStyle& style) {
+  return detail::makeTokenByIndex(830, style);
 }
 
 }  // namespace adqt::icons::twotone

@@ -306,12 +306,10 @@ def _render_functions_h(entries: Sequence[Entry]) -> str:
         "#include \"ant_design_icons_qt_global.h\"",
         "#include \"icons_types.h\"",
         "",
-        "#include <QIcon>",
-        "",
         "namespace adqt::icons::outlined {",
     ]
     for e in grouped["outlined"]:
-        lines.append(f"ADQT_ICONS_EXPORT QIcon {e.function_name}(const IconStyle& style = {{}});")
+        lines.append(f"ADQT_ICONS_EXPORT IconToken {e.function_name}(const IconStyle& style = {{}});")
 
     lines += [
         "}  // namespace adqt::icons::outlined",
@@ -319,7 +317,7 @@ def _render_functions_h(entries: Sequence[Entry]) -> str:
         "namespace adqt::icons::filled {",
     ]
     for e in grouped["filled"]:
-        lines.append(f"ADQT_ICONS_EXPORT QIcon {e.function_name}(const IconStyle& style = {{}});")
+        lines.append(f"ADQT_ICONS_EXPORT IconToken {e.function_name}(const IconStyle& style = {{}});")
 
     lines += [
         "}  // namespace adqt::icons::filled",
@@ -327,7 +325,7 @@ def _render_functions_h(entries: Sequence[Entry]) -> str:
         "namespace adqt::icons::twotone {",
     ]
     for e in grouped["twotone"]:
-        lines.append(f"ADQT_ICONS_EXPORT QIcon {e.function_name}(const IconStyle& style = {{}});")
+        lines.append(f"ADQT_ICONS_EXPORT IconToken {e.function_name}(const IconStyle& style = {{}});")
 
     lines += [
         "}  // namespace adqt::icons::twotone",
@@ -355,8 +353,8 @@ def _render_functions_cpp(entries: Sequence[Entry]) -> str:
 
     for e in grouped["outlined"]:
         lines += [
-            f"QIcon {e.function_name}(const IconStyle& style) {{",
-            f"  return detail::makeIconByIndex({e.index}, style);",
+            f"IconToken {e.function_name}(const IconStyle& style) {{",
+            f"  return detail::makeTokenByIndex({e.index}, style);",
             "}",
             "",
         ]
@@ -369,8 +367,8 @@ def _render_functions_cpp(entries: Sequence[Entry]) -> str:
 
     for e in grouped["filled"]:
         lines += [
-            f"QIcon {e.function_name}(const IconStyle& style) {{",
-            f"  return detail::makeIconByIndex({e.index}, style);",
+            f"IconToken {e.function_name}(const IconStyle& style) {{",
+            f"  return detail::makeTokenByIndex({e.index}, style);",
             "}",
             "",
         ]
@@ -383,8 +381,8 @@ def _render_functions_cpp(entries: Sequence[Entry]) -> str:
 
     for e in grouped["twotone"]:
         lines += [
-            f"QIcon {e.function_name}(const IconStyle& style) {{",
-            f"  return detail::makeIconByIndex({e.index}, style);",
+            f"IconToken {e.function_name}(const IconStyle& style) {{",
+            f"  return detail::makeTokenByIndex({e.index}, style);",
             "}",
             "",
         ]

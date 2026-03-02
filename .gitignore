@@ -1,6 +1,7 @@
 build/
 build-*/
 examples/**/build-*/
+packages/**/build-*/
 *.pro.user
 Makefile*
 *.obj

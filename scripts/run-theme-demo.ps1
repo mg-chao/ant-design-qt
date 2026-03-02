@@ -186,51 +186,122 @@ function Invoke-CheckedTool {
   }
 }
 
-$repoRoot = Resolve-RepoRoot
-$demoDir = Join-Path $repoRoot "examples\theme-demo"
-$buildDir = Join-Path $demoDir "build-mingw"
-$proFile = Join-Path $demoDir "theme-demo.pro"
-$configLower = $Config.ToLowerInvariant()
-$exePath = Join-Path $buildDir "$configLower\theme-demo.exe"
-$makefileName = "Makefile.$Config"
-$runDetached = $Detached.IsPresent
+function Build-QmakeProject {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ProjectName,
+    [Parameter(Mandatory = $true)]
+    [string]$ProFile,
+    [Parameter(Mandatory = $true)]
+    [string]$BuildDir,
+    [Parameter(Mandatory = $true)]
+    [string]$ConfigLower,
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Tools,
+    [Parameter(Mandatory = $true)]
+    [string]$ConfigName
+  )
 
-if (-not (Test-Path $proFile)) {
-  throw "Demo project file not found: $proFile"
-}
+  New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
+  $makefileName = "Makefile.$ConfigName"
+  $jobs = [Math]::Max([Environment]::ProcessorCount, 1)
 
-$tools = Find-QtTools
-
-if ($Clean -and (Test-Path $buildDir)) {
-  Write-Host "[run-theme-demo] clean build dir: $buildDir"
-  Remove-Item -Recurse -Force $buildDir
-}
-
-if (-not $NoBuild) {
-  New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
-
-  Push-Location $buildDir
+  Push-Location $BuildDir
   try {
-    Write-Host "[run-theme-demo] qmake ($Config)"
-    Invoke-CheckedTool -FilePath $tools.QMake `
-      -Arguments @("..\theme-demo.pro", "CONFIG+=$configLower") `
-      -StepName "qmake"
+    Write-Host "[run-theme-demo] qmake $ProjectName ($ConfigName)"
+    Invoke-CheckedTool -FilePath $Tools.QMake `
+      -Arguments @($ProFile, "CONFIG+=$ConfigLower") `
+      -StepName "$ProjectName qmake"
 
     if (-not (Test-Path $makefileName)) {
-      throw "$makefileName not generated under $buildDir"
+      throw "$makefileName not generated under $BuildDir"
     }
 
-    $jobs = [Math]::Max([Environment]::ProcessorCount, 1)
-    Write-Host "[run-theme-demo] compiler: $($tools.Gxx)"
-    Write-Host "[run-theme-demo] cc1plus: $($tools.Cc1Plus)"
-    Write-Host "[run-theme-demo] make -f $makefileName -j$jobs"
-    Invoke-CheckedTool -FilePath $tools.Make `
+    Write-Host "[run-theme-demo] compiler: $($Tools.Gxx)"
+    Write-Host "[run-theme-demo] cc1plus: $($Tools.Cc1Plus)"
+    Write-Host "[run-theme-demo] make $ProjectName -f $makefileName -j$jobs"
+    Invoke-CheckedTool -FilePath $Tools.Make `
       -Arguments @("-f", $makefileName, "-j$jobs") `
-      -StepName "mingw32-make"
+      -StepName "$ProjectName mingw32-make"
   }
   finally {
     Pop-Location
   }
+}
+
+$repoRoot = Resolve-RepoRoot
+$libraryDir = Join-Path $repoRoot "packages\ant-design-qt"
+$libraryBuildDir = Join-Path $libraryDir "build-mingw"
+$libraryProFile = Join-Path $libraryDir "ant-design-qt.pro"
+$iconsDir = Join-Path $repoRoot "packages\ant-design-icons-qt"
+$iconsBuildDir = Join-Path $iconsDir "build-mingw"
+$iconsProFile = Join-Path $iconsDir "ant-design-icons-qt.pro"
+$demoDir = Join-Path $repoRoot "examples\theme-demo"
+$demoBuildDir = Join-Path $demoDir "build-mingw"
+$demoProFile = Join-Path $demoDir "theme-demo.pro"
+$configLower = $Config.ToLowerInvariant()
+$exePath = Join-Path $demoBuildDir "$configLower\theme-demo.exe"
+$runDetached = $Detached.IsPresent
+
+if (-not (Test-Path $libraryProFile)) {
+  throw "Library project file not found: $libraryProFile"
+}
+
+if (-not (Test-Path $demoProFile)) {
+  throw "Demo project file not found: $demoProFile"
+}
+
+if (-not (Test-Path $iconsProFile)) {
+  throw "Icon project file not found: $iconsProFile"
+}
+
+$tools = Find-QtTools
+
+if ($Clean -and (Test-Path $libraryBuildDir)) {
+  Write-Host "[run-theme-demo] clean library build dir: $libraryBuildDir"
+  Remove-Item -Recurse -Force $libraryBuildDir
+}
+
+if ($Clean -and (Test-Path $demoBuildDir)) {
+  $runningDemo = Get-Process -Name "theme-demo" -ErrorAction SilentlyContinue
+  if ($runningDemo) {
+    Write-Host "[run-theme-demo] stop running theme-demo.exe before clean"
+    Stop-Process -Name "theme-demo" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 200
+  }
+  Write-Host "[run-theme-demo] clean demo build dir: $demoBuildDir"
+  Remove-Item -Recurse -Force $demoBuildDir
+}
+
+if ($Clean -and (Test-Path $iconsBuildDir)) {
+  Write-Host "[run-theme-demo] clean icons build dir: $iconsBuildDir"
+  Remove-Item -Recurse -Force $iconsBuildDir
+}
+
+if (-not $NoBuild) {
+  Build-QmakeProject `
+    -ProjectName "ant-design-qt" `
+    -ProFile $libraryProFile `
+    -BuildDir $libraryBuildDir `
+    -ConfigLower $configLower `
+    -Tools $tools `
+    -ConfigName $Config
+
+  Build-QmakeProject `
+    -ProjectName "ant-design-icons-qt" `
+    -ProFile $iconsProFile `
+    -BuildDir $iconsBuildDir `
+    -ConfigLower $configLower `
+    -Tools $tools `
+    -ConfigName $Config
+
+  Build-QmakeProject `
+    -ProjectName "theme-demo" `
+    -ProFile $demoProFile `
+    -BuildDir $demoBuildDir `
+    -ConfigLower $configLower `
+    -Tools $tools `
+    -ConfigName $Config
 }
 
 if (-not (Test-Path $exePath)) {

@@ -1,39 +1,52 @@
-QT += core gui widgets
+QT += core gui widgets svg
 CONFIG += c++17
 TEMPLATE = app
 TARGET = theme-demo
 
-INCLUDEPATH += ../../src
+INCLUDEPATH += ../../packages/ant-design-qt/src
+INCLUDEPATH += ../../packages/ant-design-icons-qt/src
 
 HEADERS += \
-    menu_docs_page.h \
-    ../../src/widgets/button.h \
-    ../../src/widgets/button_group.h \
-    ../../src/widgets/button_style.h \
-    ../../src/widgets/interaction_overlay_manager.h \
-    ../../src/widgets/menu.h \
-    ../../src/widgets/menu_style.h \
-    ../../src/widgets/widgets.h \
-    ../../src/theme/fast_color_lite.h \
-    ../../src/theme/palette_generate.h \
-    ../../src/theme/theme.h \
-    ../../src/theme/theme_algorithms.h \
-    ../../src/theme/theme_manager.h \
-    ../../src/theme/theme_palette.h \
-    ../../src/theme/theme_types.h
+    icon_theme_adapter.h \
+    menu_docs_page.h
 
 SOURCES += \
+    icon_theme_adapter.cpp \
     main.cpp \
-    menu_docs_page.cpp \
-    ../../src/widgets/button.cpp \
-    ../../src/widgets/button_group.cpp \
-    ../../src/widgets/button_style.cpp \
-    ../../src/widgets/interaction_overlay_manager.cpp \
-    ../../src/widgets/menu.cpp \
-    ../../src/widgets/menu_style.cpp \
-    ../../src/theme/fast_color_lite.cpp \
-    ../../src/theme/palette_generate.cpp \
-    ../../src/theme/theme_algorithms.cpp \
-    ../../src/theme/theme_manager.cpp \
-    ../../src/theme/theme_palette.cpp \
-    ../../src/theme/theme_types.cpp
+    menu_docs_page.cpp
+
+isEmpty(ADQT_LIB_BUILD_DIR) {
+    ADQT_LIB_BUILD_DIR = $$clean_path($$OUT_PWD/../../packages/ant-design-qt)
+}
+!exists($$ADQT_LIB_BUILD_DIR) {
+    ADQT_LIB_BUILD_DIR = $$clean_path($$PWD/../../packages/ant-design-qt/build-mingw)
+}
+
+isEmpty(ADQT_ICONS_LIB_BUILD_DIR) {
+    ADQT_ICONS_LIB_BUILD_DIR = $$clean_path($$OUT_PWD/../../packages/ant-design-icons-qt)
+}
+!exists($$ADQT_ICONS_LIB_BUILD_DIR) {
+    ADQT_ICONS_LIB_BUILD_DIR = $$clean_path($$PWD/../../packages/ant-design-icons-qt/build-mingw)
+}
+
+CONFIG(debug, debug|release) {
+    ADQT_LIB_DIR = $$ADQT_LIB_BUILD_DIR/debug
+    ADQT_ICONS_LIB_DIR = $$ADQT_ICONS_LIB_BUILD_DIR/debug
+} else {
+    ADQT_LIB_DIR = $$ADQT_LIB_BUILD_DIR/release
+    ADQT_ICONS_LIB_DIR = $$ADQT_ICONS_LIB_BUILD_DIR/release
+}
+
+win32-g++ {
+    PRE_TARGETDEPS += $$ADQT_LIB_DIR/libant-design-qt.a
+    PRE_TARGETDEPS += $$ADQT_ICONS_LIB_DIR/libant-design-icons-qt.a
+    LIBS += -L$$ADQT_LIB_DIR -lant-design-qt
+    LIBS += -L$$ADQT_ICONS_LIB_DIR -lant-design-icons-qt
+}
+
+win32-msvc {
+    PRE_TARGETDEPS += $$ADQT_LIB_DIR/ant-design-qt.lib
+    PRE_TARGETDEPS += $$ADQT_ICONS_LIB_DIR/ant-design-icons-qt.lib
+    LIBS += $$ADQT_LIB_DIR/ant-design-qt.lib
+    LIBS += $$ADQT_ICONS_LIB_DIR/ant-design-icons-qt.lib
+}

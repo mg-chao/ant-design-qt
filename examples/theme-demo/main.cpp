@@ -14,7 +14,6 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
-#include <QStyle>
 #include <QStyleFactory>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -22,6 +21,8 @@
 
 #include <functional>
 
+#include "icon_theme_adapter.h"
+#include "icons.h"
 #include "menu_docs_page.h"
 #include "theme/theme.h"
 #include "widgets/widgets.h"
@@ -32,6 +33,7 @@ using adqt::theme::ThemeManager;
 using adqt::widgets::AdButton;
 using adqt::widgets::AdButtonGroup;
 using adqt::widgets::AdMenu;
+namespace outlined_icons = adqt::icons::outlined;
 
 namespace {
 
@@ -220,7 +222,7 @@ class ButtonDocsPage final : public QWidget {
 
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(8);
-    auto search = style()->standardIcon(QStyle::SP_FileDialogContentsView);
+    const QIcon search = outlined_icons::Search();
 
     auto* pCircle = new AdButton();
     pCircle->setType(AdButton::Type::Primary);
@@ -297,7 +299,7 @@ class ButtonDocsPage final : public QWidget {
     layout->addLayout(switchRow);
 
     iconPlacementButtons_.clear();
-    const auto icon = style()->standardIcon(QStyle::SP_FileDialogContentsView);
+    const QIcon icon = outlined_icons::Search();
 
     auto* row1 = new QHBoxLayout();
     row1->setSpacing(8);
@@ -438,7 +440,7 @@ class ButtonDocsPage final : public QWidget {
     layout->addLayout(line2);
 
     auto* line3 = new QHBoxLayout();
-    const auto dl = style()->standardIcon(QStyle::SP_DialogSaveButton);
+    const QIcon dl = outlined_icons::Download();
     sizeIconOnly_ = new AdButton();
     sizeIconOnly_->setType(AdButton::Type::Primary);
     sizeIconOnly_->setIcon(dl);
@@ -620,13 +622,13 @@ class ButtonDocsPage final : public QWidget {
 
     auto* loadingIcon = new AdButton();
     loadingIcon->setType(AdButton::Type::Primary);
-    loadingIcon->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    loadingIcon->setIcon(outlined_icons::PlayCircle());
     loadingIcon->setLoading(true);
     row1->addWidget(loadingIcon);
 
     auto* loadingCustom = new AdButton("Loading Icon");
     loadingCustom->setType(AdButton::Type::Primary);
-    loadingCustom->setLoadingIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    loadingCustom->setLoadingIcon(outlined_icons::Reload());
     loadingCustom->setLoading(true);
     row1->addWidget(loadingCustom);
     row1->addStretch();
@@ -643,8 +645,8 @@ class ButtonDocsPage final : public QWidget {
 
     auto* iconReplace = new AdButton("Icon Replace");
     iconReplace->setType(AdButton::Type::Primary);
-    const QIcon powerIcon = style()->standardIcon(QStyle::SP_MediaPlay);
-    const QIcon syncIcon = style()->standardIcon(QStyle::SP_BrowserReload);
+    const QIcon powerIcon = outlined_icons::PlayCircle();
+    const QIcon syncIcon = outlined_icons::Reload();
     iconReplace->setIcon(powerIcon);
 
     auto* iconOnly = new AdButton();
@@ -980,7 +982,7 @@ class DemoWindow final : public QWidget {
       QVector<AdMenu::Item> sectionItems;
       const QStringList& titles = titlesFor(kind);
       sectionItems.reserve(titles.size());
-      const QIcon sectionIcon = style()->standardIcon(QStyle::SP_ArrowRight);
+      const QIcon sectionIcon = outlined_icons::Right();
       for (int i = 0; i < titles.size(); ++i) {
         AdMenu::Item item;
         item.key = sectionKey(kind, i);
@@ -995,14 +997,14 @@ class DemoWindow final : public QWidget {
     buttonRoot.key = docsRootKey(DocsKind::Button);
     buttonRoot.label = "Button";
     buttonRoot.type = AdMenu::ItemType::SubMenu;
-    buttonRoot.icon = style()->standardIcon(QStyle::SP_FileDialogDetailedView);
+    buttonRoot.icon = outlined_icons::Appstore();
     buttonRoot.children = buildSectionItems(DocsKind::Button);
 
     AdMenu::Item menuRoot;
     menuRoot.key = docsRootKey(DocsKind::Menu);
     menuRoot.label = "Menu";
     menuRoot.type = AdMenu::ItemType::SubMenu;
-    menuRoot.icon = style()->standardIcon(QStyle::SP_DirOpenIcon);
+    menuRoot.icon = outlined_icons::Menu();
     menuRoot.children = buildSectionItems(DocsKind::Menu);
 
     navMenu_->setItems({buttonRoot, menuRoot});
@@ -1109,6 +1111,7 @@ int main(int argc, char* argv[]) {
   }
 
   ThemeManager::instance().applyTo(app);
+  demo::installIconThemeResolver();
 
   DemoWindow window;
   window.show();

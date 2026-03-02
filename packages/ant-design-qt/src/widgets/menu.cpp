@@ -7,6 +7,7 @@
 #include <QCursor>
 #include <QEvent>
 #include <QFocusEvent>
+#include <QFontMetrics>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -21,6 +22,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 
 namespace adqt::widgets {
 
@@ -686,7 +688,9 @@ QSize AdMenu::sizeHint() const {
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   if (mode_ == Mode::Horizontal) {
     const int h = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
-    return QSize(std::max(width(), 480), h + style.metrics.borderWidth);
+    const int contentWidth = horizontalContentWidthHint();
+    const int preferredWidth = std::max(160, contentWidth);
+    return QSize(std::max(width(), preferredWidth), h + style.metrics.borderWidth);
   }
   const int w = inlineCollapsed_ && mode_ == Mode::Inline ? 56 : 256;
   const int h = std::max(contentHeight_, style.metrics.itemHeight * 4);
@@ -704,7 +708,7 @@ QSize AdMenu::minimumSizeHint() const {
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   if (mode_ == Mode::Horizontal) {
     const int h = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
-    return QSize(160, h);
+    return QSize(std::max(160, horizontalContentWidthHint()), h);
   }
   const int w = inlineCollapsed_ && mode_ == Mode::Inline ? 48 : 120;
   return QSize(w, style.metrics.itemHeight + style.metrics.itemMarginBlock * 2);
@@ -1495,7 +1499,6 @@ void AdMenu::appendHorizontalEntries(const QVector<Item>& items, int& cursorX) {
       semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   const int itemHeight = style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
-  QFontMetrics fm(font());
 
   for (const Item& item : items) {
     const ItemType type = effectiveType(item);
@@ -1515,20 +1518,70 @@ void AdMenu::appendHorizontalEntries(const QVector<Item>& items, int& cursorX) {
     entry.hasChildren = !item.children.isEmpty();
     entry.popupTheme = item.hasSubMenuTheme ? item.subMenuTheme : theme_;
 
-    const QString label = trimmedOrFallback(item.label, item.key);
-    int widthHint = fm.horizontalAdvance(label) + style.metrics.itemPaddingInline * 2;
-    if (!item.icon.isNull()) {
-      widthHint += style.metrics.iconSize + style.metrics.iconMarginInlineEnd;
-    }
-    if (type == ItemType::SubMenu) {
-      widthHint += 16;
-    }
-    widthHint = std::max(widthHint, 72);
+    const int widthHint = horizontalEntryWidthHint(item, type, style);
 
     entry.rect = QRect(cursorX, 0, widthHint, itemHeight);
     cursorX += widthHint + style.metrics.horizontalSpacing;
     entries_.append(entry);
   }
+}
+
+int AdMenu::horizontalEntryWidthHint(const Item& item,
+                                     ItemType type,
+                                     const detail::MenuVisualStyle& style) const {
+  const QString label = trimmedOrFallback(item.label, item.key);
+  const QFontMetricsF metrics(font());
+  const int iconSide = std::max(10, style.metrics.iconSize);
+
+  int widthHint = 0;
+  widthHint += style.metrics.itemMarginInline * 2;
+  widthHint += style.metrics.itemPaddingInline * 2;
+  widthHint += static_cast<int>(std::ceil(metrics.horizontalAdvance(label)));
+
+  if (!item.icon.isNull()) {
+    // Keep this in sync with paint geometry: icon area + explicit icon/text separation.
+    widthHint += iconSide + style.metrics.iconMarginInlineEnd + 1;
+  }
+
+  if (type == ItemType::SubMenu && !item.children.isEmpty()) {
+    // Match paint geometry: 12px arrow box + 6px text/arrow gap.
+    widthHint += 12 + 6;
+  }
+
+  const int minWidth = 72 + style.metrics.itemMarginInline * 2;
+  return std::max(widthHint, minWidth);
+}
+
+int AdMenu::horizontalContentWidthHint() const {
+  if (mode_ != Mode::Horizontal || items_.isEmpty()) {
+    return 0;
+  }
+
+  StyleContext ctx;
+  ctx.mode = mode_;
+  ctx.theme = theme_;
+  ctx.inlineCollapsed = inlineCollapsed_;
+  ctx.items = items_;
+  const SemanticStyles effectiveSemantic =
+      semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
+  const MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
+
+  int totalWidth = 0;
+  int visibleCount = 0;
+  for (const Item& item : items_) {
+    const ItemType type = effectiveType(item);
+    if (type == ItemType::Divider) {
+      continue;
+    }
+    totalWidth += horizontalEntryWidthHint(item, type, style);
+    ++visibleCount;
+  }
+
+  if (visibleCount > 1) {
+    totalWidth += (visibleCount - 1) * style.metrics.horizontalSpacing;
+  }
+
+  return totalWidth;
 }
 
 int AdMenu::rowHeightForType(ItemType type) const {

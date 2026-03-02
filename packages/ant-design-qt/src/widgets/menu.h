@@ -20,6 +20,10 @@
 
 namespace adqt::widgets {
 
+namespace detail {
+struct MenuVisualStyle;
+}
+
 class AdMenu final : public QWidget {
   Q_OBJECT
 
@@ -345,6 +349,8 @@ class AdMenu final : public QWidget {
                              int& cursorY,
                              bool rootOnlySubmenus);
   void appendHorizontalEntries(const QVector<Item>& items, int& cursorX);
+  int horizontalEntryWidthHint(const Item& item, ItemType type, const detail::MenuVisualStyle& style) const;
+  int horizontalContentWidthHint() const;
 
   int rowHeightForType(ItemType type) const;
   int entryIndexAt(const QPoint& pos) const;

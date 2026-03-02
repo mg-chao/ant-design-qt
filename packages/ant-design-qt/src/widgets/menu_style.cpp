@@ -73,8 +73,7 @@ void applyTokenOverrides(MenuMetrics& metrics, const AdMenu::ComponentTokens& to
     metrics.groupTitleFontSize = std::max(10, tokens.groupTitleFontSize.value());
   }
   if (tokens.groupTitleLineHeight.has_value()) {
-    metrics.groupTitleLineHeight =
-        std::max(metrics.groupTitleFontSize + 2, tokens.groupTitleLineHeight.value());
+    metrics.groupTitleLineHeight = std::max(metrics.groupTitleFontSize, tokens.groupTitleLineHeight.value());
   }
 }
 
@@ -127,6 +126,7 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   metrics.itemBorderRadius = std::max(0, qRound(map.borderRadiusLG));
   metrics.horizontalItemBorderRadius = metrics.itemBorderRadius;
   metrics.subMenuItemBorderRadius = std::max(0, qRound(map.borderRadiusSM));
+  metrics.popupBorderRadius = std::max(0, qRound(map.borderRadiusLG));
   metrics.inlineIndent = 24;
 
   const int itemFontSize = std::max(12, qRound(map.fontSize));
@@ -140,13 +140,13 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   metrics.borderWidth = std::max(1, qRound(map.lineWidth));
   metrics.dividerMarginBlock = metrics.borderWidth;
 
-  metrics.groupTitleFontSize = std::max(11, qRound(map.fontSize));
+  metrics.groupTitleFontSize = std::max(10, qRound(map.fontSize));
   metrics.groupTitleLineHeight =
-      std::max(metrics.groupTitleFontSize + 4, qRound(map.lineHeight * map.fontSize));
+      std::max(metrics.groupTitleFontSize, qRound(map.lineHeight * metrics.groupTitleFontSize));
   metrics.groupTitleHorizontalPadding = metrics.itemPaddingInline;
   metrics.groupTitleVerticalPadding = std::max(4, qRound(map.sizeXS));
   metrics.popupPlacementGap = std::max(0, qRound(map.sizeXS));
-  metrics.horizontalSpacing = std::max(2, qRound(map.sizeXXS));
+  metrics.horizontalSpacing = 0;
 
   applyTokenOverrides(metrics, tokenOverrides);
   return metrics;
@@ -250,8 +250,8 @@ MenuVisualStyle makeDarkStyle(const ThemeMapToken& map,
       tokens.darkSubMenuItemBg.has_value() ? toColor(tokens.darkSubMenuItemBg.value(), QColor("#000c17"))
                                            : QColor("#000c17");
   style.popupBackground = tokens.darkPopupBg.has_value()
-                              ? toColor(tokens.darkPopupBg.value(), style.subMenuBackground)
-                              : style.subMenuBackground;
+                              ? toColor(tokens.darkPopupBg.value(), style.menuBackground)
+                              : style.menuBackground;
   style.popupBorderColor = QColor(0, 0, 0, 0);
 
   style.normal.text =

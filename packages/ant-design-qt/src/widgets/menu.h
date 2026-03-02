@@ -344,12 +344,14 @@ class AdMenu final : public QWidget {
   void appendInlineEntries(const QVector<Item>& items,
                            int depth,
                            const QStringList& submenuAncestors,
-                           int& cursorY);
+                           int& cursorY,
+                           int& trailingBlockMargin);
   void appendVerticalEntries(const QVector<Item>& items,
                              int depth,
                              const QStringList& submenuAncestors,
                              int& cursorY,
-                             bool rootOnlySubmenus);
+                             bool rootOnlySubmenus,
+                             int& trailingBlockMargin);
   void appendHorizontalEntries(const QVector<Item>& items, int& cursorX);
   int horizontalEntryWidthHint(const Item& item, ItemType type, const detail::MenuVisualStyle& style) const;
   int horizontalContentWidthHint() const;

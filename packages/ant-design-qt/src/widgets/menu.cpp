@@ -785,7 +785,7 @@ void AdMenu::paintEvent(QPaintEvent* event) {
 
   const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
   if (popupLayer) {
-    const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.itemBorderRadius));
+    const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.popupBorderRadius));
     const QRectF popupRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
     QPainterPath popupPath;
     popupPath.addRoundedRect(popupRect, popupRadius, popupRadius);
@@ -918,12 +918,17 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       state = style.hover;
     }
 
-    const int blockMargin = horizontal ? 0 : style.metrics.itemMarginBlock;
-    QRect fillRect = rowRect.adjusted(style.metrics.itemMarginInline, blockMargin,
-                                      -style.metrics.itemMarginInline, -blockMargin);
+    QRect fillRect = rowRect.adjusted(style.metrics.itemMarginInline, 0, -style.metrics.itemMarginInline, 0);
+    if (horizontal) {
+      fillRect = rowRect;
+    }
 
     int radius = entry.type == ItemType::SubMenu ? style.metrics.subMenuItemBorderRadius
                                                   : style.metrics.itemBorderRadius;
+    if (popupLayer) {
+      // Match antd submenu popup: both items and submenu titles use subMenuItemBorderRadius.
+      radius = style.metrics.subMenuItemBorderRadius;
+    }
     if (horizontal) {
       radius = style.metrics.horizontalItemBorderRadius;
 
@@ -1410,16 +1415,17 @@ void AdMenu::rebuildEntries() {
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   int cursorY = 0;
   int cursorX = 0;
+  int trailingBlockMargin = 0;
 
   if (mode_ == Mode::Horizontal) {
     appendHorizontalEntries(items_, cursorX);
     contentHeight_ = style.metrics.itemHeight + style.metrics.borderWidth;
   } else if (mode_ == Mode::Inline && !inlineCollapsed_) {
-    appendInlineEntries(items_, 0, {}, cursorY);
-    contentHeight_ = cursorY + style.metrics.borderWidth;
+    appendInlineEntries(items_, 0, {}, cursorY, trailingBlockMargin);
+    contentHeight_ = cursorY + trailingBlockMargin + style.metrics.borderWidth;
   } else {
-    appendVerticalEntries(items_, 0, {}, cursorY, true);
-    contentHeight_ = cursorY + style.metrics.borderWidth;
+    appendVerticalEntries(items_, 0, {}, cursorY, true, trailingBlockMargin);
+    contentHeight_ = cursorY + trailingBlockMargin + style.metrics.borderWidth;
   }
 
   updateGeometry();
@@ -1541,7 +1547,8 @@ void AdMenu::syncTooltipForHoveredEntry() {
 void AdMenu::appendInlineEntries(const QVector<Item>& items,
                                  int depth,
                                  const QStringList& submenuAncestors,
-                                 int& cursorY) {
+                                 int& cursorY,
+                                 int& trailingBlockMargin) {
   StyleContext ctx;
   ctx.mode = mode_;
   ctx.theme = theme_;
@@ -1566,18 +1573,24 @@ void AdMenu::appendInlineEntries(const QVector<Item>& items,
     entry.hasChildren = !item.children.isEmpty();
     entry.popupTheme = item.hasSubMenuTheme ? item.subMenuTheme : theme_;
 
+    const bool menuRowType = (type == ItemType::Item || type == ItemType::SubMenu);
+    const int topBlockMargin = menuRowType ? style.metrics.itemMarginBlock : 0;
+    const int bottomBlockMargin = menuRowType ? style.metrics.itemMarginBlock : 0;
+    cursorY += std::max(trailingBlockMargin, topBlockMargin);
+
     const int height = rowHeightForType(type);
     entry.rect = QRect(0, cursorY, rowWidth, height);
     cursorY += height;
+    trailingBlockMargin = bottomBlockMargin;
     entries_.append(entry);
 
     if (type == ItemType::Group) {
-      appendInlineEntries(item.children, depth + 1, submenuAncestors, cursorY);
+      appendInlineEntries(item.children, depth + 1, submenuAncestors, cursorY, trailingBlockMargin);
       continue;
     }
 
     if (type == ItemType::SubMenu && openKeys_.contains(item.key)) {
-      appendInlineEntries(item.children, depth + 1, entry.keyPath, cursorY);
+      appendInlineEntries(item.children, depth + 1, entry.keyPath, cursorY, trailingBlockMargin);
     }
   }
 
@@ -1590,7 +1603,8 @@ void AdMenu::appendVerticalEntries(const QVector<Item>& items,
                                    int depth,
                                    const QStringList& submenuAncestors,
                                    int& cursorY,
-                                   bool rootOnlySubmenus) {
+                                   bool rootOnlySubmenus,
+                                   int& trailingBlockMargin) {
   StyleContext ctx;
   ctx.mode = mode_;
   ctx.theme = theme_;
@@ -1615,18 +1629,30 @@ void AdMenu::appendVerticalEntries(const QVector<Item>& items,
     entry.hasChildren = !item.children.isEmpty();
     entry.popupTheme = item.hasSubMenuTheme ? item.subMenuTheme : theme_;
 
+    const bool menuRowType = (type == ItemType::Item || type == ItemType::SubMenu);
+    const int topBlockMargin = menuRowType ? style.metrics.itemMarginBlock : 0;
+    const int bottomBlockMargin = menuRowType ? style.metrics.itemMarginBlock : 0;
+    cursorY += std::max(trailingBlockMargin, topBlockMargin);
+
     const int height = rowHeightForType(type);
     entry.rect = QRect(0, cursorY, rowWidth, height);
     cursorY += height;
+    trailingBlockMargin = bottomBlockMargin;
     entries_.append(entry);
 
     if (type == ItemType::Group) {
-      appendVerticalEntries(item.children, depth + 1, submenuAncestors, cursorY, rootOnlySubmenus);
+      appendVerticalEntries(item.children,
+                            depth + 1,
+                            submenuAncestors,
+                            cursorY,
+                            rootOnlySubmenus,
+                            trailingBlockMargin);
       continue;
     }
 
     if (!rootOnlySubmenus && type == ItemType::SubMenu && openKeys_.contains(item.key)) {
-      appendVerticalEntries(item.children, depth + 1, entry.keyPath, cursorY, false);
+      appendVerticalEntries(
+          item.children, depth + 1, entry.keyPath, cursorY, false, trailingBlockMargin);
     }
   }
 
@@ -1680,7 +1706,6 @@ int AdMenu::horizontalEntryWidthHint(const Item& item,
   const int iconSide = std::max(10, style.metrics.iconSize);
 
   int widthHint = 0;
-  widthHint += style.metrics.itemMarginInline * 2;
   widthHint += style.metrics.itemPaddingInline * 2;
   widthHint += static_cast<int>(std::ceil(metrics.horizontalAdvance(label)));
 
@@ -1695,8 +1720,7 @@ int AdMenu::horizontalEntryWidthHint(const Item& item,
     widthHint += kSubMenuArrowBoxWidth + kSubMenuArrowTextGap;
   }
 
-  const int minWidth = 72 + style.metrics.itemMarginInline * 2;
-  return std::max(widthHint, minWidth);
+  return widthHint;
 }
 
 int AdMenu::horizontalContentWidthHint() const {
@@ -1813,7 +1837,7 @@ int AdMenu::rowHeightForType(ItemType type) const {
         std::max(style.metrics.groupTitleFontSize, style.metrics.groupTitleLineHeight);
     return groupLineHeight + style.metrics.groupTitleVerticalPadding * 2;
   }
-  return style.metrics.itemHeight + style.metrics.itemMarginBlock * 2;
+  return style.metrics.itemHeight;
 }
 
 int AdMenu::entryIndexAt(const QPoint& pos) const {
@@ -2393,8 +2417,7 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
   int horizontalStretchWidth = 0;
   if (mode_ == Mode::Horizontal) {
     // Match antd horizontal behavior:
-    // rc-menu/rc-trigger stretch=minWidth is based on submenu-title width,
-    // which aligns with the horizontal active underline width (content box).
+    // horizontal item width is content + padding, with no extra inter-item gap.
     StyleContext ctx;
     ctx.mode = mode_;
     ctx.theme = theme_;
@@ -2403,12 +2426,9 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
     const SemanticStyles effectiveSemantic =
         semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
     const MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
-    horizontalPopupAlignOffset =
-        std::max(0, style.metrics.itemMarginInline + style.metrics.itemPaddingInline);
+    horizontalPopupAlignOffset = std::max(0, style.metrics.itemPaddingInline);
     horizontalPopupGap = std::max(0, style.metrics.popupPlacementGap);
-    horizontalStretchWidth = std::max(0,
-                                      triggerRect.width() - style.metrics.itemMarginInline * 2 -
-                                          style.metrics.itemPaddingInline * 2);
+    horizontalStretchWidth = std::max(0, triggerRect.width() - style.metrics.itemPaddingInline * 2);
   }
 
   QLayout* popupLayout = popupRecord.popup->layout();

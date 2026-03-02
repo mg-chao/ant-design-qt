@@ -20,6 +20,7 @@ struct MenuMetrics {
   int itemBorderRadius = 8;
   int horizontalItemBorderRadius = 8;
   int subMenuItemBorderRadius = 6;
+  int popupBorderRadius = 8;
   int inlineIndent = 24;
 
   int iconSize = 14;
@@ -33,7 +34,7 @@ struct MenuMetrics {
   int groupTitleHorizontalPadding = 16;
   int groupTitleVerticalPadding = 8;
   int popupPlacementGap = 8;
-  int horizontalSpacing = 4;
+  int horizontalSpacing = 0;
   QFont font;
 };
 

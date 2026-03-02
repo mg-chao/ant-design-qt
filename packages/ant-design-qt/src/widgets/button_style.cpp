@@ -585,11 +585,7 @@ void applyGhostStyle(ButtonVisualStyle& style, const ResolvedRole& role, const T
   if (role.variant == AdButton::Variant::Outlined || role.variant == AdButton::Variant::Dashed) {
     if (role.color == AdButton::Color::Default) {
       style.normal.text = defaultGhost;
-      style.hover.text = defaultGhost;
-      style.active.text = defaultGhost;
       style.normal.border = defaultGhost;
-      style.hover.border = defaultGhost;
-      style.active.border = defaultGhost;
     }
   }
 }

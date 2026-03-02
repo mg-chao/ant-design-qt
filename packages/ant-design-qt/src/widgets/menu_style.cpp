@@ -252,7 +252,8 @@ MenuVisualStyle makeDarkStyle(const ThemeMapToken& map,
   style.popupBackground = tokens.darkPopupBg.has_value()
                               ? toColor(tokens.darkPopupBg.value(), style.menuBackground)
                               : style.menuBackground;
-  style.popupBorderColor = QColor(0, 0, 0, 0);
+  style.popupBorderColor =
+      toColor(map.colorBorderSecondary, withAlpha(QColor("#ffffff"), 0.12));
 
   style.normal.text =
       tokens.darkItemColor.has_value() ? toColor(tokens.darkItemColor.value(), textDark) : textDark;

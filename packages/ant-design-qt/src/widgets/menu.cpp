@@ -786,7 +786,9 @@ void AdMenu::paintEvent(QPaintEvent* event) {
   const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
   if (popupLayer) {
     const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.popupBorderRadius));
-    const QRectF popupRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    const qreal popupBorderWidth = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.borderWidth));
+    const qreal inset = popupBorderWidth > 0.0 ? popupBorderWidth * 0.5 : 0.5;
+    const QRectF popupRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
     QPainterPath popupPath;
     popupPath.addRoundedRect(popupRect, popupRadius, popupRadius);
     painter.fillPath(popupPath, style.popupBackground);
@@ -1063,6 +1065,14 @@ void AdMenu::paintEvent(QPaintEvent* event) {
 
   if (popupLayer) {
     painter.restore();
+    if (style.metrics.borderWidth > 0 && style.popupBorderColor.alpha() > 0) {
+      painter.setPen(QPen(style.popupBorderColor, style.metrics.borderWidth));
+      painter.setBrush(Qt::NoBrush);
+      const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.popupBorderRadius));
+      const qreal inset = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.borderWidth)) * 0.5;
+      const QRectF borderRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
+      painter.drawRoundedRect(borderRect, popupRadius, popupRadius);
+    }
   }
 }
 

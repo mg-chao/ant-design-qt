@@ -76,6 +76,7 @@ struct ThemeSeedToken {
 struct ThemeConfig {
   ThemeSeedToken seed;
   QSet<ThemeAlgorithm> algorithms;
+  bool loadAntdFont = false;
 };
 
 struct ThemeMapToken {

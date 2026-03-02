@@ -85,6 +85,7 @@ ThemeConfig defaultThemeConfig() {
   ThemeConfig config;
   config.seed = defaultSeedToken();
   config.algorithms = {ThemeAlgorithm::Default};
+  config.loadAntdFont = false;
   return config;
 }
 
@@ -116,7 +117,8 @@ bool operator==(const ThemeSeedToken& lhs, const ThemeSeedToken& rhs) {
 }
 
 bool operator==(const ThemeConfig& lhs, const ThemeConfig& rhs) {
-  return lhs.seed == rhs.seed && lhs.algorithms == rhs.algorithms;
+  return lhs.seed == rhs.seed && lhs.algorithms == rhs.algorithms &&
+         lhs.loadAntdFont == rhs.loadAntdFont;
 }
 
 }  // namespace adqt::theme

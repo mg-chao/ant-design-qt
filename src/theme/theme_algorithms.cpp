@@ -620,6 +620,7 @@ QByteArray themeConfigKey(const ThemeConfig& config) {
 
   QJsonObject obj;
   obj["seed"] = seedToJson(normalized.seed);
+  obj["loadAntdFont"] = normalized.loadAntdFont;
 
   QStringList algorithms;
   algorithms.reserve(normalized.algorithms.size());

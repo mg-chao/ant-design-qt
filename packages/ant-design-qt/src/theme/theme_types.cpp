@@ -75,6 +75,13 @@ ThemeSeedToken defaultSeedToken() {
 
   token.opacityImage = 1.0;
 
+  token.timingFrameIntervalMs = 25;
+  token.timingSpinnerCycleMs = 1000;
+  token.timingWaveDurationMs = 560;
+  token.timingMenuOpenDelayMs = 0;
+  token.timingMenuCloseDelayMs = 100;
+  token.timingLoadingDelayMs = 0;
+
   token.wireframe = false;
   token.motion = true;
 
@@ -113,6 +120,12 @@ bool operator==(const ThemeSeedToken& lhs, const ThemeSeedToken& rhs) {
          lhs.sizeStep == rhs.sizeStep && lhs.sizePopupArrow == rhs.sizePopupArrow &&
          lhs.controlHeight == rhs.controlHeight && lhs.zIndexBase == rhs.zIndexBase &&
          lhs.zIndexPopupBase == rhs.zIndexPopupBase && lhs.opacityImage == rhs.opacityImage &&
+         lhs.timingFrameIntervalMs == rhs.timingFrameIntervalMs &&
+         lhs.timingSpinnerCycleMs == rhs.timingSpinnerCycleMs &&
+         lhs.timingWaveDurationMs == rhs.timingWaveDurationMs &&
+         lhs.timingMenuOpenDelayMs == rhs.timingMenuOpenDelayMs &&
+         lhs.timingMenuCloseDelayMs == rhs.timingMenuCloseDelayMs &&
+         lhs.timingLoadingDelayMs == rhs.timingLoadingDelayMs &&
          lhs.wireframe == rhs.wireframe && lhs.motion == rhs.motion;
 }
 

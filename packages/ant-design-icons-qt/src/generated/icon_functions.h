@@ -739,6 +739,7 @@ ADQT_ICONS_EXPORT IconToken Dollar(const IconStyle& style = {});
 ADQT_ICONS_EXPORT IconToken DollarCircle(const IconStyle& style = {});
 ADQT_ICONS_EXPORT IconToken DownCircle(const IconStyle& style = {});
 ADQT_ICONS_EXPORT IconToken DownSquare(const IconStyle& style = {});
+ADQT_ICONS_EXPORT IconToken EmptySimple(const IconStyle& style = {});
 ADQT_ICONS_EXPORT IconToken Edit(const IconStyle& style = {});
 ADQT_ICONS_EXPORT IconToken Environment(const IconStyle& style = {});
 ADQT_ICONS_EXPORT IconToken Euro(const IconStyle& style = {});

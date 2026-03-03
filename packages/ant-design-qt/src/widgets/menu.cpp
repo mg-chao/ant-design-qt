@@ -1,5 +1,6 @@
 #include "menu.h"
 
+#include "detail/timing_hub.h"
 #include "icons.h"
 #include "generated/icon_manifest.h"
 #include "menu_style.h"
@@ -38,16 +39,14 @@ constexpr int kAntdDropdownMinWidth = 160;
 constexpr int kSubMenuArrowBoxWidth = 12;
 constexpr int kSubMenuArrowBoxHeight = 14;
 constexpr int kSubMenuArrowTextGap = 6;
+constexpr char kHoverOpenTaskKey[] = "AdMenu.HoverOpen";
+constexpr char kHoverCloseTaskKey[] = "AdMenu.HoverClose";
 
 QPoint mouseEventPos(const QMouseEvent* event) {
   if (!event) {
     return QPoint();
   }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   return event->position().toPoint();
-#else
-  return event->pos();
-#endif
 }
 
 QRect widgetGlobalRect(const QWidget* widget) {
@@ -432,29 +431,14 @@ AdMenu::AdMenu(QWidget* parent) : QWidget(parent) {
   setFocusPolicy(Qt::StrongFocus);
   setAttribute(Qt::WA_Hover, true);
 
-  hoverOpenTimer_.setSingleShot(true);
-  connect(&hoverOpenTimer_, &QTimer::timeout, this, [this]() {
-    if (pendingHoverOpenKey_.isEmpty()) {
-      return;
-    }
-    AdMenu* sink = (eventSink_ && eventSink_.data() != this) ? eventSink_.data() : this;
-    if (sink) {
-      sink->openSubMenuByKey(pendingHoverOpenKey_);
-    }
-  });
-  hoverCloseTimer_.setSingleShot(true);
-  connect(&hoverCloseTimer_, &QTimer::timeout, this, [this]() {
-    clearDanglingPopups();
-  });
-
   connect(&theme::ThemeManager::instance(), &theme::ThemeManager::themeChanged, this, [this]() {
     update();
   });
 }
 
 AdMenu::~AdMenu() {
-  hoverOpenTimer_.stop();
-  hoverCloseTimer_.stop();
+  detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
+  detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
   pendingHoverOpenKey_.clear();
   hideTooltip();
 
@@ -638,7 +622,7 @@ void AdMenu::setTriggerSubMenuAction(TriggerSubMenuAction value) {
 int AdMenu::subMenuOpenDelayMs() const { return subMenuOpenDelayMs_; }
 
 void AdMenu::setSubMenuOpenDelayMs(int value) {
-  value = std::max(0, value);
+  value = std::max(-1, value);
   if (subMenuOpenDelayMs_ == value) {
     return;
   }
@@ -650,7 +634,7 @@ void AdMenu::setSubMenuOpenDelayMs(int value) {
 int AdMenu::subMenuCloseDelayMs() const { return subMenuCloseDelayMs_; }
 
 void AdMenu::setSubMenuCloseDelayMs(int value) {
-  value = std::max(0, value);
+  value = std::max(-1, value);
   if (subMenuCloseDelayMs_ == value) {
     return;
   }
@@ -1178,15 +1162,11 @@ void AdMenu::paintEvent(QPaintEvent* event) {
   }
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void AdMenu::enterEvent(QEnterEvent* event) {
-#else
-void AdMenu::enterEvent(QEvent* event) {
-#endif
   QWidget::enterEvent(event);
   const QPoint localCursor = mapFromGlobal(QCursor::pos());
   if (rect().contains(localCursor)) {
-    hoverCloseTimer_.stop();
+    detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
   }
   syncTooltipForHoveredEntry();
 }
@@ -1230,7 +1210,7 @@ void AdMenu::mouseMoveEvent(QMouseEvent* event) {
     const VisibleEntry& entry = entries_.at(index);
     hitOpenable = rowIsOpenable(entry);
     if (hoverPopupMode && hitOpenable) {
-      hoverCloseTimer_.stop();
+      detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
       requestHoverOpen(entry.key);
     }
   }
@@ -1422,7 +1402,7 @@ bool AdMenu::eventFilter(QObject* watched, QEvent* event) {
       watchedLayer->activeKey.clear();
     } else if (fromSharedPopup && event->type() == QEvent::Enter) {
       if (anyPopupLayerContainsGlobalPos(host, QCursor::pos())) {
-        hoverCloseTimer_.stop();
+        detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
       }
     } else if (fromSharedPopup && event->type() == QEvent::Leave &&
                triggerSubMenuAction_ == TriggerSubMenuAction::Hover &&
@@ -2514,17 +2494,25 @@ void AdMenu::requestHoverOpen(const QString& key) {
 
   if (key.isEmpty()) {
     pendingHoverOpenKey_.clear();
-    hoverOpenTimer_.stop();
+    detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
     return;
   }
 
   pendingHoverOpenKey_ = key;
-  const int delay = std::max(0, subMenuOpenDelayMs_);
+  const int delay = detail::resolveMenuOpenDelayMs(subMenuOpenDelayMs_);
   if (delay == 0) {
-    hoverOpenTimer_.stop();
+    detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
     openSubMenuByKey(key);
   } else {
-    hoverOpenTimer_.start(delay);
+    detail::scheduleTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey), delay, [this]() {
+      if (pendingHoverOpenKey_.isEmpty()) {
+        return;
+      }
+      AdMenu* sink = (eventSink_ && eventSink_.data() != this) ? eventSink_.data() : this;
+      if (sink) {
+        sink->openSubMenuByKey(pendingHoverOpenKey_);
+      }
+    });
   }
 }
 
@@ -2535,14 +2523,16 @@ void AdMenu::requestHoverClose() {
     return;
   }
 
-  hoverCloseTimer_.stop();
+  detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
 
-  const int delay = std::max(0, subMenuCloseDelayMs_);
+  const int delay = detail::resolveMenuCloseDelayMs(subMenuCloseDelayMs_);
   if (delay == 0) {
     clearDanglingPopups();
     return;
   }
-  hoverCloseTimer_.start(delay);
+  detail::scheduleTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey), delay, [this]() {
+    clearDanglingPopups();
+  });
 }
 
 void AdMenu::hideTooltip() {
@@ -2955,8 +2945,8 @@ void AdMenu::popupCloseFromHost(detail::PopupCloseReason reason) {
   Q_UNUSED(reason)
 
   pendingHoverOpenKey_.clear();
-  hoverOpenTimer_.stop();
-  hoverCloseTimer_.stop();
+  detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
+  detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
 
   if (!openKeys_.isEmpty()) {
     applyOpenInternal({}, true);

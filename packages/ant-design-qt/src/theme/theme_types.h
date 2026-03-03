@@ -69,6 +69,13 @@ struct ThemeSeedToken {
 
   double opacityImage;
 
+  int timingFrameIntervalMs;
+  int timingSpinnerCycleMs;
+  int timingWaveDurationMs;
+  int timingMenuOpenDelayMs;
+  int timingMenuCloseDelayMs;
+  int timingLoadingDelayMs;
+
   bool wireframe;
   bool motion;
 };
@@ -225,6 +232,13 @@ struct ThemeMapToken {
 
   double sizeUnit;
   double sizeStep;
+
+  int timingFrameIntervalMs;
+  int timingSpinnerCycleMs;
+  int timingWaveDurationMs;
+  int timingMenuOpenDelayMs;
+  int timingMenuCloseDelayMs;
+  int timingLoadingDelayMs;
 
   bool motion;
 };

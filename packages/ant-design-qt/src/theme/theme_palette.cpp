@@ -91,11 +91,9 @@ QPalette buildPalette(const GlobalPaletteToken& token) {
   palette.setColor(QPalette::Disabled, QPalette::Link, link);
   palette.setColor(QPalette::Disabled, QPalette::LinkVisited, linkActive);
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   palette.setColor(QPalette::Active, QPalette::Accent, primary);
   palette.setColor(QPalette::Inactive, QPalette::Accent, primary);
   palette.setColor(QPalette::Disabled, QPalette::Accent, primaryHover);
-#endif
 
   return palette;
 }

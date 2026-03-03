@@ -837,6 +837,7 @@ const IconEntry kEntries[] = {
     {IconTheme::TwoTone, "video-camera", ":/adqt/icons/twotone/video-camera.svg"},
     {IconTheme::TwoTone, "wallet", ":/adqt/icons/twotone/wallet.svg"},
     {IconTheme::TwoTone, "warning", ":/adqt/icons/twotone/warning.svg"},
+    {IconTheme::TwoTone, "empty-simple", ":/adqt/icons/twotone/empty-simple.svg"},
 };
 
 const IconEntry kInvalidEntry = {

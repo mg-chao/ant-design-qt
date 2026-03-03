@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QEnterEvent>
 #include <QList>
 #include <QMap>
 #include <QObject>
@@ -9,7 +10,6 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QTimer>
 #include <QVector>
 #include <QWidget>
 #include <QPainter>
@@ -296,11 +296,7 @@ class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
 
  protected:
   void paintEvent(QPaintEvent* event) override;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   void enterEvent(QEnterEvent* event) override;
-#else
-  void enterEvent(QEvent* event) override;
-#endif
   void leaveEvent(QEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
@@ -449,8 +445,8 @@ class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
   bool inlineCollapsed_ = false;
   int inlineIndent_ = 24;
   TriggerSubMenuAction triggerSubMenuAction_ = TriggerSubMenuAction::Hover;
-  int subMenuOpenDelayMs_ = 0;
-  int subMenuCloseDelayMs_ = 100;
+  int subMenuOpenDelayMs_ = -1;
+  int subMenuCloseDelayMs_ = -1;
   bool tooltipEnabled_ = true;
   QString overflowedIndicatorText_ = "...";
 
@@ -467,8 +463,6 @@ class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
   QStringList keyPathPrefix_;
   QPointer<AdMenu> eventSink_;
 
-  QTimer hoverOpenTimer_;
-  QTimer hoverCloseTimer_;
   QString pendingHoverOpenKey_;
 
   PopupRecord popupRecordCache_;

@@ -2,13 +2,13 @@
 
 #include <QFont>
 #include <QFontMetrics>
+#include <QEnterEvent>
 #include <QHideEvent>
 #include <QIcon>
 #include <QMoveEvent>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QShowEvent>
-#include <QTimer>
 #include <QtGlobal>
 
 #include "icons_types.h"
@@ -169,11 +169,7 @@ class AdButton final : public QPushButton {
   QSize minimumSizeHint() const override;
 
   void changeEvent(QEvent* event) override;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   void enterEvent(QEnterEvent* event) override;
-#else
-  void enterEvent(QEvent* event) override;
-#endif
   void leaveEvent(QEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
@@ -243,7 +239,7 @@ class AdButton final : public QPushButton {
   bool ghost_ = false;
   bool block_ = false;
   bool loading_ = false;
-  int loadingDelay_ = 0;
+  int loadingDelay_ = -1;
   bool loadingVisible_ = false;
   bool autoInsertSpace_ = true;
   bool hovered_ = false;
@@ -251,7 +247,6 @@ class AdButton final : public QPushButton {
 
   adqt::icons::IconToken iconToken_;
   adqt::icons::IconToken loadingIconToken_;
-  QTimer loadingDelayTimer_;
   bool spinnerSubscribed_ = false;
 
   GroupPosition groupPosition_ = GroupPosition::None;

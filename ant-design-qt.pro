@@ -4,9 +4,12 @@ CONFIG += ordered
 SUBDIRS += \
     ant_design_qt \
     ant_design_icons_qt \
+    ant_design_qt_tests \
     theme_demo
 
 ant_design_qt.subdir = packages/ant-design-qt
 ant_design_icons_qt.subdir = packages/ant-design-icons-qt
+ant_design_qt_tests.file = packages/ant-design-qt/tests/ant-design-qt-tests.pro
+ant_design_qt_tests.depends = ant_design_qt ant_design_icons_qt
 theme_demo.subdir = examples/theme-demo
 theme_demo.depends = ant_design_qt ant_design_icons_qt

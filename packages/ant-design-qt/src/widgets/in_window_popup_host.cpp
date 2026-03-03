@@ -1,4 +1,5 @@
 #include "in_window_popup_host.h"
+#include "detail/timing_hub.h"
 
 #include <QApplication>
 #include <QEvent>
@@ -6,8 +7,8 @@
 #include <QMouseEvent>
 #include <QPointer>
 #include <QSet>
+#include <QString>
 #include <QTouchEvent>
-#include <QTimer>
 #include <QWidget>
 
 #include <optional>
@@ -16,34 +17,25 @@ namespace adqt::widgets::detail {
 
 namespace {
 
+constexpr char kRelayoutTaskKey[] = "InWindowPopupHost.Relayout";
+constexpr char kRefreshAnchorWatchersTaskKey[] = "InWindowPopupHost.RefreshAnchorWatchers";
+
 QPoint mouseEventGlobalPos(const QMouseEvent* event) {
   if (!event) {
     return QPoint();
   }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   return event->globalPosition().toPoint();
-#else
-  return event->globalPos();
-#endif
 }
 
 std::optional<QPoint> touchEventGlobalPos(const QTouchEvent* event) {
   if (!event) {
     return std::nullopt;
   }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   const QList<QEventPoint> points = event->points();
   if (points.isEmpty()) {
     return std::nullopt;
   }
   return points.constFirst().globalPosition().toPoint();
-#else
-  const QList<QTouchEvent::TouchPoint> points = event->touchPoints();
-  if (points.isEmpty()) {
-    return std::nullopt;
-  }
-  return points.constFirst().screenPos().toPoint();
-#endif
 }
 
 std::optional<QPoint> popupInteractionGlobalPos(const QEvent* event) {
@@ -204,7 +196,7 @@ class InWindowPopupHost final : public QObject {
       } else if (event->type() == QEvent::ParentChange ||
                  event->type() == QEvent::ParentAboutToChange) {
         scheduleRelayout();
-        QTimer::singleShot(0, this, [this]() {
+        detail::deferTimingTask(this, QString::fromLatin1(kRefreshAnchorWatchersTaskKey), [this]() {
           refreshAnchorChainWatchers();
           scheduleRelayout();
         });
@@ -232,7 +224,7 @@ class InWindowPopupHost final : public QObject {
       return;
     }
     relayoutQueued_ = true;
-    QTimer::singleShot(0, this, [this]() {
+    detail::deferTimingTask(this, QString::fromLatin1(kRelayoutTaskKey), [this]() {
       relayoutQueued_ = false;
       if (!activeOwner_) {
         return;

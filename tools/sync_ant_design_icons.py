@@ -153,24 +153,53 @@ def _collect_svg_paths(svg_root: Path) -> Dict[str, List[Path]]:
     return result
 
 
-def _sync_svg_assets(svg_root: Path, dst_icons_root: Path, dry_run: bool) -> Dict[str, List[str]]:
+def _collect_custom_svg_paths(custom_root: Path) -> Dict[str, List[Path]]:
+    result: Dict[str, List[Path]] = {theme: [] for theme in THEMES}
+    for theme in THEMES:
+        theme_dir = custom_root / theme
+        if not theme_dir.exists():
+            continue
+        if not theme_dir.is_dir():
+            raise RuntimeError(f"Custom icon theme path is not a directory: {theme_dir}")
+        result[theme] = sorted(theme_dir.glob("*.svg"), key=lambda p: p.name)
+    return result
+
+
+def _sync_svg_assets(
+    svg_root: Path,
+    dst_icons_root: Path,
+    dry_run: bool,
+    custom_svg_paths: Optional[Dict[str, List[Path]]] = None,
+) -> Dict[str, List[str]]:
     copied: Dict[str, List[str]] = {theme: [] for theme in THEMES}
+    custom_svg_paths = custom_svg_paths or {theme: [] for theme in THEMES}
 
     for theme in THEMES:
         src_dir = svg_root / theme
         dst_dir = dst_icons_root / theme
         dst_dir.mkdir(parents=True, exist_ok=True)
 
+        source_files: Dict[str, Path] = {}
+        for src_file in sorted(src_dir.glob("*.svg"), key=lambda p: p.name):
+            source_files[src_file.name] = src_file
+        for src_file in custom_svg_paths.get(theme, []):
+            if src_file.name in source_files and source_files[src_file.name] != src_file:
+                raise RuntimeError(
+                    f"Custom icon '{src_file.name}' in theme '{theme}' collides with upstream icon."
+                )
+            source_files[src_file.name] = src_file
+
         existing = sorted(dst_dir.glob("*.svg"))
-        wanted_names = {p.name for p in src_dir.glob("*.svg")}
+        wanted_names = set(source_files.keys())
 
         for old_file in existing:
             if old_file.name not in wanted_names and not dry_run:
                 old_file.unlink()
 
-        for src_file in sorted(src_dir.glob("*.svg"), key=lambda p: p.name):
-            dst_file = dst_dir / src_file.name
-            copied[theme].append(src_file.stem)
+        for file_name in sorted(wanted_names):
+            src_file = source_files[file_name]
+            dst_file = dst_dir / file_name
+            copied[theme].append(Path(file_name).stem)
             if dry_run:
                 continue
             shutil.copy2(src_file, dst_file)
@@ -421,6 +450,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pkg_root = root / "packages" / "ant-design-icons-qt"
     resources_root = pkg_root / "resources"
     icons_root = resources_root / "icons"
+    custom_icons_root = resources_root / "custom-icons"
     generated_root = pkg_root / "src" / "generated"
 
     if not pkg_root.exists():
@@ -435,7 +465,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         svg_root = extracted_root / "packages" / "icons-svg" / "svg"
 
         _collect_svg_paths(svg_root)
-        copied_names = _sync_svg_assets(svg_root, icons_root, args.dry_run)
+        custom_svg_paths = _collect_custom_svg_paths(custom_icons_root)
+        copied_names = _sync_svg_assets(svg_root, icons_root, args.dry_run, custom_svg_paths=custom_svg_paths)
 
         entries = _build_entries(copied_names)
 

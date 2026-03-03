@@ -1,6 +1,7 @@
 #include "button.h"
 
 #include "button_style.h"
+#include "detail/timing_hub.h"
 #include "interaction_overlay_manager.h"
 #include "theme/theme.h"
 #include "icons.h"
@@ -18,7 +19,6 @@
 #include <QPainterPath>
 #include <QRegularExpression>
 #include <QResizeEvent>
-#include <QSet>
 #include <QShowEvent>
 #include <QStyle>
 
@@ -27,6 +27,10 @@
 namespace adqt::widgets {
 
 namespace {
+
+namespace outlined_icons = adqt::icons::outlined;
+constexpr char kLoadingDelayTaskKey[] = "AdButton.LoadingDelay";
+constexpr char kSpinnerFrameKey[] = "AdButton.SpinnerFrame";
 
 QPainterPath roundedRectPath(const QRectF& rect, qreal topLeft, qreal topRight, qreal bottomRight,
                              qreal bottomLeft) {
@@ -83,11 +87,7 @@ QPoint mouseEventPos(const QMouseEvent* event) {
   if (!event) {
     return QPoint();
   }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   return event->position().toPoint();
-#else
-  return event->pos();
-#endif
 }
 
 bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
@@ -181,75 +181,23 @@ int measureDisplayTextWidth(const QFontMetrics& fm,
   return std::max(0, first) + std::max(0, second) + twoCnLetterSpacingPx(fm, contentFont);
 }
 
-int& sharedSpinnerAngle() {
-  static int angle = 0;
-  return angle;
+qreal snapToDevicePixel(qreal value, qreal dpr) {
+  if (dpr <= 0.0) {
+    return value;
+  }
+  return qRound(value * dpr) / dpr;
 }
 
-QSet<QWidget*>& sharedSpinnerWidgets() {
-  static QSet<QWidget*> widgets;
-  return widgets;
-}
-
-QTimer& sharedSpinnerTimer() {
-  static QTimer timer;
-  static bool initialized = false;
-
-  if (!initialized) {
-    timer.setInterval(60);
-    QObject::connect(&timer, &QTimer::timeout, []() {
-      auto& widgets = sharedSpinnerWidgets();
-      if (widgets.isEmpty()) {
-        return;
-      }
-
-      sharedSpinnerAngle() = (sharedSpinnerAngle() + 24) % 360;
-
-      for (QWidget* widget : widgets) {
-        if (widget && widget->isVisible()) {
-          widget->update();
-        }
-      }
-    });
-    initialized = true;
+int sharedSpinnerAngle() {
+  const int cycleMs = detail::spinnerCycleDurationMs();
+  if (cycleMs <= 0) {
+    return 0;
   }
-
-  return timer;
-}
-
-void subscribeSharedSpinner(QWidget* widget) {
-  if (!widget) {
-    return;
+  qint64 phaseMs = detail::timingNowMs() % cycleMs;
+  if (phaseMs < 0) {
+    phaseMs += cycleMs;
   }
-
-  auto& widgets = sharedSpinnerWidgets();
-  if (widgets.contains(widget)) {
-    return;
-  }
-
-  widgets.insert(widget);
-
-  QTimer& timer = sharedSpinnerTimer();
-  if (!timer.isActive()) {
-    timer.start();
-  }
-}
-
-void unsubscribeSharedSpinner(QWidget* widget) {
-  if (!widget) {
-    return;
-  }
-
-  auto& widgets = sharedSpinnerWidgets();
-  widgets.remove(widget);
-
-  if (widgets.isEmpty()) {
-    QTimer& timer = sharedSpinnerTimer();
-    if (timer.isActive()) {
-      timer.stop();
-    }
-    sharedSpinnerAngle() = 0;
-  }
+  return static_cast<int>((phaseMs * 360) / cycleMs);
 }
 
 bool isValidWaveColor(const QColor& color) {
@@ -287,18 +235,14 @@ AdButton::AdButton(QWidget* parent) : QPushButton(parent), baseSizePolicy_(sizeP
   setSizePolicy(policy);
   baseSizePolicy_ = policy;
 
-  loadingDelayTimer_.setSingleShot(true);
-  connect(&loadingDelayTimer_, &QTimer::timeout, this, [this]() {
-    if (!loading_) {
-      return;
-    }
-    loadingVisible_ = true;
-    updateSpinnerState();
-    refreshAfterPropertyChange();
-  });
-
   connect(&adqt::theme::ThemeManager::instance(), &adqt::theme::ThemeManager::themeChanged, this,
-          [this]() { refreshAfterPropertyChange(); });
+          [this]() {
+            if (loading_) {
+              updateLoadingVisualState();
+              return;
+            }
+            refreshAfterPropertyChange();
+          });
 
   refreshAfterPropertyChange();
 }
@@ -308,11 +252,9 @@ AdButton::AdButton(const QString& text, QWidget* parent) : AdButton(parent) { se
 AdButton::~AdButton() {
   stopWaveEffect();
   stopInteractionFocusForOwner(this);
-
-  if (spinnerSubscribed_) {
-    unsubscribeSharedSpinner(this);
-    spinnerSubscribed_ = false;
-  }
+  detail::cancelTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey));
+  detail::clearFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey));
+  spinnerSubscribed_ = false;
 }
 
 AdButton::Type AdButton::type() const { return type_; }
@@ -422,7 +364,7 @@ void AdButton::setLoading(bool value) {
 int AdButton::loadingDelay() const { return loadingDelay_; }
 
 void AdButton::setLoadingDelay(int value) {
-  const int normalized = std::max(0, value);
+  const int normalized = std::max(-1, value);
   if (loadingDelay_ == normalized) {
     return;
   }
@@ -605,9 +547,12 @@ void AdButton::paintEvent(QPaintEvent* event) {
 
   const QString textToRender = renderText();
   const bool twoCnAutoSpacing = shouldApplyTwoCnSpacing(textToRender);
-  const bool spinnerOnly = loadingVisible_ && !adqt::icons::isValid(loadingIconToken_);
-  adqt::icons::IconToken iconToRender = loadingVisible_ ? loadingIconToken_ : iconToken_;
-  const bool hasIcon = spinnerOnly || adqt::icons::isValid(iconToRender);
+  adqt::icons::IconToken iconToRender = iconToken_;
+  if (loadingVisible_) {
+    iconToRender =
+        adqt::icons::isValid(loadingIconToken_) ? loadingIconToken_ : outlined_icons::Loading();
+  }
+  const bool hasIcon = adqt::icons::isValid(iconToRender);
   const bool iconOnly = hasIcon && textToRender.isEmpty();
 
   int iconSide = resolveIconSide(this, fm, style.metrics.font);
@@ -639,7 +584,8 @@ void AdButton::paintEvent(QPaintEvent* event) {
   painter.setPen(contentColor);
 
   if (layout.hasIcon) {
-    if (spinnerOnly) {
+    const bool drawBuiltinLoadingSpinner = loadingVisible_ && !adqt::icons::isValid(loadingIconToken_);
+    if (drawBuiltinLoadingSpinner) {
       drawSpinner(painter, layout.iconRect, contentColor);
     } else {
       if (shouldInheritCurrentColor(iconToRender)) {
@@ -651,10 +597,27 @@ void AdButton::paintEvent(QPaintEvent* event) {
       const QPixmap pixmap =
           adqt::icons::renderIconPixmap(iconToRender, layout.iconRect.size(), dpr, mode, QIcon::Off);
       if (!pixmap.isNull()) {
-        const QSize drawSize = pixmap.deviceIndependentSize().toSize();
-        const QPoint drawTopLeft(layout.iconRect.x() + (layout.iconRect.width() - drawSize.width()) / 2,
-                                 layout.iconRect.y() + (layout.iconRect.height() - drawSize.height()) / 2);
-        painter.drawPixmap(drawTopLeft, pixmap);
+        const QRectF iconRectF(layout.iconRect);
+        const QPointF iconCenter = iconRectF.center();
+        const QSizeF drawSize = pixmap.deviceIndependentSize();
+        QPointF drawTopLeft(iconCenter.x() - drawSize.width() / 2.0,
+                            iconCenter.y() - drawSize.height() / 2.0);
+        if (loadingVisible_) {
+          painter.save();
+          painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+          painter.translate(iconCenter);
+          painter.rotate(static_cast<qreal>(sharedSpinnerAngle()));
+          painter.translate(-iconCenter);
+          painter.drawPixmap(drawTopLeft, pixmap);
+          painter.restore();
+        } else {
+          drawTopLeft.setX(snapToDevicePixel(drawTopLeft.x(), dpr));
+          drawTopLeft.setY(snapToDevicePixel(drawTopLeft.y(), dpr));
+          painter.drawPixmap(drawTopLeft, pixmap);
+        }
+      } else if (loadingVisible_) {
+        // Fallback when loading icon resource is unavailable.
+        drawSpinner(painter, layout.iconRect, contentColor);
       }
     }
   }
@@ -746,13 +709,8 @@ void AdButton::changeEvent(QEvent* event) {
   }
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void AdButton::enterEvent(QEnterEvent* event) {
   QPushButton::enterEvent(event);
-#else
-void AdButton::enterEvent(QEvent* event) {
-  QPushButton::enterEvent(event);
-#endif
   hovered_ = true;
   bumpGroupZOrder();
   update();
@@ -913,15 +871,23 @@ void AdButton::refreshAfterPropertyChange(bool updateGeometryHint) {
 }
 
 void AdButton::updateLoadingVisualState() {
-  loadingDelayTimer_.stop();
+  detail::cancelTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey));
 
   if (!loading_) {
     loadingVisible_ = false;
-  } else if (loadingDelay_ <= 0) {
+  } else if (detail::resolveLoadingDelayMs(loadingDelay_) <= 0) {
     loadingVisible_ = true;
   } else {
     loadingVisible_ = false;
-    loadingDelayTimer_.start(loadingDelay_);
+    const int delayMs = detail::resolveLoadingDelayMs(loadingDelay_);
+    detail::scheduleTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey), delayMs, [this]() {
+      if (!loading_) {
+        return;
+      }
+      loadingVisible_ = true;
+      updateSpinnerState();
+      refreshAfterPropertyChange();
+    });
   }
 
   updateSpinnerState();
@@ -932,12 +898,18 @@ void AdButton::updateLoadingVisualState() {
 }
 
 void AdButton::updateSpinnerState() {
-  const bool spinning = loadingVisible_ && !adqt::icons::isValid(loadingIconToken_);
+  const bool spinning = loadingVisible_;
   if (spinning && !spinnerSubscribed_) {
-    subscribeSharedSpinner(this);
+    detail::setFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey), true,
+                                 [this](qint64, qint64) {
+                                   if (!loadingVisible_ || !isVisible()) {
+                                     return;
+                                   }
+                                   update();
+                                 });
     spinnerSubscribed_ = true;
   } else if (!spinning && spinnerSubscribed_) {
-    unsubscribeSharedSpinner(this);
+    detail::clearFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey));
     spinnerSubscribed_ = false;
   }
 }
@@ -1173,9 +1145,11 @@ AdButton::ContentLayout AdButton::computeContentLayout(const QRect& contentRect,
 
 void AdButton::drawSpinner(QPainter& painter, const QRect& iconRect, const QColor& color) const {
   const int side = std::max(8, std::min(iconRect.width(), iconRect.height()) - 2);
-  const QRectF spinnerRect(iconRect.center().x() - side / 2.0, iconRect.center().y() - side / 2.0, side, side);
-
-  QPen pen(color, 1.8, Qt::SolidLine, Qt::RoundCap);
+  const QPointF center = QRectF(iconRect).center();
+  const QRectF spinnerRect(center.x() - side / 2.0, center.y() - side / 2.0, side, side);
+  const qreal strokeWidth =
+      std::clamp(static_cast<qreal>(std::min(iconRect.width(), iconRect.height())) * 0.08, 1.0, 2.0);
+  QPen pen(color, strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
   painter.setPen(pen);
   painter.setBrush(Qt::NoBrush);
   painter.drawArc(spinnerRect, (90 - sharedSpinnerAngle()) * 16, -270 * 16);

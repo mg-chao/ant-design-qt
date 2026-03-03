@@ -18,6 +18,7 @@ class QAbstractListModel;
 class QFrame;
 class QHBoxLayout;
 class QLabel;
+class QLayout;
 class QLineEdit;
 class QListView;
 class QMoveEvent;
@@ -28,6 +29,8 @@ class QToolButton;
 class QVBoxLayout;
 
 namespace adqt::widgets {
+
+class AdScrollArea;
 
 namespace detail {
 struct SelectVisualStyle;
@@ -322,11 +325,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   void enterEvent(QEnterEvent* event) override;
-#else
-  void enterEvent(QEvent* event) override;
-#endif
   void leaveEvent(QEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
@@ -337,6 +336,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
  private:
   struct ModelRow {
     bool header = false;
+    bool empty = false;
     int optionIndex = -1;
     QString headerText;
   };
@@ -356,15 +356,25 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   QString formattedTagText(const Option& option) const;
   QString formattedSelectedLabel(const Option& option) const;
   QString fallbackSelectedLabel(const QString& value) const;
-  QString summaryForSelectedValues() const;
   QStringList normalizedValues(const QStringList& values) const;
   int responsiveVisibleTagCount(const QStringList& labels, int availableWidth) const;
+  void clearTagWidgets();
+  void rebuildTagWidgets();
   void enforceMaxCount();
   void updateInputMode();
+  void syncContentLayoutForMode();
+  bool suffixButtonTriggersPopup() const;
+  Qt::CursorShape selectorCursorShape() const;
+  Qt::CursorShape optionCursorShapeAtRow(int row) const;
+  void syncPopupOptionCursor(const QPoint& viewportPos);
   void updateDisplay();
+  void updateMultipleSelectorHeight();
   void updateClearButton();
+  void updateClearVisual();
+  void updateAccessoryGeometry();
   void updatePrefixVisual();
   void updateSuffixVisual();
+  void updateLoadingSpinnerState();
   void applyVisualStyle();
   void refreshRows();
   QVector<int> filteredOptionIndexes() const;
@@ -438,19 +448,24 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   QLabel* prefixLabel_ = nullptr;
   QWidget* contentHost_ = nullptr;
   QHBoxLayout* contentLayout_ = nullptr;
-  QLabel* tagsSummaryLabel_ = nullptr;
+  QWidget* tagsContainer_ = nullptr;
+  QLabel* placeholderLabel_ = nullptr;
+  QLayout* tagsLayout_ = nullptr;
   QLineEdit* lineEdit_ = nullptr;
   QToolButton* clearButton_ = nullptr;
   QToolButton* suffixButton_ = nullptr;
 
   QFrame* popup_ = nullptr;
   QVBoxLayout* popupLayout_ = nullptr;
+  AdScrollArea* popupScrollArea_ = nullptr;
   QListView* listView_ = nullptr;
   QWidget* popupExtraContent_ = nullptr;
   OptionListModel* listModel_ = nullptr;
   QVector<ModelRow> rows_;
+  bool suffixSpinnerSubscribed_ = false;
 
   bool hovered_ = false;
+  bool clearHovered_ = false;
   bool hasFocusWithin_ = false;
   bool suppressLineEditChange_ = false;
   bool applyingVisualStyle_ = false;

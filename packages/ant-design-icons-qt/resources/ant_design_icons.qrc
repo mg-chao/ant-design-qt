@@ -726,6 +726,7 @@
     <file alias="twotone/dollar-circle.svg">icons/twotone/dollar-circle.svg</file>
     <file alias="twotone/down-circle.svg">icons/twotone/down-circle.svg</file>
     <file alias="twotone/down-square.svg">icons/twotone/down-square.svg</file>
+    <file alias="twotone/empty-simple.svg">icons/twotone/empty-simple.svg</file>
     <file alias="twotone/edit.svg">icons/twotone/edit.svg</file>
     <file alias="twotone/environment.svg">icons/twotone/environment.svg</file>
     <file alias="twotone/euro.svg">icons/twotone/euro.svg</file>

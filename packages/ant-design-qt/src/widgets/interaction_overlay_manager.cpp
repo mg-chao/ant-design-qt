@@ -1,10 +1,11 @@
 #include "interaction_overlay_manager.h"
+#include "detail/timing_hub.h"
 
 #include <QHash>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPointer>
-#include <QTimer>
+#include <QString>
 #include <QWidget>
 
 #include <algorithm>
@@ -13,12 +14,11 @@ namespace adqt::widgets {
 
 namespace {
 
-constexpr int kInteractionWaveFrameIntervalMs = 33;
 constexpr int kInteractionWaveSpreadDurationMs = 300;
-constexpr int kInteractionWaveFadeDurationMs = 560;
 constexpr int kInteractionWaveThickenDurationMs = 180;
 constexpr qreal kInteractionWaveInitialOpacity = 0.16;
 constexpr qreal kInteractionWaveStrokeWidth = 1.6;
+constexpr char kWaveFrameKey[] = "SharedInteractionOverlay.WaveFrame";
 
 qreal clampUnit(qreal value) { return std::clamp(value, 0.0, 1.0); }
 
@@ -108,11 +108,6 @@ class SharedInteractionOverlay final : public QWidget {
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_NoSystemBackground, true);
     hide();
-
-    interactionWaveTimer_.setInterval(kInteractionWaveFrameIntervalMs);
-    interactionWaveTimer_.setTimerType(Qt::CoarseTimer);
-    connect(&interactionWaveTimer_, &QTimer::timeout, this,
-            &SharedInteractionOverlay::advanceInteractionWaveFrame);
   }
 
   void triggerInteractionWave(const InteractionWaveRequest& request) {
@@ -122,15 +117,14 @@ class SharedInteractionOverlay final : public QWidget {
 
     interactionWaveOwner_ = request.owner;
     interactionWaveRequest_ = request;
-    interactionWaveFrame_ = 0;
+    interactionWaveStartMs_ = detail::timingNowMs();
     interactionWaveActive_ = true;
     syncGeometryToParent();
     ensureVisibleAndRaised();
     update();
-
-    if (!interactionWaveTimer_.isActive()) {
-      interactionWaveTimer_.start();
-    }
+    detail::setFrameSubscription(this, QString::fromLatin1(kWaveFrameKey), true, [this](qint64, qint64) {
+      advanceInteractionWaveFrame();
+    });
   }
 
   void triggerInteractionFocus(const InteractionFocusRequest& request) {
@@ -172,11 +166,14 @@ class SharedInteractionOverlay final : public QWidget {
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     if (interactionWaveActive_) {
-      const int elapsedMs = interactionWaveFrame_ * kInteractionWaveFrameIntervalMs;
+      const int totalWaveDurationMs = std::max(0, detail::waveDurationMs());
+      const qint64 elapsedMs = std::max<qint64>(0, detail::timingNowMs() - interactionWaveStartMs_);
       const qreal spreadProgress =
           easeOutCirc(static_cast<qreal>(elapsedMs) / kInteractionWaveSpreadDurationMs);
       const qreal fadeProgress =
-          clampUnit(static_cast<qreal>(elapsedMs) / kInteractionWaveFadeDurationMs);
+          totalWaveDurationMs > 0
+              ? clampUnit(static_cast<qreal>(elapsedMs) / totalWaveDurationMs)
+              : 1.0;
       const qreal thickenProgress =
           easeOutCirc(static_cast<qreal>(elapsedMs) / kInteractionWaveThickenDurationMs);
       const qreal opacity = kInteractionWaveInitialOpacity * (1.0 - fadeProgress);
@@ -235,13 +232,18 @@ class SharedInteractionOverlay final : public QWidget {
  private:
   void advanceInteractionWaveFrame() {
     if (!interactionWaveActive_) {
-      interactionWaveTimer_.stop();
+      detail::clearFrameSubscription(this, QString::fromLatin1(kWaveFrameKey));
       return;
     }
 
-    ++interactionWaveFrame_;
-    if (interactionWaveFrame_ * kInteractionWaveFrameIntervalMs >=
-        kInteractionWaveFadeDurationMs) {
+    const int totalWaveDurationMs = std::max(0, detail::waveDurationMs());
+    if (totalWaveDurationMs <= 0) {
+      resetInteractionWave();
+      return;
+    }
+
+    const qint64 elapsedMs = std::max<qint64>(0, detail::timingNowMs() - interactionWaveStartMs_);
+    if (elapsedMs >= totalWaveDurationMs) {
       resetInteractionWave();
       return;
     }
@@ -271,10 +273,8 @@ class SharedInteractionOverlay final : public QWidget {
   void resetInteractionWave() {
     interactionWaveActive_ = false;
     interactionWaveOwner_.clear();
-    interactionWaveFrame_ = 0;
-    if (interactionWaveTimer_.isActive()) {
-      interactionWaveTimer_.stop();
-    }
+    interactionWaveStartMs_ = 0;
+    detail::clearFrameSubscription(this, QString::fromLatin1(kWaveFrameKey));
     if (!interactionFocusActive_) {
       hide();
     }
@@ -294,8 +294,7 @@ class SharedInteractionOverlay final : public QWidget {
   InteractionWaveRequest interactionWaveRequest_;
   QPointer<const QWidget> interactionFocusOwner_;
   InteractionFocusRequest interactionFocusRequest_;
-  QTimer interactionWaveTimer_;
-  int interactionWaveFrame_ = 0;
+  qint64 interactionWaveStartMs_ = 0;
   bool interactionWaveActive_ = false;
   bool interactionFocusActive_ = false;
 };

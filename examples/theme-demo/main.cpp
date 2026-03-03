@@ -15,7 +15,6 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStyleFactory>
-#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -26,6 +25,7 @@
 #include "menu_docs_page.h"
 #include "select_docs_page.h"
 #include "theme/theme.h"
+#include "widgets/detail/timing_hub.h"
 #include "widgets/widgets.h"
 
 using adqt::theme::ThemeAlgorithm;
@@ -671,7 +671,12 @@ class ButtonDocsPage final : public QWidget {
         return;
       }
       button->setLoading(true);
-      QTimer::singleShot(ms, button, [button]() { button->setLoading(false); });
+      adqt::widgets::detail::scheduleTimingTask(
+          button, QStringLiteral("ThemeDemo.ButtonLoading"), ms, [button]() {
+            if (button) {
+              button->setLoading(false);
+            }
+          });
     };
 
     auto startLoadingPairFor = [](AdButton* first, AdButton* second, int ms) {
@@ -681,14 +686,19 @@ class ButtonDocsPage final : public QWidget {
       if (second) {
         second->setLoading(true);
       }
-      QTimer::singleShot(ms, first ? first : second, [first, second]() {
-        if (first) {
-          first->setLoading(false);
-        }
-        if (second) {
-          second->setLoading(false);
-        }
-      });
+      QObject* owner = first ? static_cast<QObject*>(first) : static_cast<QObject*>(second);
+      if (!owner) {
+        return;
+      }
+      adqt::widgets::detail::scheduleTimingTask(
+          owner, QStringLiteral("ThemeDemo.ButtonPairLoading"), ms, [first, second]() {
+            if (first) {
+              first->setLoading(false);
+            }
+            if (second) {
+              second->setLoading(false);
+            }
+          });
     };
 
     connect(iconStart, &QPushButton::clicked, this, [iconStart, startLoadingFor]() {
@@ -1065,8 +1075,7 @@ class DemoWindow final : public QWidget {
     selectRoot.children = buildSectionItems(DocsKind::Select);
 
     navMenu_->setItems({buttonRoot, menuRoot, selectRoot});
-    navMenu_->setOpenKeys(
-        {docsRootKey(DocsKind::Button), docsRootKey(DocsKind::Menu), docsRootKey(DocsKind::Select)});
+    navMenu_->setOpenKeys({});
   }
 
   void applyThemeFromControls() {

@@ -3334,4 +3334,8 @@ IconToken Warning(const IconStyle& style) {
   return detail::makeTokenByIndex(830, style);
 }
 
+IconToken EmptySimple(const IconStyle& style) {
+  return detail::makeTokenByIndex(831, style);
+}
+
 }  // namespace adqt::icons::twotone

@@ -356,6 +356,12 @@ void applyCommonMap(const ThemeSeedToken& seed, ThemeMapToken& map) {
   map.motionDurationFast = QString::number(seed.motionBase + seed.motionUnit, 'f', 1) + "s";
   map.motionDurationMid = QString::number(seed.motionBase + seed.motionUnit * 2.0, 'f', 1) + "s";
   map.motionDurationSlow = QString::number(seed.motionBase + seed.motionUnit * 3.0, 'f', 1) + "s";
+  map.timingFrameIntervalMs = seed.timingFrameIntervalMs;
+  map.timingSpinnerCycleMs = seed.timingSpinnerCycleMs;
+  map.timingWaveDurationMs = seed.timingWaveDurationMs;
+  map.timingMenuOpenDelayMs = seed.timingMenuOpenDelayMs;
+  map.timingMenuCloseDelayMs = seed.timingMenuCloseDelayMs;
+  map.timingLoadingDelayMs = seed.timingLoadingDelayMs;
 
   map.lineWidthBold = seed.lineWidth + 1.0;
 
@@ -370,6 +376,12 @@ void applyCommonMap(const ThemeSeedToken& seed, ThemeMapToken& map) {
     map.motionDurationFast = "0s";
     map.motionDurationMid = "0s";
     map.motionDurationSlow = "0s";
+    map.timingFrameIntervalMs = 0;
+    map.timingSpinnerCycleMs = 0;
+    map.timingWaveDurationMs = 0;
+    map.timingMenuOpenDelayMs = 0;
+    map.timingMenuCloseDelayMs = 0;
+    map.timingLoadingDelayMs = 0;
   }
 }
 
@@ -553,6 +565,12 @@ QJsonObject seedToJson(const ThemeSeedToken& seed) {
   obj["zIndexBase"] = seed.zIndexBase;
   obj["zIndexPopupBase"] = seed.zIndexPopupBase;
   obj["opacityImage"] = seed.opacityImage;
+  obj["timingFrameIntervalMs"] = seed.timingFrameIntervalMs;
+  obj["timingSpinnerCycleMs"] = seed.timingSpinnerCycleMs;
+  obj["timingWaveDurationMs"] = seed.timingWaveDurationMs;
+  obj["timingMenuOpenDelayMs"] = seed.timingMenuOpenDelayMs;
+  obj["timingMenuCloseDelayMs"] = seed.timingMenuCloseDelayMs;
+  obj["timingLoadingDelayMs"] = seed.timingLoadingDelayMs;
   obj["wireframe"] = seed.wireframe;
   obj["motion"] = seed.motion;
 

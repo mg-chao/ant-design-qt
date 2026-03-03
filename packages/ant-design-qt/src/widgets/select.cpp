@@ -1,12 +1,15 @@
 ﻿#include "select.h"
 
+#include "detail/timing_hub.h"
 #include "icons.h"
 #include "interaction_overlay_manager.h"
 #include "popup_placement.h"
+#include "scroll_area.h"
 #include "select_style.h"
 #include "theme/theme.h"
 
 #include <QAbstractItemView>
+#include <QCursor>
 #include <QEvent>
 #include <QFontMetrics>
 #include <QFrame>
@@ -41,6 +44,9 @@ namespace adqt::widgets {
 namespace {
 
 namespace outlined_icons = adqt::icons::outlined;
+namespace filled_icons = adqt::icons::filled;
+namespace twotone_icons = adqt::icons::twotone;
+constexpr char kSuffixSpinnerFrameKey[] = "AdSelect.SuffixSpinnerFrame";
 
 QRect widgetGlobalRect(const QWidget* widget) {
   if (!widget) {
@@ -82,6 +88,40 @@ bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconT
   return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
 }
 
+QPixmap makeSpinnerPixmap(const QSize& logicalSize, qreal devicePixelRatio, const QColor& color, int angleDegrees) {
+  if (!logicalSize.isValid() || logicalSize.isEmpty()) {
+    return QPixmap();
+  }
+
+  const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+  const int logicalW = qMax(1, logicalSize.width());
+  const int logicalH = qMax(1, logicalSize.height());
+  const int pixelW = qMax(1, qRound(static_cast<qreal>(logicalW) * dpr));
+  const int pixelH = qMax(1, qRound(static_cast<qreal>(logicalH) * dpr));
+
+  QPixmap spinner(pixelW, pixelH);
+  spinner.setDevicePixelRatio(dpr);
+  spinner.fill(Qt::transparent);
+
+  const int normalizedAngle = ((angleDegrees % 360) + 360) % 360;
+  const qreal side = std::max<qreal>(8.0, std::min(logicalW, logicalH) - 2.0);
+  const QPointF center(static_cast<qreal>(logicalW) / 2.0, static_cast<qreal>(logicalH) / 2.0);
+  const QRectF spinnerRect(center.x() - side / 2.0, center.y() - side / 2.0, side, side);
+  const qreal strokeWidth =
+      std::clamp(static_cast<qreal>(std::min(logicalW, logicalH)) * 0.08, 1.0, 2.0);
+
+  QPainter painter(&spinner);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  painter.translate(center);
+  painter.rotate(static_cast<qreal>(normalizedAngle));
+  painter.translate(-center);
+  QPen pen(color, strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+  painter.setPen(pen);
+  painter.setBrush(Qt::NoBrush);
+  painter.drawArc(spinnerRect, 90 * 16, -270 * 16);
+  return spinner;
+}
+
 bool setWidgetFontIfChanged(QWidget* widget, const QFont& font) {
   if (!widget || widget->font() == font) {
     return false;
@@ -106,15 +146,11 @@ bool setWidgetAutoFillBackgroundIfChanged(QWidget* widget, bool enabled) {
   return true;
 }
 
-bool setWidgetMinimumHeightIfChanged(QWidget* widget, int height) {
-  if (!widget) {
+bool setWidgetContentsMarginsIfChanged(QWidget* widget, const QMargins& margins) {
+  if (!widget || widget->contentsMargins() == margins) {
     return false;
   }
-  const int normalized = std::max(0, height);
-  if (widget->minimumHeight() == normalized) {
-    return false;
-  }
-  widget->setMinimumHeight(normalized);
+  widget->setContentsMargins(margins);
   return true;
 }
 
@@ -135,6 +171,34 @@ bool setWidgetFixedHeightIfChanged(QWidget* widget, int height) {
   return changed;
 }
 
+bool setWidgetFixedWidthIfChanged(QWidget* widget, int width) {
+  if (!widget) {
+    return false;
+  }
+  const int normalized = std::max(0, width);
+  bool changed = false;
+  if (widget->minimumWidth() != normalized) {
+    widget->setMinimumWidth(normalized);
+    changed = true;
+  }
+  if (widget->maximumWidth() != normalized) {
+    widget->setMaximumWidth(normalized);
+    changed = true;
+  }
+  return changed;
+}
+
+bool setWidgetCursorIfChanged(QWidget* widget, Qt::CursorShape cursorShape) {
+  if (!widget) {
+    return false;
+  }
+  if (widget->cursor().shape() == cursorShape) {
+    return false;
+  }
+  widget->setCursor(cursorShape);
+  return true;
+}
+
 bool setLayoutContentsMarginsIfChanged(QLayout* layout, const QMargins& margins) {
   if (!layout || layout->contentsMargins() == margins) {
     return false;
@@ -149,6 +213,22 @@ bool setLayoutSpacingIfChanged(QLayout* layout, int spacing) {
   }
   layout->setSpacing(spacing);
   return true;
+}
+
+int boundedWidgetHeightHint(const QWidget* widget, int availableWidth) {
+  if (!widget) {
+    return 0;
+  }
+
+  int hintHeight = widget->sizeHint().height();
+  if (availableWidth > 0 && widget->sizePolicy().hasHeightForWidth()) {
+    hintHeight = widget->heightForWidth(availableWidth);
+  }
+  hintHeight = std::max(hintHeight, widget->minimumSizeHint().height());
+
+  const int minHeight = std::max(0, widget->minimumHeight());
+  const int maxHeight = std::max(minHeight, widget->maximumHeight());
+  return std::clamp(hintHeight, minHeight, maxHeight);
 }
 
 detail::PopupPlacement toPopupPlacement(AdSelect::Placement placement) {
@@ -172,9 +252,271 @@ QPainterPath roundedRectPath(const QRectF& rect, qreal radius) {
   return path;
 }
 
+class WrappingTagsLayout final : public QLayout {
+ public:
+  explicit WrappingTagsLayout(QWidget* parent = nullptr) : QLayout(parent) {
+    setContentsMargins(0, 0, 0, 0);
+    setSpacing(0);
+  }
+
+  ~WrappingTagsLayout() override {
+    while (QLayoutItem* item = takeAt(0)) {
+      delete item;
+    }
+  }
+
+  void addItem(QLayoutItem* item) override {
+    if (!item) {
+      return;
+    }
+    items_.append(item);
+  }
+
+  int count() const override { return items_.size(); }
+
+  QLayoutItem* itemAt(int index) const override {
+    if (index < 0 || index >= items_.size()) {
+      return nullptr;
+    }
+    return items_.at(index);
+  }
+
+  QLayoutItem* takeAt(int index) override {
+    if (index < 0 || index >= items_.size()) {
+      return nullptr;
+    }
+    return items_.takeAt(index);
+  }
+
+  Qt::Orientations expandingDirections() const override { return {}; }
+
+  bool hasHeightForWidth() const override { return true; }
+
+  int heightForWidth(int width) const override {
+    return doLayout(QRect(0, 0, std::max(0, width), 0), true);
+  }
+
+  int layoutHeightForWidth(int width) const {
+    return heightForWidth(width);
+  }
+
+  QSize sizeHint() const override { return minimumSize(); }
+
+  QSize minimumSize() const override {
+    QSize size;
+    for (QLayoutItem* item : items_) {
+      if (!item) {
+        continue;
+      }
+      size = size.expandedTo(item->minimumSize());
+    }
+    const QMargins margins = contentsMargins();
+    size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom());
+    return size;
+  }
+
+  void setGeometry(const QRect& rect) override {
+    QLayout::setGeometry(rect);
+    doLayout(rect, false);
+  }
+
+ private:
+  int doLayout(const QRect& rect, bool testOnly) const {
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+    getContentsMargins(&left, &top, &right, &bottom);
+    QRect effectiveRect = rect.adjusted(left, top, -right, -bottom);
+    if (effectiveRect.width() < 0) {
+      effectiveRect.setWidth(0);
+    }
+
+    const int horizontalSpacing = std::max(0, spacing());
+    const int verticalSpacing = std::max(0, spacing());
+    int x = effectiveRect.x();
+    int y = effectiveRect.y();
+    int lineHeight = 0;
+
+    auto remainingWidth = [&effectiveRect, &x]() {
+      return std::max(0, effectiveRect.right() - x + 1);
+    };
+
+    for (QLayoutItem* item : items_) {
+      if (!item) {
+        continue;
+      }
+
+      QSize itemSize = item->sizeHint();
+      if (!itemSize.isValid()) {
+        itemSize = item->minimumSize();
+      }
+      const QSize minimum = item->minimumSize();
+      const int minWidth = std::max(0, minimum.width());
+      const int itemHeight = std::max(itemSize.height(), minimum.height());
+
+      QWidget* widget = item->widget();
+      bool expanding = false;
+      if (widget) {
+        const QSizePolicy::Policy horizontalPolicy = widget->sizePolicy().horizontalPolicy();
+        expanding = horizontalPolicy == QSizePolicy::Expanding ||
+                    horizontalPolicy == QSizePolicy::MinimumExpanding;
+      }
+
+      int itemWidth = std::max(itemSize.width(), minWidth);
+      if (expanding) {
+        itemWidth = std::max(minWidth, remainingWidth());
+      }
+
+      if (x > effectiveRect.x() && x + itemWidth > effectiveRect.right() + 1) {
+        x = effectiveRect.x();
+        y += lineHeight + verticalSpacing;
+        lineHeight = 0;
+        if (expanding) {
+          itemWidth = std::max(minWidth, remainingWidth());
+        }
+      }
+
+      if (!testOnly) {
+        item->setGeometry(QRect(QPoint(x, y), QSize(itemWidth, itemHeight)));
+      }
+
+      x += itemWidth + horizontalSpacing;
+      lineHeight = std::max(lineHeight, itemHeight);
+    }
+
+    const int contentBottom = lineHeight > 0 ? (y + lineHeight) : effectiveRect.y();
+    return contentBottom - rect.y() + bottom;
+  }
+
+  QVector<QLayoutItem*> items_;
+};
+
 constexpr int kSelectRowHeaderRole = Qt::UserRole + 97;
+constexpr int kSelectRowEmptyRole = Qt::UserRole + 98;
 
 }  // namespace
+
+class FlatIconToolButton final : public QToolButton {
+ public:
+  explicit FlatIconToolButton(QWidget* parent = nullptr) : QToolButton(parent) {
+    setAutoRaise(true);
+    setFocusPolicy(Qt::NoFocus);
+    setAttribute(Qt::WA_Hover, true);
+    setAutoFillBackground(false);
+  }
+
+  void setBackgroundDecoration(const QColor& background, int radius) {
+    const int normalizedRadius = std::max(0, radius);
+    if (background_ == background && radius_ == normalizedRadius) {
+      return;
+    }
+
+    background_ = background;
+    radius_ = normalizedRadius;
+    update();
+  }
+
+ protected:
+  void paintEvent(QPaintEvent* event) override {
+    Q_UNUSED(event)
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    if (background_.isValid() && background_.alpha() > 0) {
+      const QRectF fillRect = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+      if (fillRect.isValid()) {
+        painter.fillPath(roundedRectPath(fillRect, radius_), background_);
+      }
+    }
+
+    const QSize targetIconSize = iconSize().isValid() ? iconSize() : QSize(width(), height());
+    const QRect iconRect((width() - targetIconSize.width()) / 2,
+                         (height() - targetIconSize.height()) / 2, targetIconSize.width(),
+                         targetIconSize.height());
+
+    const QIcon::Mode iconMode =
+        !isEnabled() ? QIcon::Disabled
+                     : (isDown() ? QIcon::Selected
+                                 : (underMouse() ? QIcon::Active : QIcon::Normal));
+    const QIcon::State iconState = isChecked() ? QIcon::On : QIcon::Off;
+    if (!icon().isNull() && iconRect.isValid()) {
+      const QPixmap iconPixmap = icon().pixmap(targetIconSize, iconMode, iconState);
+      if (!iconPixmap.isNull()) {
+        painter.drawPixmap(iconRect.topLeft(), iconPixmap);
+        return;
+      }
+    }
+
+    if (!text().isEmpty()) {
+      painter.setPen(palette().color(QPalette::ButtonText));
+      painter.setFont(font());
+      painter.drawText(rect(), Qt::AlignCenter, text());
+    }
+  }
+
+ private:
+  QColor background_;
+  int radius_ = 0;
+};
+
+class TagChipWidget final : public QWidget {
+ public:
+  explicit TagChipWidget(QWidget* parent = nullptr) : QWidget(parent) {
+    setAutoFillBackground(false);
+  }
+
+  void setVisualStyle(const QColor& background, const QColor& borderColor, int borderRadius, int borderWidth) {
+    const int normalizedRadius = std::max(0, borderRadius);
+    const int normalizedBorderWidth = std::max(0, borderWidth);
+    if (background_ == background && borderColor_ == borderColor && borderRadius_ == normalizedRadius &&
+        borderWidth_ == normalizedBorderWidth) {
+      return;
+    }
+
+    background_ = background;
+    borderColor_ = borderColor;
+    borderRadius_ = normalizedRadius;
+    borderWidth_ = normalizedBorderWidth;
+    update();
+  }
+
+ protected:
+  void paintEvent(QPaintEvent* event) override {
+    Q_UNUSED(event)
+
+    const qreal borderWidth =
+        (borderColor_.isValid() && borderColor_.alpha() > 0 && borderWidth_ > 0)
+            ? static_cast<qreal>(borderWidth_)
+            : 0.0;
+    const qreal inset = borderWidth > 0.0 ? borderWidth * 0.5 : 0.0;
+    const QRectF chipRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
+    if (!chipRect.isValid()) {
+      return;
+    }
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QPainterPath chipPath = roundedRectPath(chipRect, borderRadius_);
+    if (background_.isValid() && background_.alpha() > 0) {
+      painter.fillPath(chipPath, background_);
+    }
+
+    if (borderWidth > 0.0) {
+      QPen borderPen(borderColor_, borderWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+      painter.setPen(borderPen);
+      painter.setBrush(Qt::NoBrush);
+      painter.drawPath(chipPath);
+    }
+  }
+
+ private:
+  QColor background_;
+  QColor borderColor_;
+  int borderRadius_ = 0;
+  int borderWidth_ = 0;
+};
 
 class AdSelect::OptionListModel final : public QAbstractListModel {
  public:
@@ -202,19 +544,44 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
     const detail::SelectVisualStyle& style = *owner_->visualStyle_;
 
     if (role == kSelectRowHeaderRole) {
-      return row.optionIndex < 0 || row.optionIndex >= owner_->options_.size();
+      return row.header;
+    }
+
+    if (role == kSelectRowEmptyRole) {
+      return row.empty;
     }
 
     if (role == Qt::SizeHintRole) {
+      if (row.empty) {
+        return QSize(0, style.metrics.emptyStateHeight);
+      }
       return QSize(0, style.metrics.optionHeight);
     }
 
-    if (row.optionIndex < 0 || row.optionIndex >= owner_->options_.size()) {
+    if (row.empty) {
       if (role == Qt::DisplayRole) {
         return row.headerText;
       }
       if (role == Qt::FontRole) {
-        QFont font = style.metrics.font;
+        QFont font = style.metrics.optionFont;
+        font.setBold(false);
+        return font;
+      }
+      if (role == Qt::ForegroundRole) {
+        return style.emptyTextColor;
+      }
+      if (role == Qt::TextAlignmentRole) {
+        return static_cast<int>(Qt::AlignHCenter | Qt::AlignTop);
+      }
+      return QVariant();
+    }
+
+    if (row.header) {
+      if (role == Qt::DisplayRole) {
+        return row.headerText;
+      }
+      if (role == Qt::FontRole) {
+        QFont font = style.metrics.optionFont;
         font.setBold(true);
         return font;
       }
@@ -224,6 +591,10 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
       if (role == Qt::TextAlignmentRole) {
         return static_cast<int>(Qt::AlignVCenter | Qt::AlignLeft);
       }
+      return QVariant();
+    }
+
+    if (row.optionIndex < 0 || row.optionIndex >= owner_->options_.size()) {
       return QVariant();
     }
 
@@ -241,7 +612,7 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
       return style.optionTextColor;
     }
     if (role == Qt::FontRole) {
-      QFont font = style.metrics.font;
+      QFont font = style.metrics.optionFont;
       if (owner_->isValueSelected(option.value)) {
         font.setWeight(QFont::DemiBold);
       }
@@ -262,7 +633,10 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
     }
 
     const ModelRow& row = rows_.at(index.row());
-    if (row.optionIndex < 0 || row.optionIndex >= owner_->options_.size()) {
+    if (row.empty) {
+      return Qt::NoItemFlags;
+    }
+    if (row.header || row.optionIndex < 0 || row.optionIndex >= owner_->options_.size()) {
       return Qt::ItemIsEnabled;
     }
 
@@ -285,6 +659,7 @@ class AdSelect::PopupFrame final : public QFrame {
   explicit PopupFrame(QWidget* parent = nullptr) : QFrame(parent) {
     setFrameShape(QFrame::NoFrame);
     setAttribute(Qt::WA_Hover, true);
+    setAutoFillBackground(false);
   }
 
   void setVisualStyle(const QColor& background, const QColor& borderColor, int borderRadius) {
@@ -297,32 +672,36 @@ class AdSelect::PopupFrame final : public QFrame {
     background_ = background;
     borderColor_ = borderColor;
     borderRadius_ = normalizedRadius;
+    syncRoundedMask();
     update();
   }
 
  protected:
+  void resizeEvent(QResizeEvent* event) override {
+    QFrame::resizeEvent(event);
+    syncRoundedMask();
+  }
+
   void paintEvent(QPaintEvent* event) override {
     Q_UNUSED(event)
 
-    const QRectF frameRect = rect().adjusted(0.5, 0.5, -0.5, -0.5);
+    const qreal borderWidth =
+        (borderColor_.isValid() && borderColor_.alpha() > 0) ? 1.0 : 0.0;
+    const qreal inset = borderWidth > 0.0 ? borderWidth * 0.5 : 0.0;
+    const QRectF frameRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
     if (!frameRect.isValid()) {
       return;
     }
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-
-    if (background_.alpha() > 0) {
-      painter.fillRect(rect(), background_);
-    }
-
     const QPainterPath framePath = roundedRectPath(frameRect, borderRadius_);
-    if (background_.alpha() > 0) {
+    if (background_.isValid() && background_.alpha() > 0) {
       painter.fillPath(framePath, background_);
     }
 
-    if (borderColor_.alpha() > 0) {
-      QPen borderPen(borderColor_, 1.0, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
+    if (borderWidth > 0.0) {
+      QPen borderPen(borderColor_, borderWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
       painter.setPen(borderPen);
       painter.setBrush(Qt::NoBrush);
       painter.drawPath(framePath);
@@ -330,6 +709,25 @@ class AdSelect::PopupFrame final : public QFrame {
   }
 
  private:
+  void syncRoundedMask() {
+    if (rect().isEmpty() || borderRadius_ <= 0) {
+      clearMask();
+      return;
+    }
+
+    const qreal clampedRadius =
+        std::clamp(static_cast<qreal>(borderRadius_), 0.0,
+                   std::min(static_cast<qreal>(width()), static_cast<qreal>(height())) / 2.0);
+    if (clampedRadius <= 0.0) {
+      clearMask();
+      return;
+    }
+
+    QPainterPath maskPath;
+    maskPath.addRoundedRect(QRectF(rect()), clampedRadius, clampedRadius);
+    setMask(QRegion(maskPath.toFillPolygon().toPolygon()));
+  }
+
   QColor background_;
   QColor borderColor_;
   int borderRadius_ = 0;
@@ -363,14 +761,26 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
 
     const detail::SelectVisualStyle& style = *owner_->visualStyle_;
     const bool isHeader = index.data(kSelectRowHeaderRole).toBool();
+    const bool isEmpty = index.data(kSelectRowEmptyRole).toBool();
     const bool isSelected = (itemOption.state & QStyle::State_Selected) != 0;
     const bool isHovered = (itemOption.state & QStyle::State_MouseOver) != 0;
     const bool isEnabled = (itemOption.state & QStyle::State_Enabled) != 0;
+    bool optionSelected = false;
+    bool optionDisabled = false;
+    if (!isHeader && !isEmpty && index.row() >= 0 && index.row() < owner_->rows_.size()) {
+      const AdSelect::ModelRow& modelRow = owner_->rows_.at(index.row());
+      if (modelRow.optionIndex >= 0 && modelRow.optionIndex < owner_->options_.size()) {
+        const Option& modelOption = owner_->options_.at(modelRow.optionIndex);
+        optionDisabled = modelOption.disabled;
+        optionSelected = owner_->isValueSelected(modelOption.value);
+      }
+    }
+
     QColor background(Qt::transparent);
-    if (!isHeader && isEnabled) {
-      if (isSelected) {
-        background = style.optionSelectedBg;
-      } else if (isHovered) {
+    if (!isHeader && !isEmpty) {
+      if (optionSelected) {
+        background = optionDisabled ? style.disabledBg : style.optionSelectedBg;
+      } else if (!optionDisabled && (isHovered || isSelected)) {
         background = style.optionHoverBg;
       }
     }
@@ -383,8 +793,54 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
 
     painter->fillRect(itemOption.rect, style.popupBg);
 
+    if (isEmpty) {
+      const int optionHInset = std::max(0, style.metrics.optionPaddingHorizontal);
+      const int optionVInset = std::max(0, style.metrics.optionPaddingVertical);
+      QRect contentRect = itemOption.rect.adjusted(optionHInset, optionVInset, -optionHInset, -optionVInset);
+      const int marginInline = std::max(0, style.metrics.emptyStateMarginInline);
+      contentRect.adjust(marginInline, 0, -marginInline, 0);
+
+      const int marginBlock = std::max(0, style.metrics.emptyStateMarginBlock);
+      const int imageBottomMargin = std::max(0, style.metrics.emptyStateImageMarginBottom);
+      const int iconWidth = std::max(30, style.metrics.emptyStateIconWidth);
+      const int iconHeight = std::max(20, style.metrics.emptyStateIconHeight);
+      const int textHeight = std::max(12, style.metrics.emptyDescriptionLineHeight);
+      const int top = contentRect.top() + marginBlock;
+
+      const QRectF iconRect(contentRect.left() + (contentRect.width() - iconWidth) / 2.0,
+                            top,
+                            iconWidth,
+                            iconHeight);
+      adqt::icons::IconStyle emptyIconStyle;
+      emptyIconStyle.primary = style.emptyBorderColor;
+      emptyIconStyle.hasPrimary = true;
+      emptyIconStyle.secondary = style.emptyContentColor;
+      emptyIconStyle.hasSecondary = true;
+      const adqt::icons::IconToken emptyIcon = twotone_icons::EmptySimple(emptyIconStyle);
+      const qreal dpr = owner_->devicePixelRatioF();
+      const QPixmap iconPixmap =
+          adqt::icons::renderIconPixmap(emptyIcon, QSize(iconWidth, iconHeight), dpr, QIcon::Normal, QIcon::Off);
+      if (!iconPixmap.isNull()) {
+        painter->drawPixmap(QPointF(iconRect.left(), iconRect.top()), iconPixmap);
+      }
+
+      QFont textFont = style.metrics.optionFont;
+      textFont.setWeight(QFont::Normal);
+      textFont.setPixelSize(std::max(12, style.metrics.emptyDescriptionFontSize));
+      painter->setFont(textFont);
+      painter->setPen(style.emptyTextColor);
+      const QFontMetrics metrics(textFont);
+      const QString text = metrics.elidedText(itemOption.text, Qt::ElideRight, std::max(0, contentRect.width()));
+      const QRect textRect(
+          contentRect.left(), top + iconHeight + imageBottomMargin, contentRect.width(), textHeight);
+      painter->drawText(textRect, Qt::AlignHCenter | Qt::AlignTop, text);
+
+      painter->restore();
+      return;
+    }
+
     if (hasBackground) {
-      const QRectF backgroundRect = itemOption.rect.adjusted(2.0, 1.0, -2.0, -1.0);
+      const QRectF backgroundRect(itemOption.rect);
       if (backgroundRect.isValid()) {
         if (drawRoundedBackground) {
           painter->fillPath(roundedRectPath(backgroundRect, optionRadius), background);
@@ -418,12 +874,37 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
 
     const int horizontalPadding = std::max(0, style.metrics.optionPaddingHorizontal);
     const int verticalPadding = std::max(0, style.metrics.optionPaddingVertical);
-    const QRect textRect = itemOption.rect.adjusted(
+    const bool showSelectedIcon = optionSelected && owner_->mode_ != AdSelect::Mode::Single;
+    const int selectedIconSize = std::max(10, style.metrics.iconSize);
+    const int selectedStateGap = std::max(2, style.metrics.optionStateGap);
+
+    QRect textRect = itemOption.rect.adjusted(
         horizontalPadding, verticalPadding, -horizontalPadding, -verticalPadding);
+    if (showSelectedIcon) {
+      textRect.adjust(0, 0, -(selectedIconSize + selectedStateGap), 0);
+    }
     const QFontMetrics metrics(textFont);
     const QString text =
         metrics.elidedText(itemOption.text, Qt::ElideRight, std::max(0, textRect.width()));
     painter->drawText(textRect, textAlignment, text);
+
+    if (showSelectedIcon) {
+      const QRect stateRect(itemOption.rect.right() - horizontalPadding - selectedIconSize + 1,
+                            itemOption.rect.top() + (itemOption.rect.height() - selectedIconSize) / 2,
+                            selectedIconSize,
+                            selectedIconSize);
+      adqt::icons::IconToken checkIcon = outlined_icons::Check();
+      if (adqt::icons::isValid(checkIcon)) {
+        checkIcon.style.primary = isEnabled ? style.selectorActiveBorderColor : style.disabledTextColor;
+        checkIcon.style.hasPrimary = true;
+        const qreal dpr = owner_->devicePixelRatioF();
+        const QPixmap iconPixmap = adqt::icons::renderIconPixmap(
+            checkIcon, QSize(selectedIconSize, selectedIconSize), dpr, QIcon::Normal, QIcon::Off);
+        if (!iconPixmap.isNull()) {
+          painter->drawPixmap(stateRect.topLeft(), iconPixmap);
+        }
+      }
+    }
 
     painter->restore();
   }
@@ -457,32 +938,45 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
   contentLayout_->setContentsMargins(0, 0, 0, 0);
   contentLayout_->setSpacing(6);
 
-  tagsSummaryLabel_ = new QLabel(contentHost_);
-  tagsSummaryLabel_->setObjectName(QStringLiteral("adselect-tags"));
-  tagsSummaryLabel_->setMargin(3);
-  tagsSummaryLabel_->setVisible(false);
-  contentLayout_->addWidget(tagsSummaryLabel_);
+  tagsContainer_ = new QWidget(contentHost_);
+  tagsContainer_->setObjectName(QStringLiteral("adselect-tags"));
+  tagsContainer_->setAutoFillBackground(false);
+  tagsContainer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  tagsContainer_->setVisible(false);
+  tagsLayout_ = new WrappingTagsLayout(tagsContainer_);
+  tagsLayout_->setContentsMargins(0, 0, 0, 0);
+  tagsLayout_->setSpacing(4);
+  contentLayout_->addWidget(tagsContainer_);
+
+  placeholderLabel_ = new QLabel(tagsContainer_);
+  placeholderLabel_->setObjectName(QStringLiteral("adselect-placeholder"));
+  placeholderLabel_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+  placeholderLabel_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+  placeholderLabel_->setVisible(false);
 
   lineEdit_ = new QLineEdit(contentHost_);
   lineEdit_->setObjectName(QStringLiteral("adselect-input"));
   lineEdit_->setFrame(false);
   lineEdit_->setAutoFillBackground(false);
+  lineEdit_->setMinimumWidth(4);
+  lineEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  QPalette inputBasePalette = lineEdit_->palette();
+  inputBasePalette.setColor(QPalette::Base, QColor(0, 0, 0, 0));
+  inputBasePalette.setColor(QPalette::Disabled, QPalette::Base, QColor(0, 0, 0, 0));
+  lineEdit_->setPalette(inputBasePalette);
   lineEdit_->setPlaceholderText(placeholder_);
   lineEdit_->installEventFilter(this);
   contentLayout_->addWidget(lineEdit_, 1);
   rootLayout_->addWidget(contentHost_, 1);
 
-  clearButton_ = new QToolButton(this);
+  clearButton_ = new FlatIconToolButton(this);
   clearButton_->setObjectName(QStringLiteral("adselect-clear"));
-  clearButton_->setText(QStringLiteral("x"));
-  clearButton_->setAutoRaise(true);
   clearButton_->setCursor(Qt::PointingHandCursor);
+  clearButton_->installEventFilter(this);
   clearButton_->setVisible(false);
-  rootLayout_->addWidget(clearButton_);
 
-  suffixButton_ = new QToolButton(this);
+  suffixButton_ = new FlatIconToolButton(this);
   suffixButton_->setObjectName(QStringLiteral("adselect-suffix"));
-  suffixButton_->setAutoRaise(true);
   suffixButton_->setCursor(Qt::PointingHandCursor);
   rootLayout_->addWidget(suffixButton_);
 
@@ -505,6 +999,9 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
     }
     searchText_ = text;
     emit searchTextChanged(searchText_);
+    if (mode_ != Mode::Single) {
+      updateDisplay();
+    }
     if (!open_) {
       openPopup();
     } else {
@@ -514,6 +1011,9 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 
   connect(clearButton_, &QToolButton::clicked, this, [this]() { clearSelectionInternal(true); });
   connect(suffixButton_, &QToolButton::clicked, this, [this]() {
+    if (!suffixButtonTriggersPopup()) {
+      return;
+    }
     if (open_) {
       closePopup();
     } else {
@@ -534,6 +1034,8 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 
 AdSelect::~AdSelect() {
   stopInteractionFocusForOwner(this);
+  detail::clearFrameSubscription(this, QString::fromLatin1(kSuffixSpinnerFrameKey));
+  suffixSpinnerSubscribed_ = false;
   detail::setInWindowPopupHostOpen(this, false);
   if (popup_) {
     popup_->hide();
@@ -572,6 +1074,7 @@ void AdSelect::setMode(Mode value) {
   refreshRows();
   updateDisplay();
   updateClearButton();
+  updateSuffixVisual();
   emit modeChanged(mode_);
   emit valueChanged(value_);
   emit valuesChanged(values_);
@@ -629,6 +1132,7 @@ void AdSelect::setLoading(bool value) {
     return;
   }
   loading_ = value;
+  updateLoadingSpinnerState();
   updateSuffixVisual();
   emit loadingChanged(loading_);
 }
@@ -651,8 +1155,10 @@ void AdSelect::setDisabled(bool value) {
   }
   QWidget::setDisabled(value);
   if (value) {
+    clearHovered_ = false;
     closePopup();
   }
+  updateInputMode();
   applyVisualStyle();
   updateDisplay();
   updateClearButton();
@@ -670,6 +1176,7 @@ void AdSelect::setSearchEnabled(bool value) {
   updateInputMode();
   refreshRows();
   updateDisplay();
+  updateSuffixVisual();
   emit searchEnabledChanged(searchEnabled_);
 }
 
@@ -688,6 +1195,9 @@ void AdSelect::setSearchText(const QString& value) {
       suppressLineEditChange_ = false;
     }
     refreshRows();
+  }
+  if (mode_ != Mode::Single) {
+    updateDisplay();
   }
 }
 
@@ -815,6 +1325,7 @@ void AdSelect::setSuffixIconToken(const adqt::icons::IconToken& token) {
     return;
   }
   suffixIconToken_ = token;
+  updateInputMode();
   updateSuffixVisual();
   emit suffixIconTokenChanged(suffixIconToken_);
 }
@@ -994,12 +1505,18 @@ void AdSelect::setSemanticStyleResolver(SemanticStyleResolver resolver) {
 }
 
 QSize AdSelect::sizeHint() const {
-  const int height = visualStyle_ ? visualStyle_->metrics.height : 32;
+  int height = visualStyle_ ? visualStyle_->metrics.height : 32;
+  if (mode_ != Mode::Single) {
+    height = std::max(height, this->height());
+  }
   return QSize(240, height);
 }
 
 QSize AdSelect::minimumSizeHint() const {
-  const int height = visualStyle_ ? visualStyle_->metrics.height : 32;
+  int height = visualStyle_ ? visualStyle_->metrics.height : 32;
+  if (mode_ != Mode::Single) {
+    height = std::max(height, this->height());
+  }
   return QSize(120, height);
 }
 
@@ -1010,8 +1527,36 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
 
   if (watched == lineEdit_) {
     if (event->type() == QEvent::MouseButtonPress) {
+      if (lineEdit_->isReadOnly()) {
+        if (!disabled()) {
+          if (open_) {
+            closePopup();
+          } else {
+            openPopup();
+          }
+        }
+        lineEdit_->deselect();
+        return true;
+      }
       if (!disabled() && !open_) {
         openPopup();
+      }
+    } else if (event->type() == QEvent::MouseMove) {
+      if (lineEdit_->isReadOnly()) {
+        return true;
+      }
+    } else if (event->type() == QEvent::MouseButtonRelease) {
+      if (lineEdit_->isReadOnly()) {
+        return true;
+      }
+    } else if (event->type() == QEvent::MouseButtonDblClick) {
+      if (lineEdit_->isReadOnly()) {
+        lineEdit_->deselect();
+        return true;
+      }
+    } else if (event->type() == QEvent::ContextMenu) {
+      if (lineEdit_->isReadOnly()) {
+        return true;
       }
     } else if (event->type() == QEvent::FocusIn) {
       updateFocusState();
@@ -1021,6 +1566,9 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
       }
     } else if (event->type() == QEvent::KeyPress) {
       auto* keyEvent = static_cast<QKeyEvent*>(event);
+      if (lineEdit_->isReadOnly() && keyEvent->matches(QKeySequence::SelectAll)) {
+        return true;
+      }
       if (keyEvent->key() == Qt::Key_Down) {
         if (!open_) {
           openPopup();
@@ -1070,29 +1618,49 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
         }
       }
     }
+  } else if (watched == clearButton_) {
+    if (event->type() == QEvent::Enter) {
+      clearHovered_ = true;
+      updateClearButton();
+    } else if (event->type() == QEvent::Leave) {
+      clearHovered_ = false;
+      updateClearButton();
+    }
   } else if (watched == popup_) {
     if (event->type() == QEvent::Hide) {
       if (open_) {
         setOpenInternal(false, true);
       }
     }
-  } else if (watched == listView_ && event->type() == QEvent::KeyPress) {
-    auto* keyEvent = static_cast<QKeyEvent*>(event);
-    if (keyEvent->key() == Qt::Key_Escape) {
-      closePopup();
-      return true;
-    }
-    if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
-      if (listView_->currentIndex().isValid()) {
-        const int row = listView_->currentIndex().row();
-        if (row >= 0 && row < rows_.size()) {
-          const ModelRow& modelRow = rows_.at(row);
-          if (modelRow.optionIndex >= 0 && modelRow.optionIndex < options_.size()) {
-            toggleSelectionForOption(options_.at(modelRow.optionIndex));
-            return true;
+  } else if (watched == listView_) {
+    if (event->type() == QEvent::KeyPress) {
+      auto* keyEvent = static_cast<QKeyEvent*>(event);
+      if (keyEvent->key() == Qt::Key_Escape) {
+        closePopup();
+        return true;
+      }
+      if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+        if (listView_->currentIndex().isValid()) {
+          const int row = listView_->currentIndex().row();
+          if (row >= 0 && row < rows_.size()) {
+            const ModelRow& modelRow = rows_.at(row);
+            if (modelRow.optionIndex >= 0 && modelRow.optionIndex < options_.size()) {
+              toggleSelectionForOption(options_.at(modelRow.optionIndex));
+              return true;
+            }
           }
         }
       }
+    }
+  } else if (listView_ && watched == listView_->viewport()) {
+    if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::MouseButtonRelease) {
+      const auto* mouseEvent = static_cast<const QMouseEvent*>(event);
+      syncPopupOptionCursor(mouseEvent->pos());
+    } else if (event->type() == QEvent::Enter) {
+      syncPopupOptionCursor(listView_->viewport()->mapFromGlobal(QCursor::pos()));
+    } else if (event->type() == QEvent::Leave) {
+      syncPopupOptionCursor(QPoint(-1, -1));
     }
   }
   return QWidget::eventFilter(watched, event);
@@ -1199,20 +1767,20 @@ void AdSelect::paintSelectorShell(QPainter& painter) const {
   painter.restore();
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void AdSelect::enterEvent(QEnterEvent* event) {
   QWidget::enterEvent(event);
-#else
-void AdSelect::enterEvent(QEvent* event) {
-  QWidget::enterEvent(event);
-#endif
   hovered_ = true;
+  updateClearButton();
   update();
 }
 
 void AdSelect::leaveEvent(QEvent* event) {
   QWidget::leaveEvent(event);
   hovered_ = false;
+  if (!clearButton_ || !clearButton_->underMouse()) {
+    clearHovered_ = false;
+  }
+  updateClearButton();
   update();
 }
 
@@ -1222,7 +1790,14 @@ void AdSelect::mousePressEvent(QMouseEvent* event) {
       QWidget::mousePressEvent(event);
       return;
     }
-    if (!open_) {
+    const bool readOnlyDisplay = lineEdit_ && lineEdit_->isReadOnly();
+    if (readOnlyDisplay) {
+      if (open_) {
+        closePopup();
+      } else {
+        openPopup();
+      }
+    } else if (!open_) {
       openPopup();
     }
   }
@@ -1262,12 +1837,13 @@ void AdSelect::moveEvent(QMoveEvent* event) {
 
 void AdSelect::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
-  if (responsiveMaxTagCount_) {
+  if (responsiveMaxTagCount_ || mode_ != Mode::Single) {
     updateDisplay();
   }
   if (open_) {
     syncPopupGeometry();
   }
+  updateAccessoryGeometry();
   updateInteractionFocusOverlay();
 }
 
@@ -1278,6 +1854,8 @@ void AdSelect::changeEvent(QEvent* event) {
   }
   if (event->type() == QEvent::Hide) {
     hovered_ = false;
+    clearHovered_ = false;
+    updateClearButton();
     stopInteractionFocusForOwner(this);
     return;
   }
@@ -1290,6 +1868,7 @@ void AdSelect::changeEvent(QEvent* event) {
     if (event->type() == QEvent::EnabledChange && disabled()) {
       hovered_ = false;
     }
+    updateInputMode();
     applyVisualStyle();
     updateDisplay();
     updateClearButton();
@@ -1384,9 +1963,72 @@ QString AdSelect::fallbackSelectedLabel(const QString& value) const {
   return formattedSelectedLabel(*option);
 }
 
-QString AdSelect::summaryForSelectedValues() const {
-  if (values_.isEmpty()) {
-    return QString();
+QStringList AdSelect::normalizedValues(const QStringList& values) const {
+  return uniqueStringList(values);
+}
+
+int AdSelect::responsiveVisibleTagCount(const QStringList& labels, int availableWidth) const {
+  if (labels.isEmpty() || availableWidth <= 0) {
+    return 0;
+  }
+
+  const QFontMetrics fm(tagsContainer_ ? tagsContainer_->font() : font());
+  const int tagPaddingStart =
+      std::max(4, visualStyle_ ? visualStyle_->metrics.tagPaddingInlineStart : 8);
+  const int tagPaddingEnd =
+      std::max(2, visualStyle_ ? visualStyle_->metrics.tagPaddingInlineEnd : 4);
+  const int tagInnerGap =
+      std::max(2, visualStyle_ ? visualStyle_->metrics.tagContentGap : 4);
+  const int removeIconWidth =
+      std::max(8, visualStyle_ ? (visualStyle_->metrics.iconSize - 2) : 10);
+  const int interTagGap =
+      std::max(2, visualStyle_ ? visualStyle_->metrics.tagItemGap : 4);
+
+  int usedWidth = 0;
+  int count = 0;
+  for (const QString& label : labels) {
+    const int width = fm.horizontalAdvance(label) + tagPaddingStart + tagPaddingEnd +
+                      removeIconWidth + tagInnerGap;
+    if (count > 0) {
+      usedWidth += interTagGap;
+    }
+    if (count > 0 && usedWidth + width > availableWidth) {
+      break;
+    }
+    usedWidth += width;
+    ++count;
+  }
+  return std::max(1, count);
+}
+
+void AdSelect::clearTagWidgets() {
+  if (!tagsLayout_) {
+    return;
+  }
+
+  while (QLayoutItem* item = tagsLayout_->takeAt(0)) {
+    if (QWidget* widget = item->widget()) {
+      if (widget == lineEdit_) {
+        delete item;
+        continue;
+      }
+      delete widget;
+    }
+    delete item;
+  }
+}
+
+void AdSelect::rebuildTagWidgets() {
+  if (!tagsContainer_ || !tagsLayout_) {
+    return;
+  }
+
+  clearTagWidgets();
+
+  if (mode_ == Mode::Single) {
+    tagsContainer_->setVisible(false);
+    tagsContainer_->setToolTip(QString());
+    return;
   }
 
   QStringList labels;
@@ -1400,48 +2042,159 @@ QString AdSelect::summaryForSelectedValues() const {
     visibleCount = std::min(visibleCount, maxTagCount_);
   }
   if (responsiveMaxTagCount_) {
-    const int prefixWidth = prefixLabel_ && prefixLabel_->isVisible() ? prefixLabel_->width() : 0;
-    const int suffixWidth = suffixButton_ ? suffixButton_->width() : 0;
-    const int clearWidth = clearButton_ && clearButton_->isVisible() ? clearButton_->width() : 0;
-    const int available = std::max(40, width() - prefixWidth - suffixWidth - clearWidth - 56);
-    visibleCount = std::min(visibleCount, responsiveVisibleTagCount(labels, available));
+    int availableWidth = contentHost_ ? contentHost_->width() : width();
+    const int reservedInputWidth =
+        std::max(24, (visualStyle_ ? visualStyle_->metrics.tagHeight : 20) + 6);
+    availableWidth = std::max(0, availableWidth - reservedInputWidth);
+    visibleCount = std::min(visibleCount, responsiveVisibleTagCount(labels, availableWidth));
   }
-
-  QString summary = labels.mid(0, visibleCount).join(QStringLiteral(", "));
+  visibleCount = std::clamp(visibleCount, 0, static_cast<int>(labels.size()));
   const int hiddenCount = labels.size() - visibleCount;
+
+  const int tagHeight = std::max(16, visualStyle_ ? visualStyle_->metrics.tagHeight : 20);
+  const int tagRadius = std::max(0, visualStyle_ ? visualStyle_->metrics.tagBorderRadius : 4);
+  const int tagBorderWidth = std::max(0, visualStyle_ ? visualStyle_->metrics.borderWidth : 1);
+  const int tagPaddingStart =
+      std::max(4, visualStyle_ ? visualStyle_->metrics.tagPaddingInlineStart : 8);
+  const int tagPaddingEnd =
+      std::max(2, visualStyle_ ? visualStyle_->metrics.tagPaddingInlineEnd : 4);
+  const int tagGap =
+      std::max(2, visualStyle_ ? visualStyle_->metrics.tagContentGap : 4);
+  const int removeIconSize =
+      std::max(8, visualStyle_ ? (visualStyle_->metrics.iconSize - 2) : 10);
+  const QColor tagBg = visualStyle_ ? visualStyle_->tagBg : QColor("#f5f5f5");
+  const QColor tagBorderColor = visualStyle_ ? visualStyle_->tagBorderColor : QColor(0, 0, 0, 0);
+  const QColor tagTextColor = visualStyle_ ? visualStyle_->tagTextColor : QColor("#141414");
+  const QColor disabledTextColor = visualStyle_ ? visualStyle_->disabledTextColor : QColor("#bfbfbf");
+  const QColor removeColor = visualStyle_ ? visualStyle_->clearColor : QColor("#8c8c8c");
+  const QColor removeHoverColor = visualStyle_ ? visualStyle_->clearHoverColor : QColor("#595959");
+
+  const auto buildTag = [this,
+                         tagHeight,
+                         tagRadius,
+                         tagBorderWidth,
+                         tagPaddingStart,
+                         tagPaddingEnd,
+                         tagGap,
+                         removeIconSize,
+                         tagBg,
+                         tagBorderColor,
+                         tagTextColor,
+                         disabledTextColor,
+                         removeColor,
+                         removeHoverColor](const QString& text,
+                                           const QString& value,
+                                           bool removable) {
+    auto* chip = new TagChipWidget(tagsContainer_);
+    chip->setObjectName(QStringLiteral("adselect-tag-item"));
+    chip->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    setWidgetFixedHeightIfChanged(chip, tagHeight);
+
+    auto* chipLayout = new QHBoxLayout(chip);
+    chipLayout->setContentsMargins(tagPaddingStart, 0, tagPaddingEnd, 0);
+    chipLayout->setSpacing(tagGap);
+
+    auto* label = new QLabel(text, chip);
+    label->setObjectName(QStringLiteral("adselect-tag-text"));
+    label->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    chipLayout->addWidget(label);
+
+    QPalette chipPalette = chip->palette();
+    chipPalette.setColor(QPalette::Window, tagBg);
+    chipPalette.setColor(QPalette::WindowText, tagTextColor);
+    chipPalette.setColor(QPalette::Disabled, QPalette::WindowText, disabledTextColor);
+    chip->setPalette(chipPalette);
+
+    QPalette labelPalette = label->palette();
+    labelPalette.setColor(QPalette::WindowText, tagTextColor);
+    labelPalette.setColor(QPalette::Disabled, QPalette::WindowText, disabledTextColor);
+    label->setPalette(labelPalette);
+
+    chip->setVisualStyle(tagBg, tagBorderColor, tagRadius, tagBorderWidth);
+
+    setWidgetCursorIfChanged(chip, selectorCursorShape());
+    setWidgetCursorIfChanged(label, selectorCursorShape());
+
+    if (removable && !disabled() && !value.isEmpty()) {
+      auto* removeButton = new FlatIconToolButton(chip);
+      removeButton->setObjectName(QStringLiteral("adselect-tag-remove"));
+      removeButton->setText(QString());
+      removeButton->setFixedSize(removeIconSize, removeIconSize);
+      removeButton->setIconSize(QSize(removeIconSize, removeIconSize));
+      removeButton->setCursor(Qt::PointingHandCursor);
+
+      adqt::icons::IconToken closeIcon = outlined_icons::Close();
+      if (adqt::icons::isValid(closeIcon)) {
+        closeIcon.style.primary = removeColor;
+        closeIcon.style.hasPrimary = true;
+        const qreal dpr = devicePixelRatioF();
+        QPixmap closePixmap = adqt::icons::renderIconPixmap(
+            closeIcon, QSize(removeIconSize, removeIconSize), dpr, QIcon::Normal, QIcon::Off);
+        QIcon closeButtonIcon;
+        if (!closePixmap.isNull()) {
+          closeButtonIcon.addPixmap(closePixmap, QIcon::Normal, QIcon::Off);
+        }
+        adqt::icons::IconToken hoverIcon = closeIcon;
+        hoverIcon.style.primary = removeHoverColor;
+        QPixmap closeHoverPixmap = adqt::icons::renderIconPixmap(
+            hoverIcon, QSize(removeIconSize, removeIconSize), dpr, QIcon::Active, QIcon::Off);
+        if (!closeHoverPixmap.isNull()) {
+          closeButtonIcon.addPixmap(closeHoverPixmap, QIcon::Active, QIcon::Off);
+        }
+        if (!closeButtonIcon.isNull()) {
+          removeButton->setIcon(closeButtonIcon);
+        }
+      } else {
+        removeButton->setText(QStringLiteral("x"));
+      }
+
+      connect(removeButton, &QToolButton::clicked, this, [this, value]() {
+        if (value.isEmpty() || disabled()) {
+          return;
+        }
+        const int index = values_.indexOf(value);
+        if (index < 0) {
+          return;
+        }
+        values_.removeAt(index);
+        emit deselected(value, fallbackSelectedLabel(value));
+        emit valuesChanged(values_);
+        emitSelectionChangedSignals();
+        refreshRows();
+        updateDisplay();
+        updateClearButton();
+      });
+      chipLayout->addWidget(removeButton, 0, Qt::AlignVCenter);
+    }
+
+    tagsLayout_->addWidget(chip);
+  };
+
+  for (int i = 0; i < visibleCount && i < labels.size() && i < values_.size(); ++i) {
+    buildTag(labels.at(i), values_.at(i), true);
+  }
   if (hiddenCount > 0) {
-    if (!summary.isEmpty()) {
-      summary.append(QStringLiteral(" "));
-    }
-    summary.append(QStringLiteral("+%1...").arg(hiddenCount));
-  }
-  return summary;
-}
-
-QStringList AdSelect::normalizedValues(const QStringList& values) const {
-  return uniqueStringList(values);
-}
-
-int AdSelect::responsiveVisibleTagCount(const QStringList& labels, int availableWidth) const {
-  if (labels.isEmpty() || availableWidth <= 0) {
-    return 0;
+    buildTag(QStringLiteral("+%1...").arg(hiddenCount), QString(), false);
   }
 
-  const QFontMetrics fm(tagsSummaryLabel_ ? tagsSummaryLabel_->font() : font());
-  int usedWidth = 0;
-  int count = 0;
-  for (const QString& label : labels) {
-    const int width = fm.horizontalAdvance(label) + 18;
-    if (count > 0) {
-      usedWidth += fm.horizontalAdvance(QStringLiteral(", "));
-    }
-    if (count > 0 && usedWidth + width > availableWidth) {
-      break;
-    }
-    usedWidth += width;
-    ++count;
+  const bool hasPrefix = prefixLabel_ && prefixLabel_->isVisible();
+  if (!hasPrefix && visibleCount == 0 && hiddenCount == 0 && visualStyle_) {
+    auto* spacer = new QWidget(tagsContainer_);
+    spacer->setObjectName(QStringLiteral("adselect-tag-leading-spacer"));
+    spacer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    spacer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    spacer->setFixedWidth(std::max(0, visualStyle_->metrics.multipleItemPaddingHorizontal));
+    spacer->setFixedHeight(std::max(1, tagHeight));
+    tagsLayout_->addWidget(spacer);
   }
-  return std::max(1, count);
+
+  if (lineEdit_ && lineEdit_->parentWidget() == tagsContainer_) {
+    tagsLayout_->addWidget(lineEdit_);
+  }
+
+  tagsContainer_->setVisible(true);
+  tagsContainer_->setToolTip(labels.join(QStringLiteral(", ")));
 }
 
 void AdSelect::enforceMaxCount() {
@@ -1458,24 +2211,165 @@ void AdSelect::enforceMaxCount() {
   }
 }
 
+bool AdSelect::suffixButtonTriggersPopup() const {
+  if (disabled()) {
+    return false;
+  }
+  // Keep Ant Design behavior: custom suffix icons are decorative by default and
+  // should not change popup visibility.
+  return !adqt::icons::isValid(suffixIconToken_);
+}
+
+Qt::CursorShape AdSelect::selectorCursorShape() const {
+  if (disabled()) {
+    return Qt::ForbiddenCursor;
+  }
+  return isSearchEnabledForCurrentMode() ? Qt::IBeamCursor : Qt::PointingHandCursor;
+}
+
+Qt::CursorShape AdSelect::optionCursorShapeAtRow(int row) const {
+  if (disabled()) {
+    return Qt::ForbiddenCursor;
+  }
+  if (row < 0 || row >= rows_.size()) {
+    return Qt::ArrowCursor;
+  }
+
+  const ModelRow& modelRow = rows_.at(row);
+  if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
+    return Qt::ArrowCursor;
+  }
+  return options_.at(modelRow.optionIndex).disabled ? Qt::ForbiddenCursor : Qt::PointingHandCursor;
+}
+
+void AdSelect::syncPopupOptionCursor(const QPoint& viewportPos) {
+  if (!listView_) {
+    return;
+  }
+  QWidget* viewport = listView_->viewport();
+  if (!viewport) {
+    return;
+  }
+
+  Qt::CursorShape shape = disabled() ? Qt::ForbiddenCursor : Qt::ArrowCursor;
+  if (!disabled()) {
+    const QModelIndex hoveredIndex = listView_->indexAt(viewportPos);
+    shape = optionCursorShapeAtRow(hoveredIndex.isValid() ? hoveredIndex.row() : -1);
+  }
+  setWidgetCursorIfChanged(viewport, shape);
+}
+
+void AdSelect::syncContentLayoutForMode() {
+  if (!contentLayout_ || !contentHost_ || !tagsContainer_ || !tagsLayout_ || !lineEdit_) {
+    return;
+  }
+
+  const bool multipleMode = mode_ != Mode::Single;
+  if (multipleMode) {
+    if (contentLayout_->indexOf(tagsContainer_) < 0) {
+      contentLayout_->insertWidget(0, tagsContainer_, 1);
+    }
+    if (contentLayout_->indexOf(lineEdit_) >= 0) {
+      contentLayout_->removeWidget(lineEdit_);
+    }
+    if (lineEdit_->parentWidget() != tagsContainer_) {
+      lineEdit_->setParent(tagsContainer_);
+      lineEdit_->show();
+    }
+    lineEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    lineEdit_->setMinimumWidth(4);
+    if (tagsLayout_->indexOf(lineEdit_) < 0) {
+      tagsLayout_->addWidget(lineEdit_);
+    }
+    if (placeholderLabel_) {
+      placeholderLabel_->setParent(tagsContainer_);
+      placeholderLabel_->show();
+    }
+    tagsContainer_->setVisible(true);
+    return;
+  }
+
+  if (tagsLayout_->indexOf(lineEdit_) >= 0) {
+    tagsLayout_->removeWidget(lineEdit_);
+  }
+  if (lineEdit_->parentWidget() != contentHost_) {
+    lineEdit_->setParent(contentHost_);
+    lineEdit_->show();
+  }
+  lineEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  lineEdit_->setMinimumWidth(4);
+  lineEdit_->setMaximumWidth(QWIDGETSIZE_MAX);
+  if (contentLayout_->indexOf(tagsContainer_) < 0) {
+    contentLayout_->insertWidget(0, tagsContainer_);
+  }
+  if (contentLayout_->indexOf(lineEdit_) < 0) {
+    contentLayout_->addWidget(lineEdit_, 1);
+  }
+  if (placeholderLabel_) {
+    placeholderLabel_->hide();
+  }
+  tagsContainer_->setVisible(false);
+}
+
 void AdSelect::updateInputMode() {
+  syncContentLayoutForMode();
+
+  const Qt::CursorShape selectorCursor = selectorCursorShape();
+  setWidgetCursorIfChanged(this, selectorCursor);
+  setWidgetCursorIfChanged(contentHost_, selectorCursor);
+  setWidgetCursorIfChanged(prefixLabel_, selectorCursor);
+  setWidgetCursorIfChanged(tagsContainer_, selectorCursor);
+  setWidgetCursorIfChanged(placeholderLabel_, selectorCursor);
+  if (tagsContainer_) {
+    const auto tagWidgets =
+        tagsContainer_->findChildren<QWidget*>(QStringLiteral("adselect-tag-item"), Qt::FindChildrenRecursively);
+    for (QWidget* tagWidget : tagWidgets) {
+      setWidgetCursorIfChanged(tagWidget, selectorCursor);
+    }
+    const auto removeButtons =
+        tagsContainer_->findChildren<QToolButton*>(QStringLiteral("adselect-tag-remove"),
+                                                   Qt::FindChildrenRecursively);
+    const Qt::CursorShape removeCursor = disabled() ? Qt::ForbiddenCursor : Qt::PointingHandCursor;
+    for (QToolButton* removeButton : removeButtons) {
+      setWidgetCursorIfChanged(removeButton, removeCursor);
+    }
+  }
+  if (suffixButton_) {
+    const Qt::CursorShape suffixCursor =
+        suffixButtonTriggersPopup() ? Qt::PointingHandCursor : selectorCursor;
+    setWidgetCursorIfChanged(suffixButton_, suffixCursor);
+  }
+
   const bool searchable = isSearchEnabledForCurrentMode();
   if (lineEdit_) {
     const bool readOnly = !searchable;
     lineEdit_->setReadOnly(readOnly);
-    lineEdit_->setCursor(readOnly ? Qt::ArrowCursor : Qt::IBeamCursor);
+    setWidgetCursorIfChanged(lineEdit_, selectorCursor);
+  }
+
+  if (listView_) {
+    setWidgetCursorIfChanged(listView_, disabled() ? Qt::ForbiddenCursor : Qt::ArrowCursor);
+    if (QWidget* viewport = listView_->viewport()) {
+      if (disabled()) {
+        setWidgetCursorIfChanged(viewport, Qt::ForbiddenCursor);
+      } else {
+        syncPopupOptionCursor(viewport->mapFromGlobal(QCursor::pos()));
+      }
+    }
   }
 }
 
 void AdSelect::updateDisplay() {
-  if (!lineEdit_ || !tagsSummaryLabel_) {
+  if (!lineEdit_ || !tagsContainer_) {
     return;
   }
 
   suppressLineEditChange_ = true;
 
   if (mode_ == Mode::Single) {
-    tagsSummaryLabel_->setVisible(false);
+    clearTagWidgets();
+    tagsContainer_->setVisible(false);
+    tagsContainer_->setToolTip(QString());
     const QString label = value_.isEmpty() ? QString() : fallbackSelectedLabel(value_);
     if (open_ && isSearchEnabledForCurrentMode()) {
       lineEdit_->setText(searchText_);
@@ -1484,34 +2378,145 @@ void AdSelect::updateDisplay() {
     }
     lineEdit_->setPlaceholderText(placeholder_);
     lineEdit_->setToolTip(label);
-  } else {
-    const QString summary = summaryForSelectedValues();
-    tagsSummaryLabel_->setVisible(!summary.isEmpty());
-    tagsSummaryLabel_->setText(summary);
-
-    QStringList labels;
-    for (const QString& current : values_) {
-      labels.append(fallbackSelectedLabel(current));
+    lineEdit_->setTextMargins(0, 0, 0, 0);
+    if (placeholderLabel_) {
+      placeholderLabel_->setVisible(false);
     }
-    tagsSummaryLabel_->setToolTip(labels.join(QStringLiteral(", ")));
+  } else {
+    rebuildTagWidgets();
 
     if (open_) {
       lineEdit_->setText(searchText_);
     } else {
       lineEdit_->clear();
     }
-    lineEdit_->setPlaceholderText(values_.isEmpty() ? placeholder_ : QString());
+    lineEdit_->setPlaceholderText(QString());
+    lineEdit_->setToolTip(QString());
+    lineEdit_->setTextMargins(0, 0, 0, 0);
+    const QFontMetrics inputMetrics(lineEdit_->font());
+    const QString inputText = lineEdit_->text();
+    const int inputWidth =
+        inputText.isEmpty() ? 4 : std::max(4, inputMetrics.horizontalAdvance(inputText + QStringLiteral(" ")) + 2);
+    setWidgetFixedWidthIfChanged(lineEdit_, inputWidth);
+
+    if (placeholderLabel_) {
+      const bool showPlaceholder = values_.isEmpty() && inputText.isEmpty() && !placeholder_.trimmed().isEmpty();
+      placeholderLabel_->setText(placeholder_);
+      placeholderLabel_->setVisible(showPlaceholder);
+    }
   }
 
   suppressLineEditChange_ = false;
+  updateMultipleSelectorHeight();
+}
+
+void AdSelect::updateMultipleSelectorHeight() {
+  if (!visualStyle_ || mode_ == Mode::Single || !rootLayout_ || !tagsContainer_ || !tagsLayout_) {
+    return;
+  }
+
+  int availableWidth = tagsContainer_->width();
+  if (availableWidth <= 0 && contentHost_) {
+    availableWidth = contentHost_->width();
+  }
+  if (availableWidth <= 0) {
+    availableWidth = std::max(1, width());
+  }
+
+  int tagsHeight = 0;
+  if (auto* wrappingLayout = dynamic_cast<WrappingTagsLayout*>(tagsLayout_)) {
+    tagsHeight = wrappingLayout->layoutHeightForWidth(availableWidth);
+  } else {
+    tagsHeight = tagsLayout_->sizeHint().height();
+  }
+
+  const int minTagsHeight = std::max(16, visualStyle_->metrics.tagHeight);
+  tagsHeight = std::max(minTagsHeight, tagsHeight);
+  setWidgetFixedHeightIfChanged(tagsContainer_, tagsHeight);
+
+  if (placeholderLabel_) {
+    const bool hasPrefix = prefixLabel_ && prefixLabel_->isVisible();
+    const int inset =
+        hasPrefix ? 0 : std::max(0, visualStyle_->metrics.multipleItemPaddingHorizontal);
+    const int labelWidth = std::max(0, tagsContainer_->width() - inset);
+    placeholderLabel_->setGeometry(inset, 0, labelWidth, tagsHeight);
+    placeholderLabel_->raise();
+  }
+
+  const QMargins rootMargins = rootLayout_->contentsMargins();
+  const int targetHeight =
+      std::max(visualStyle_->metrics.height, tagsHeight + rootMargins.top() + rootMargins.bottom());
+  setWidgetFixedHeightIfChanged(this, targetHeight);
+  updateGeometry();
 }
 
 void AdSelect::updateClearButton() {
-  if (!clearButton_) {
+  if (!clearButton_ || !visualStyle_) {
     return;
   }
   const bool hasValue = mode_ == Mode::Single ? !value_.isEmpty() : !values_.isEmpty();
-  clearButton_->setVisible(allowClear_ && hasValue && !disabled());
+  const bool canShow = allowClear_ && hasValue && !disabled();
+  if (!canShow) {
+    clearHovered_ = false;
+  }
+  const bool hovered = hovered_ || clearHovered_;
+  const bool shouldShow = canShow && hovered;
+  if (clearButton_->isVisible() != shouldShow) {
+    clearButton_->setVisible(shouldShow);
+  }
+  updateClearVisual();
+  updateAccessoryGeometry();
+}
+
+void AdSelect::updateClearVisual() {
+  if (!clearButton_ || !visualStyle_) {
+    return;
+  }
+
+  const int iconSize = std::max(10, visualStyle_->metrics.iconSize);
+  clearButton_->setText(QString());
+  QColor iconColor = visualStyle_->clearColor;
+  if (clearButton_->isVisible() && clearHovered_ && !disabled()) {
+    iconColor = visualStyle_->clearHoverColor;
+  } else if (disabled()) {
+    iconColor = visualStyle_->disabledTextColor;
+  }
+
+  adqt::icons::IconToken icon = filled_icons::CloseCircle();
+  if (adqt::icons::isValid(icon)) {
+    icon.style.primary = iconColor;
+    icon.style.hasPrimary = true;
+    const qreal dpr = devicePixelRatioF();
+    const QPixmap pixmap =
+        adqt::icons::renderIconPixmap(icon, QSize(iconSize, iconSize), dpr, QIcon::Normal, QIcon::Off);
+    clearButton_->setIcon(QIcon(pixmap));
+    clearButton_->setIconSize(QSize(iconSize, iconSize));
+  } else {
+    clearButton_->setIcon(QIcon());
+    clearButton_->setText(QStringLiteral("x"));
+  }
+
+  const QColor clearBg =
+      clearButton_->isVisible() ? visualStyle_->clearBg : QColor(0, 0, 0, 0);
+  const int radius = std::max(0, iconSize / 2);
+  if (auto* flatButton = dynamic_cast<FlatIconToolButton*>(clearButton_)) {
+    flatButton->setBackgroundDecoration(clearBg, radius);
+  }
+}
+
+void AdSelect::updateAccessoryGeometry() {
+  if (!clearButton_ || !visualStyle_) {
+    return;
+  }
+
+  const int iconSize = std::max(10, visualStyle_->metrics.iconSize);
+  clearButton_->setFixedSize(iconSize, iconSize);
+
+  const int endInset = std::max(0, visualStyle_->metrics.horizontalPadding);
+  const int x = std::max(0, width() - endInset - iconSize);
+  const int y = std::max(0, (height() - iconSize) / 2);
+  clearButton_->move(x, y);
+  clearButton_->raise();
 }
 
 void AdSelect::updatePrefixVisual() {
@@ -1546,6 +2551,27 @@ void AdSelect::updatePrefixVisual() {
   prefixLabel_->setVisible(!pixmap.isNull());
 }
 
+void AdSelect::updateLoadingSpinnerState() {
+  if (loading_) {
+    if (!suffixSpinnerSubscribed_) {
+      detail::setFrameSubscription(this, QString::fromLatin1(kSuffixSpinnerFrameKey), true,
+                                   [this](qint64, qint64) {
+                                     if (!loading_) {
+                                       return;
+                                     }
+                                     updateSuffixVisual();
+                                   });
+      suffixSpinnerSubscribed_ = true;
+    }
+    return;
+  }
+
+  if (suffixSpinnerSubscribed_) {
+    detail::clearFrameSubscription(this, QString::fromLatin1(kSuffixSpinnerFrameKey));
+    suffixSpinnerSubscribed_ = false;
+  }
+}
+
 void AdSelect::updateSuffixVisual() {
   if (!suffixButton_ || !visualStyle_) {
     return;
@@ -1555,13 +2581,32 @@ void AdSelect::updateSuffixVisual() {
   suffixButton_->setIcon(QIcon());
 
   if (loading_) {
+    const qreal dpr = devicePixelRatioF();
+    const int iconSize = std::max(10, visualStyle_->metrics.iconSize);
+    const int cycleMs = detail::spinnerCycleDurationMs();
+    int angle = 0;
+    if (cycleMs > 0) {
+      qint64 phaseMs = detail::timingNowMs() % cycleMs;
+      if (phaseMs < 0) {
+        phaseMs += cycleMs;
+      }
+      angle = static_cast<int>((phaseMs * 360) / cycleMs);
+    }
+    QPixmap pixmap =
+        makeSpinnerPixmap(QSize(iconSize, iconSize), dpr, visualStyle_->suffixColor, angle);
+    if (!pixmap.isNull()) {
+      suffixButton_->setIcon(QIcon(pixmap));
+      suffixButton_->setIconSize(QSize(iconSize, iconSize));
+      return;
+    }
     suffixButton_->setText(QStringLiteral("..."));
     return;
   }
 
   adqt::icons::IconToken icon = suffixIconToken_;
   if (!adqt::icons::isValid(icon)) {
-    icon = outlined_icons::Down();
+    const bool showSearchIcon = open_ && isSearchEnabledForCurrentMode();
+    icon = showSearchIcon ? outlined_icons::Search() : outlined_icons::Down();
   }
   if (adqt::icons::isValid(icon)) {
     icon.style.primary = visualStyle_->suffixColor;
@@ -1624,30 +2669,45 @@ void AdSelect::applyVisualStyle() {
       previousStyle.optionHoverBg != visualStyle_->optionHoverBg ||
       previousStyle.optionSelectedBg != visualStyle_->optionSelectedBg ||
       previousStyle.optionSelectedColor != visualStyle_->optionSelectedColor ||
+      previousStyle.selectorActiveBorderColor != visualStyle_->selectorActiveBorderColor ||
       previousStyle.disabledTextColor != visualStyle_->disabledTextColor ||
+      previousStyle.disabledBg != visualStyle_->disabledBg ||
       previousStyle.metrics.optionBorderRadius != visualStyle_->metrics.optionBorderRadius ||
       previousStyle.metrics.optionPaddingHorizontal != visualStyle_->metrics.optionPaddingHorizontal ||
       previousStyle.metrics.optionPaddingVertical != visualStyle_->metrics.optionPaddingVertical ||
-      previousStyle.metrics.font != visualStyle_->metrics.font;
+      previousStyle.metrics.iconSize != visualStyle_->metrics.iconSize ||
+      previousStyle.metrics.optionFont != visualStyle_->metrics.optionFont;
 
   bool widgetStyleChanged = false;
 
-  widgetStyleChanged |= setWidgetFontIfChanged(this, visualStyle_->metrics.font);
+  widgetStyleChanged |= setWidgetFontIfChanged(this, visualStyle_->metrics.selectorFont);
   if (lineEdit_) {
-    widgetStyleChanged |= setWidgetFontIfChanged(lineEdit_, visualStyle_->metrics.font);
+    widgetStyleChanged |= setWidgetFontIfChanged(lineEdit_, visualStyle_->metrics.selectorFont);
   }
-  if (tagsSummaryLabel_) {
-    widgetStyleChanged |= setWidgetFontIfChanged(tagsSummaryLabel_, visualStyle_->metrics.font);
+  if (tagsContainer_) {
+    widgetStyleChanged |= setWidgetFontIfChanged(tagsContainer_, visualStyle_->metrics.selectorFont);
+  }
+  if (placeholderLabel_) {
+    widgetStyleChanged |= setWidgetFontIfChanged(placeholderLabel_, visualStyle_->metrics.selectorFont);
   }
   if (prefixLabel_) {
-    widgetStyleChanged |= setWidgetFontIfChanged(prefixLabel_, visualStyle_->metrics.font);
+    widgetStyleChanged |= setWidgetFontIfChanged(prefixLabel_, visualStyle_->metrics.selectorFont);
+    const int prefixInset = mode_ != Mode::Single
+                                ? std::max(0, visualStyle_->metrics.multipleItemPaddingHorizontal)
+                                : 0;
+    widgetStyleChanged |= setWidgetContentsMarginsIfChanged(prefixLabel_, QMargins(prefixInset, 0, 0, 0));
   }
 
+  const bool multipleMode = mode_ != Mode::Single;
+  const int startPadding = multipleMode ? std::max(0, visualStyle_->metrics.multiplePaddingInlineStart)
+                                        : std::max(0, visualStyle_->metrics.horizontalPadding);
+  const int endPadding = std::max(0, visualStyle_->metrics.horizontalPadding);
+  const int verticalPadding = multipleMode ? std::max(0, visualStyle_->metrics.multiplePaddingVertical) : 0;
   widgetStyleChanged |= setLayoutContentsMarginsIfChanged(
-      rootLayout_, QMargins(visualStyle_->metrics.horizontalPadding, 0,
-                            visualStyle_->metrics.horizontalPadding, 0));
+      rootLayout_, QMargins(startPadding, verticalPadding, endPadding, verticalPadding));
   widgetStyleChanged |= setLayoutSpacingIfChanged(rootLayout_, visualStyle_->metrics.spacing);
-  widgetStyleChanged |= setLayoutSpacingIfChanged(contentLayout_, visualStyle_->metrics.spacing);
+  widgetStyleChanged |=
+      setLayoutSpacingIfChanged(contentLayout_, std::max(0, visualStyle_->metrics.tagItemGap));
 
   widgetStyleChanged |= setWidgetFixedHeightIfChanged(this, visualStyle_->metrics.height);
 
@@ -1663,9 +2723,7 @@ void AdSelect::applyVisualStyle() {
     inputPalette.setColor(QPalette::Disabled, QPalette::Text, visualStyle_->disabledTextColor);
     inputPalette.setColor(QPalette::Highlight, visualStyle_->optionSelectedBg);
     inputPalette.setColor(QPalette::HighlightedText, visualStyle_->optionSelectedColor);
-#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
     inputPalette.setColor(QPalette::PlaceholderText, visualStyle_->placeholderColor);
-#endif
     lineEditStyleChanged = setWidgetPaletteIfChanged(lineEdit_, inputPalette);
     if (lineEditStyleChanged) {
       lineEdit_->update();
@@ -1673,18 +2731,9 @@ void AdSelect::applyVisualStyle() {
   }
 
   bool tagsStyleChanged = false;
-  if (tagsSummaryLabel_) {
-    QPalette tagPalette = tagsSummaryLabel_->palette();
-    tagPalette.setColor(QPalette::Window, visualStyle_->tagBg);
-    tagPalette.setColor(QPalette::WindowText, visualStyle_->tagTextColor);
-    tagPalette.setColor(QPalette::Disabled, QPalette::WindowText, visualStyle_->disabledTextColor);
-    tagsStyleChanged |= setWidgetAutoFillBackgroundIfChanged(tagsSummaryLabel_, true);
-    tagsStyleChanged |= setWidgetPaletteIfChanged(tagsSummaryLabel_, tagPalette);
+  if (tagsLayout_) {
     tagsStyleChanged |=
-        setWidgetMinimumHeightIfChanged(tagsSummaryLabel_, visualStyle_->metrics.tagHeight);
-    if (tagsStyleChanged) {
-      tagsSummaryLabel_->update();
-    }
+        setLayoutSpacingIfChanged(tagsLayout_, std::max(0, visualStyle_->metrics.tagItemGap));
   }
 
   bool prefixPaletteChanged = false;
@@ -1696,6 +2745,16 @@ void AdSelect::applyVisualStyle() {
     if (prefixPaletteChanged) {
       prefixLabel_->update();
     }
+  }
+  if (placeholderLabel_) {
+    QPalette placeholderPalette = placeholderLabel_->palette();
+    placeholderPalette.setColor(QPalette::WindowText, visualStyle_->placeholderColor);
+    placeholderPalette.setColor(QPalette::Disabled, QPalette::WindowText, visualStyle_->disabledTextColor);
+    const bool placeholderPaletteChanged = setWidgetPaletteIfChanged(placeholderLabel_, placeholderPalette);
+    if (placeholderPaletteChanged) {
+      placeholderLabel_->update();
+    }
+    widgetStyleChanged |= placeholderPaletteChanged;
   }
 
   const auto applyToolButtonPalette = [this](QToolButton* button,
@@ -1716,7 +2775,8 @@ void AdSelect::applyVisualStyle() {
     return changed;
   };
   const bool suffixPaletteChanged = applyToolButtonPalette(suffixButton_, visualStyle_->suffixColor);
-  const bool clearPaletteChanged = applyToolButtonPalette(clearButton_, visualStyle_->clearColor);
+  const QColor clearPaletteColor = clearHovered_ ? visualStyle_->clearHoverColor : visualStyle_->clearColor;
+  const bool clearPaletteChanged = applyToolButtonPalette(clearButton_, clearPaletteColor);
 
   bool popupStyleChanged = false;
   if (popup_) {
@@ -1729,6 +2789,17 @@ void AdSelect::applyVisualStyle() {
 
     static_cast<PopupFrame*>(popup_)->setVisualStyle(
         visualStyle_->popupBg, visualStyle_->popupBorderColor, visualStyle_->metrics.popupBorderRadius);
+
+    if (popupScrollArea_) {
+      QPalette scrollPalette = popupScrollArea_->palette();
+      scrollPalette.setColor(QPalette::Base, visualStyle_->popupBg);
+      scrollPalette.setColor(QPalette::Window, visualStyle_->popupBg);
+      popupStyleChanged |= setWidgetPaletteIfChanged(popupScrollArea_, scrollPalette);
+      if (QWidget* viewport = popupScrollArea_->viewport()) {
+        popupStyleChanged |= setWidgetPaletteIfChanged(viewport, scrollPalette);
+        popupStyleChanged |= setWidgetAutoFillBackgroundIfChanged(viewport, true);
+      }
+    }
 
     if (listView_) {
       QPalette listPalette = listView_->palette();
@@ -1748,7 +2819,7 @@ void AdSelect::applyVisualStyle() {
   updateInteractionFocusOverlay();
   const bool hasPrefixIcon = prefixText_.trimmed().isEmpty() && adqt::icons::isValid(prefixIconToken_);
   const bool shouldRefreshPrefixIcon = hasPrefixIcon && prefixIconStyleChanged;
-  const bool shouldRefreshSuffixIcon = !loading_ && suffixIconStyleChanged;
+  const bool shouldRefreshSuffixIcon = suffixIconStyleChanged || loading_;
   if (shouldRefreshPrefixIcon) {
     updatePrefixVisual();
   }
@@ -1757,6 +2828,7 @@ void AdSelect::applyVisualStyle() {
   }
   updateDisplay();
   updateClearButton();
+  updateAccessoryGeometry();
   if (widgetStyleChanged || lineEditStyleChanged || tagsStyleChanged || prefixPaletteChanged ||
       suffixPaletteChanged || clearPaletteChanged || shouldRefreshPrefixIcon ||
       shouldRefreshSuffixIcon) {
@@ -1805,8 +2877,8 @@ void AdSelect::refreshRows() {
 
   if (nextRows.isEmpty()) {
     ModelRow emptyRow;
-    emptyRow.header = true;
-    emptyRow.headerText = QStringLiteral("Not Found");
+    emptyRow.empty = true;
+    emptyRow.headerText = QStringLiteral("No data");
     nextRows.append(emptyRow);
   }
 
@@ -1815,6 +2887,12 @@ void AdSelect::refreshRows() {
     listModel_->setRows(rows_);
   }
   syncCurrentListRow();
+  if (listView_ && listView_->viewport()) {
+    syncPopupOptionCursor(listView_->viewport()->mapFromGlobal(QCursor::pos()));
+  }
+  if (popupIsVisible()) {
+    syncPopupGeometry();
+  }
 }
 
 QVector<int> AdSelect::filteredOptionIndexes() const {
@@ -1897,10 +2975,17 @@ void AdSelect::syncCurrentListRow() {
   }
 
   if (targetRow >= 0) {
-    listView_->setCurrentIndex(listModel_->index(targetRow, 0));
-    if (mode_ == Mode::Single) {
-      listView_->selectionModel()->select(listModel_->index(targetRow, 0),
-                                          QItemSelectionModel::ClearAndSelect);
+    const QModelIndex targetIndex = listModel_->index(targetRow, 0);
+    listView_->setCurrentIndex(targetIndex);
+    if (mode_ == Mode::Single && listView_->selectionModel()) {
+      listView_->selectionModel()->select(targetIndex, QItemSelectionModel::ClearAndSelect);
+    }
+    if (popupScrollArea_) {
+      const QRect targetRect = listView_->visualRect(targetIndex);
+      if (targetRect.isValid()) {
+        const int margin = visualStyle_ ? std::max(2, visualStyle_->metrics.optionHeight / 2) : 8;
+        popupScrollArea_->ensureVisible(targetRect.center().x(), targetRect.center().y(), 0, margin);
+      }
     }
   }
 }
@@ -2101,7 +3186,13 @@ void AdSelect::ensurePopup() {
   popupLayout_->setContentsMargins(4, 4, 4, 4);
   popupLayout_->setSpacing(0);
 
-  listView_ = new QListView(popup_);
+  popupScrollArea_ = new AdScrollArea(popup_);
+  popupScrollArea_->setObjectName(QStringLiteral("adselect-list-scroll"));
+  popupScrollArea_->setFitToWidth(true);
+  popupScrollArea_->setFocusPolicy(Qt::NoFocus);
+  popupScrollArea_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+  listView_ = new QListView(popupScrollArea_);
   listView_->setObjectName(QStringLiteral("adselect-list"));
   listView_->setModel(listModel_);
   listView_->setItemDelegate(new OptionListDelegate(this));
@@ -2109,15 +3200,19 @@ void AdSelect::ensurePopup() {
   listView_->setSelectionMode(QAbstractItemView::SingleSelection);
   listView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
   listView_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  listView_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   listView_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   listView_->setSpacing(0);
   listView_->setUniformItemSizes(true);
   listView_->setMouseTracking(true);
+  listView_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   if (listView_->viewport()) {
     listView_->viewport()->setMouseTracking(true);
+    listView_->viewport()->installEventFilter(this);
   }
   listView_->installEventFilter(this);
-  popupLayout_->addWidget(listView_);
+  popupScrollArea_->setContentWidget(listView_);
+  popupLayout_->addWidget(popupScrollArea_);
 
   connect(listView_, &QListView::clicked, this, [this](const QModelIndex& index) {
     if (!index.isValid()) {
@@ -2135,6 +3230,7 @@ void AdSelect::ensurePopup() {
   });
 
   applyVisualStyle();
+  updateInputMode();
 }
 
 void AdSelect::rebuildPopupExtraContent() {
@@ -2162,12 +3258,32 @@ void AdSelect::syncPopupGeometry() {
     return;
   }
 
-  const int rowCount = std::max(1, static_cast<int>(rows_.size()));
-  const int listHeight =
-      std::min(visualStyle_->metrics.popupMaxHeight, rowCount * visualStyle_->metrics.optionHeight);
+  int contentHeight = 0;
+  if (rows_.isEmpty()) {
+    contentHeight = visualStyle_->metrics.optionHeight;
+  } else {
+    for (const ModelRow& row : rows_) {
+      contentHeight += row.empty ? visualStyle_->metrics.emptyStateHeight
+                                 : visualStyle_->metrics.optionHeight;
+    }
+  }
+  const int listHeight = std::min(visualStyle_->metrics.popupMaxHeight, contentHeight);
+  int targetListHeight = std::max(visualStyle_->metrics.optionHeight, listHeight);
+  const int targetListContentHeight = std::max(visualStyle_->metrics.optionHeight, contentHeight);
   if (listView_) {
-    listView_->setMinimumHeight(std::max(visualStyle_->metrics.optionHeight, listHeight));
-    listView_->setMaximumHeight(std::max(visualStyle_->metrics.optionHeight, listHeight));
+    const int listViewHeight = popupScrollArea_ ? targetListContentHeight : targetListHeight;
+    setWidgetFixedHeightIfChanged(listView_, listViewHeight);
+    listView_->updateGeometry();
+  }
+  if (popupScrollArea_) {
+    setWidgetFixedHeightIfChanged(popupScrollArea_, targetListHeight);
+    popupScrollArea_->updateGeometry();
+  } else if (!listView_) {
+    targetListHeight = 0;
+  }
+  if (popupLayout_) {
+    popupLayout_->invalidate();
+    popupLayout_->activate();
   }
 
   popup_->adjustSize();
@@ -2178,7 +3294,18 @@ void AdSelect::syncPopupGeometry() {
     popupW = popupWidth_;
   }
   popupW = std::max(120, popupW);
-  popup_->resize(popupW, popup_->sizeHint().height());
+
+  int popupH = popup_->sizeHint().height();
+  if (popupLayout_ && (popupScrollArea_ || listView_)) {
+    const QMargins margins = popupLayout_->contentsMargins();
+    popupH = margins.top() + targetListHeight + margins.bottom();
+    if (popupExtraContent_ && popupExtraContent_->isVisible()) {
+      popupH += std::max(0, popupLayout_->spacing());
+      const int availableWidth = std::max(0, popupW - margins.left() - margins.right());
+      popupH += boundedWidgetHeightHint(popupExtraContent_, availableWidth);
+    }
+  }
+  popup_->resize(popupW, std::max(1, popupH));
 
   QWidget* popupParent = popup_->parentWidget();
   if (!popupParent) {
@@ -2274,6 +3401,8 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
     hasFocusWithin_ = false;
     applyVisualStyle();
   }
+
+  updateSuffixVisual();
 
   if (emitSignal) {
     emit openChanged(open_);

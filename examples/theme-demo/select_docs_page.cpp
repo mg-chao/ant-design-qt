@@ -11,12 +11,12 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QTimer>
 #include <QVBoxLayout>
 
 #include <memory>
 
 #include "icons.h"
+#include "widgets/detail/timing_hub.h"
 
 using adqt::widgets::AdSelect;
 namespace outlined_icons = adqt::icons::outlined;
@@ -473,24 +473,26 @@ QWidget* SelectDocsPage::buildSearchBoxDemo() {
             const int current = *requestId;
             select->setLoading(true);
             hint->setText(QStringLiteral("Fetching: %1").arg(value));
-            QTimer::singleShot(300, select, [select, requestId, current, value, hint]() {
-              if (current != *requestId) {
-                return;
-              }
-              QVector<Option> options;
-              if (!value.trimmed().isEmpty()) {
-                for (int i = 0; i < 5; ++i) {
-                  const QString text = QStringLiteral("%1-result-%2").arg(value).arg(i + 1);
-                  options.append(makeOption(text, text));
-                }
-              }
-              select->setOptions(options);
-              select->setLoading(false);
-              hint->setText(QStringLiteral("Loaded %1 options").arg(options.size()));
-              if (select->open()) {
-                select->setOpen(true);
-              }
-            });
+            adqt::widgets::detail::scheduleTimingTask(
+                select, QStringLiteral("ThemeDemo.SelectSearchBox"), 300,
+                [select, requestId, current, value, hint]() {
+                  if (current != *requestId) {
+                    return;
+                  }
+                  QVector<Option> options;
+                  if (!value.trimmed().isEmpty()) {
+                    for (int i = 0; i < 5; ++i) {
+                      const QString text = QStringLiteral("%1-result-%2").arg(value).arg(i + 1);
+                      options.append(makeOption(text, text));
+                    }
+                  }
+                  select->setOptions(options);
+                  select->setLoading(false);
+                  hint->setText(QStringLiteral("Loaded %1 options").arg(options.size()));
+                  if (select->open()) {
+                    select->setOpen(true);
+                  }
+                });
           });
 
   layout->addWidget(select, 0, Qt::AlignLeft);
@@ -560,22 +562,24 @@ QWidget* SelectDocsPage::buildSelectUsersDemo() {
             *requestId += 1;
             const int current = *requestId;
             select->setLoading(true);
-            QTimer::singleShot(280, select, [select, hint, requestId, current, value]() {
-              if (current != *requestId) {
-                return;
-              }
-              QVector<Option> options;
-              if (!value.trimmed().isEmpty()) {
-                for (int i = 0; i < 8; ++i) {
-                  const QString id = QStringLiteral("%1-%2").arg(value).arg(i + 1);
-                  options.append(makeOption(id, QStringLiteral("User %1").arg(id), false, QString(),
-                                            {{"avatar", QStringLiteral("[%1]").arg(i + 1)}}));
-                }
-              }
-              select->setOptions(options);
-              select->setLoading(false);
-              hint->setText(QStringLiteral("Loaded users: %1").arg(options.size()));
-            });
+            adqt::widgets::detail::scheduleTimingTask(
+                select, QStringLiteral("ThemeDemo.SelectUsersSearch"), 280,
+                [select, hint, requestId, current, value]() {
+                  if (current != *requestId) {
+                    return;
+                  }
+                  QVector<Option> options;
+                  if (!value.trimmed().isEmpty()) {
+                    for (int i = 0; i < 8; ++i) {
+                      const QString id = QStringLiteral("%1-%2").arg(value).arg(i + 1);
+                      options.append(makeOption(id, QStringLiteral("User %1").arg(id), false, QString(),
+                                                {{"avatar", QStringLiteral("[%1]").arg(i + 1)}}));
+                    }
+                  }
+                  select->setOptions(options);
+                  select->setLoading(false);
+                  hint->setText(QStringLiteral("Loaded users: %1").arg(options.size()));
+                });
           });
   select->setOptionTextFormatter([](const Option& option) {
     const QString avatar = option.metadata.value("avatar").toString();

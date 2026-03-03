@@ -127,9 +127,11 @@ void applySemanticStyles(const AdMenu::SemanticStyles& semantic, MenuVisualStyle
     style.subMenuItemSelectedColor = semantic.subMenuItemTitle.textColor.value();
   }
 
+  if (semantic.subMenuList.backgroundColor.has_value()) {
+    style.subMenuBackground = semantic.subMenuList.backgroundColor.value();
+  }
   if (semantic.popup.backgroundColor.has_value()) {
     style.popupBackground = semantic.popup.backgroundColor.value();
-    style.subMenuBackground = semantic.popup.backgroundColor.value();
   }
   if (semantic.popup.borderColor.has_value()) {
     style.popupBorderColor = semantic.popup.borderColor.value();

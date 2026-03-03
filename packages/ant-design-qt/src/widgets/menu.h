@@ -375,6 +375,7 @@ class AdMenu final : public QWidget {
   QStringList normalizeOpenKeys(const QStringList& keys) const;
   void applySelectedInternal(const QStringList& keys, bool emitSignals);
   void applyOpenInternal(const QStringList& keys, bool emitSignals);
+  void syncOpenKeysForModeTransition(Mode previousMode, bool previousInlineCollapsed);
   void emitOpenChanged();
 
   bool findItemByKeyRecursive(const QVector<Item>& items,
@@ -409,6 +410,7 @@ class AdMenu final : public QWidget {
 
   QVector<Item> items_;
   QVector<VisibleEntry> entries_;
+  QVector<QRect> inlineSubMenuBackgroundRects_;
 
   QSet<QString> validItemKeys_;
   QSet<QString> validSubMenuKeys_;
@@ -420,6 +422,7 @@ class AdMenu final : public QWidget {
   QStringList defaultSelectedKeys_;
   QStringList openKeys_;
   QStringList defaultOpenKeys_;
+  QStringList inlineCacheOpenKeys_;
 
   bool selectedKeysExplicit_ = false;
   bool openKeysExplicit_ = false;

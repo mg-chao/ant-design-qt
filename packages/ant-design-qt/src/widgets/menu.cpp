@@ -504,10 +504,13 @@ void AdMenu::setMode(Mode value) {
   if (mode_ == value) {
     return;
   }
+  const Mode previousMode = mode_;
+  const bool previousInlineCollapsed = inlineCollapsed_;
   mode_ = value;
   hoveredEntry_ = -1;
   pressedEntry_ = -1;
   hideTooltip();
+  syncOpenKeysForModeTransition(previousMode, previousInlineCollapsed);
   rebuildEntries();
   syncPopupVisibility();
   emit modeChanged(mode_);
@@ -624,10 +627,13 @@ void AdMenu::setInlineCollapsed(bool value) {
   if (inlineCollapsed_ == value) {
     return;
   }
+  const Mode previousMode = mode_;
+  const bool previousInlineCollapsed = inlineCollapsed_;
   inlineCollapsed_ = value;
   hoveredEntry_ = -1;
   pressedEntry_ = -1;
   hideTooltip();
+  syncOpenKeysForModeTransition(previousMode, previousInlineCollapsed);
   rebuildEntries();
   syncPopupVisibility();
   emit inlineCollapsedChanged(inlineCollapsed_);
@@ -890,6 +896,20 @@ void AdMenu::paintEvent(QPaintEvent* event) {
     painter.setClipPath(popupPath);
   } else {
     painter.fillRect(rect(), style.menuBackground);
+  }
+
+  if (!popupLayer && mode_ == Mode::Inline && !inlineCollapsed_ && style.subMenuBackground.alpha() > 0) {
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(style.subMenuBackground);
+    for (const QRect& subMenuRect : inlineSubMenuBackgroundRects_) {
+      const QRect clippedRect = subMenuRect.intersected(rect());
+      if (clippedRect.width() <= 0 || clippedRect.height() <= 0) {
+        continue;
+      }
+      painter.drawRect(clippedRect);
+    }
+    painter.restore();
   }
 
   const int rootBorderWidth = rootBorderWidthForStyle(this, style);
@@ -1534,6 +1554,7 @@ void AdMenu::rebuildEntries() {
   rebuildSelectedSubMenuKeys();
 
   entries_.clear();
+  inlineSubMenuBackgroundRects_.clear();
   contentHeight_ = 0;
 
   StyleContext ctx;
@@ -1623,6 +1644,7 @@ void AdMenu::ensureDefaultStatesApplied() {
   } else {
     openKeys_ = normalizeOpenKeys(openKeys_);
   }
+  inlineCacheOpenKeys_ = openKeys_;
 }
 
 bool AdMenu::shouldShowPopupForEntry(const VisibleEntry& entry) const {
@@ -1826,7 +1848,13 @@ void AdMenu::appendInlineEntries(const QVector<Item>& items,
     }
 
     if (type == ItemType::SubMenu && openKeys_.contains(item.key)) {
+      const int subMenuTop = cursorY;
       appendInlineEntries(item.children, depth + 1, entry.keyPath, cursorY, trailingBlockMargin);
+      const int subMenuBottom = cursorY + std::max(0, trailingBlockMargin);
+      if (subMenuBottom > subMenuTop) {
+        inlineSubMenuBackgroundRects_.append(
+            QRect(0, subMenuTop, rowWidth, subMenuBottom - subMenuTop));
+      }
     }
   }
 
@@ -2299,6 +2327,9 @@ void AdMenu::applyOpenInternal(const QStringList& keys, bool emitSignals) {
     return;
   }
   openKeys_ = normalized;
+  if (mode_ == Mode::Inline && !inlineCollapsed_) {
+    inlineCacheOpenKeys_ = openKeys_;
+  }
   rebuildEntries();
   syncPopupVisibility();
   if (emitSignals) {
@@ -2314,6 +2345,29 @@ void AdMenu::applyOpenInternal(const QStringList& keys, bool emitSignals) {
       }
     }
   }
+}
+
+void AdMenu::syncOpenKeysForModeTransition(Mode previousMode, bool previousInlineCollapsed) {
+  if (openKeysExplicit_) {
+    return;
+  }
+
+  // Align with antd/rc-menu behavior:
+  // - leaving inline mode clears current popup open state
+  // - returning to inline mode restores the cached inline open keys
+  const bool wasInlineMode = previousMode == Mode::Inline && !previousInlineCollapsed;
+  const bool isInlineMode = mode_ == Mode::Inline && !inlineCollapsed_;
+
+  if (wasInlineMode) {
+    inlineCacheOpenKeys_ = normalizeOpenKeys(openKeys_);
+  }
+
+  if (isInlineMode) {
+    applyOpenInternal(inlineCacheOpenKeys_, false);
+    return;
+  }
+
+  applyOpenInternal({}, true);
 }
 
 void AdMenu::emitOpenChanged() { emit openChanged(openKeys_); }

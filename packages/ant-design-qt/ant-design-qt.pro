@@ -15,6 +15,8 @@ HEADERS += \
     src/widgets/interaction_overlay_manager.h \
     src/widgets/menu.h \
     src/widgets/menu_style.h \
+    src/widgets/select.h \
+    src/widgets/select_style.h \
     src/widgets/widgets.h \
     src/theme/fast_color_lite.h \
     src/theme/palette_generate.h \
@@ -32,6 +34,8 @@ SOURCES += \
     src/widgets/interaction_overlay_manager.cpp \
     src/widgets/menu.cpp \
     src/widgets/menu_style.cpp \
+    src/widgets/select.cpp \
+    src/widgets/select_style.cpp \
     src/theme/fast_color_lite.cpp \
     src/theme/palette_generate.cpp \
     src/theme/theme_algorithms.cpp \

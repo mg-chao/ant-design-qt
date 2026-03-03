@@ -24,6 +24,7 @@
 #include "icon_theme_adapter.h"
 #include "icons.h"
 #include "menu_docs_page.h"
+#include "select_docs_page.h"
 #include "theme/theme.h"
 #include "widgets/widgets.h"
 
@@ -879,8 +880,10 @@ class DemoWindow final : public QWidget {
     docsStack_ = new QStackedWidget();
     buttonPage_ = new ButtonDocsPage();
     menuPage_ = new MenuDocsPage();
+    selectPage_ = new SelectDocsPage();
     docsStack_->addWidget(buttonPage_);
     docsStack_->addWidget(menuPage_);
+    docsStack_->addWidget(selectPage_);
     scroll_->setWidget(docsStack_);
     body->addWidget(scroll_, 1);
 
@@ -895,6 +898,8 @@ class DemoWindow final : public QWidget {
         switchDocs(DocsKind::Button, false);
       } else if (key == QStringLiteral("menu-docs")) {
         switchDocs(DocsKind::Menu, false);
+      } else if (key == QStringLiteral("select-docs")) {
+        switchDocs(DocsKind::Select, false);
       }
     });
     connect(scroll_->verticalScrollBar(), &QAbstractSlider::valueChanged, this,
@@ -913,15 +918,30 @@ class DemoWindow final : public QWidget {
   enum class DocsKind {
     Button,
     Menu,
+    Select,
   };
 
   QString docsRootKey(DocsKind kind) const {
-    return kind == DocsKind::Button ? QStringLiteral("button-docs") : QStringLiteral("menu-docs");
+    if (kind == DocsKind::Button) {
+      return QStringLiteral("button-docs");
+    }
+    if (kind == DocsKind::Menu) {
+      return QStringLiteral("menu-docs");
+    }
+    return QStringLiteral("select-docs");
   }
 
   QString sectionKey(DocsKind kind, int row) const {
+    QString prefix;
+    if (kind == DocsKind::Button) {
+      prefix = QStringLiteral("button");
+    } else if (kind == DocsKind::Menu) {
+      prefix = QStringLiteral("menu");
+    } else {
+      prefix = QStringLiteral("select");
+    }
     return QStringLiteral("%1-section-%2")
-        .arg(kind == DocsKind::Button ? QStringLiteral("button") : QStringLiteral("menu"))
+        .arg(prefix)
         .arg(row);
   }
 
@@ -954,6 +974,20 @@ class DemoWindow final : public QWidget {
       }
       return false;
     }
+    if (key.startsWith(QStringLiteral("select-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("select-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Select;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
     return false;
   }
 
@@ -965,6 +999,9 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Menu && menuPage_) {
       return menuPage_->sectionAnchors();
     }
+    if (kind == DocsKind::Select && selectPage_) {
+      return selectPage_->sectionAnchors();
+    }
     return kEmpty;
   }
 
@@ -975,6 +1012,9 @@ class DemoWindow final : public QWidget {
     }
     if (kind == DocsKind::Menu && menuPage_) {
       return menuPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Select && selectPage_) {
+      return selectPage_->sectionTitles();
     }
     return kEmpty;
   }
@@ -1013,8 +1053,16 @@ class DemoWindow final : public QWidget {
     menuRoot.icon = outlined_icons::Menu();
     menuRoot.children = buildSectionItems(DocsKind::Menu);
 
-    navMenu_->setItems({buttonRoot, menuRoot});
-    navMenu_->setOpenKeys({docsRootKey(DocsKind::Button), docsRootKey(DocsKind::Menu)});
+    AdMenu::Item selectRoot;
+    selectRoot.key = docsRootKey(DocsKind::Select);
+    selectRoot.label = "Select";
+    selectRoot.type = AdMenu::ItemType::SubMenu;
+    selectRoot.icon = outlined_icons::Select();
+    selectRoot.children = buildSectionItems(DocsKind::Select);
+
+    navMenu_->setItems({buttonRoot, menuRoot, selectRoot});
+    navMenu_->setOpenKeys(
+        {docsRootKey(DocsKind::Button), docsRootKey(DocsKind::Menu), docsRootKey(DocsKind::Select)});
   }
 
   void applyThemeFromControls() {
@@ -1033,8 +1081,15 @@ class DemoWindow final : public QWidget {
   void switchDocs(DocsKind kind, bool preserveScroll) {
     currentKind_ = kind;
     if (docsStack_) {
-      docsStack_->setCurrentWidget(kind == DocsKind::Button ? static_cast<QWidget*>(buttonPage_)
-                                                            : static_cast<QWidget*>(menuPage_));
+      QWidget* target = nullptr;
+      if (kind == DocsKind::Button) {
+        target = buttonPage_;
+      } else if (kind == DocsKind::Menu) {
+        target = menuPage_;
+      } else {
+        target = selectPage_;
+      }
+      docsStack_->setCurrentWidget(target);
     }
     if (!preserveScroll && scroll_) {
       scroll_->verticalScrollBar()->setValue(0);
@@ -1104,6 +1159,7 @@ class DemoWindow final : public QWidget {
   QStackedWidget* docsStack_ = nullptr;
   ButtonDocsPage* buttonPage_ = nullptr;
   MenuDocsPage* menuPage_ = nullptr;
+  SelectDocsPage* selectPage_ = nullptr;
   DocsKind currentKind_ = DocsKind::Button;
 };
 

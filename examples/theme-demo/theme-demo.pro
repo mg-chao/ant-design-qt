@@ -8,12 +8,14 @@ INCLUDEPATH += ../../packages/ant-design-icons-qt/src
 
 HEADERS += \
     icon_theme_adapter.h \
-    menu_docs_page.h
+    menu_docs_page.h \
+    select_docs_page.h
 
 SOURCES += \
     icon_theme_adapter.cpp \
     main.cpp \
-    menu_docs_page.cpp
+    menu_docs_page.cpp \
+    select_docs_page.cpp
 
 isEmpty(ADQT_LIB_BUILD_DIR) {
     ADQT_LIB_BUILD_DIR = $$clean_path($$OUT_PWD/../../packages/ant-design-qt)

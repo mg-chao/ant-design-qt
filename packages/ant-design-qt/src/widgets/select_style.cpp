@@ -30,6 +30,12 @@ QColor resolveTokenColor(const std::optional<QString>& token, const QColor& fall
   return toColor(token.value(), fallback);
 }
 
+QColor withAlpha(const QColor& color, qreal alpha) {
+  QColor updated = color;
+  updated.setAlphaF(std::clamp(alpha, 0.0, 1.0));
+  return updated;
+}
+
 void applySemanticSlot(const AdSelect::SemanticSlotStyle& slot,
                        QColor* textColor,
                        QColor* backgroundColor,
@@ -49,12 +55,16 @@ void applySemanticSlot(const AdSelect::SemanticSlotStyle& slot,
 
 SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   const adqt::theme::ThemeMapToken& map = adqt::theme::ThemeManager::instance().currentMapToken();
+  const QColor transparent(0, 0, 0, 0);
 
   SelectVisualStyle style;
   style.selectorBg = toColor(map.colorBgContainer, QColor("#ffffff"));
+  style.selectorHoverBg = style.selectorBg;
+  style.selectorActiveBg = style.selectorBg;
   style.selectorBorderColor = toColor(map.colorBorder, QColor("#d9d9d9"));
   style.selectorHoverBorderColor = toColor(map.colorPrimaryHover, QColor("#4096ff"));
   style.selectorActiveBorderColor = toColor(map.colorPrimary, QColor("#1677ff"));
+  style.selectorFocusOutlineColor = withAlpha(toColor(map.colorPrimary, QColor("#1677ff")), 0.12);
   style.selectorTextColor = toColor(map.colorText, QColor("#141414"));
   style.placeholderColor = toColor(map.colorTextQuaternary, QColor("#bfbfbf"));
   style.popupBg = toColor(map.colorBgElevated, QColor("#ffffff"));
@@ -79,6 +89,8 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   style.metrics.popupBorderRadius = std::max(0, qRound(map.borderRadiusLG));
   style.metrics.optionBorderRadius = std::max(0, qRound(map.borderRadiusSM));
   style.metrics.borderWidth = std::max(1, qRound(map.lineWidth));
+  style.metrics.focusOutlineWidth = std::max<qreal>(1.0, map.lineWidth * 3.0);
+  style.metrics.focusOutlineOffset = 1.0;
   style.metrics.horizontalPadding = std::max(8, qRound(map.sizeSM - map.lineWidth));
   style.metrics.popupPadding = std::max(2, qRound(map.sizeXXS));
   style.metrics.popupOffset = std::max(2, qRound(map.sizeXXS));
@@ -112,26 +124,54 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
 
   if (input.variant == AdSelect::Variant::Filled) {
     style.selectorBg = toColor(map.colorFillTertiary, QColor("#f5f5f5"));
-    style.selectorBorderColor = QColor(0, 0, 0, 0);
+    style.selectorHoverBg = toColor(map.colorFillSecondary, QColor("#f5f5f5"));
+    style.selectorActiveBg = toColor(map.colorBgContainer, QColor("#ffffff"));
+    style.selectorBorderColor = transparent;
+    style.selectorHoverBorderColor = transparent;
+    style.selectorFocusOutlineColor = transparent;
   } else if (input.variant == AdSelect::Variant::Borderless) {
-    style.selectorBg = toColor(map.colorBgContainer, QColor("#ffffff"));
-    style.selectorBorderColor = QColor(0, 0, 0, 0);
-    style.selectorHoverBorderColor = QColor(0, 0, 0, 0);
-    style.selectorActiveBorderColor = QColor(0, 0, 0, 0);
+    style.selectorBg = transparent;
+    style.selectorHoverBg = transparent;
+    style.selectorActiveBg = transparent;
+    style.selectorBorderColor = transparent;
+    style.selectorHoverBorderColor = transparent;
+    style.selectorActiveBorderColor = transparent;
+    style.selectorFocusOutlineColor = transparent;
   } else if (input.variant == AdSelect::Variant::Underlined) {
     style.selectorBg = toColor(map.colorBgContainer, QColor("#ffffff"));
+    style.selectorHoverBg = style.selectorBg;
+    style.selectorActiveBg = style.selectorBg;
+    style.selectorFocusOutlineColor = transparent;
   }
 
   if (input.status == AdSelect::Status::Error) {
-    const QColor errorColor = toColor(map.colorError, QColor("#ff4d4f"));
-    style.selectorBorderColor = errorColor;
-    style.selectorHoverBorderColor = errorColor;
-    style.selectorActiveBorderColor = errorColor;
+    if (input.variant == AdSelect::Variant::Filled) {
+      style.selectorBg = toColor(map.colorErrorBg, QColor("#fff2f0"));
+      style.selectorHoverBg = toColor(map.colorErrorBgHover, QColor("#fff1f0"));
+      style.selectorActiveBorderColor = toColor(map.colorError, QColor("#ff4d4f"));
+    } else if (input.variant != AdSelect::Variant::Borderless) {
+      style.selectorBorderColor = toColor(map.colorError, QColor("#ff4d4f"));
+      style.selectorHoverBorderColor = toColor(map.colorErrorHover, QColor("#ff7875"));
+      style.selectorActiveBorderColor = toColor(map.colorError, QColor("#ff4d4f"));
+      style.selectorFocusOutlineColor =
+          (input.variant == AdSelect::Variant::Outlined)
+              ? withAlpha(toColor(map.colorError, QColor("#ff4d4f")), 0.12)
+              : transparent;
+    }
   } else if (input.status == AdSelect::Status::Warning) {
-    const QColor warningColor = toColor(map.colorWarning, QColor("#faad14"));
-    style.selectorBorderColor = warningColor;
-    style.selectorHoverBorderColor = warningColor;
-    style.selectorActiveBorderColor = warningColor;
+    if (input.variant == AdSelect::Variant::Filled) {
+      style.selectorBg = toColor(map.colorWarningBg, QColor("#fffbe6"));
+      style.selectorHoverBg = toColor(map.colorWarningBgHover, QColor("#fffbe6"));
+      style.selectorActiveBorderColor = toColor(map.colorWarning, QColor("#faad14"));
+    } else if (input.variant != AdSelect::Variant::Borderless) {
+      style.selectorBorderColor = toColor(map.colorWarning, QColor("#faad14"));
+      style.selectorHoverBorderColor = toColor(map.colorWarningHover, QColor("#ffd666"));
+      style.selectorActiveBorderColor = toColor(map.colorWarning, QColor("#faad14"));
+      style.selectorFocusOutlineColor =
+          (input.variant == AdSelect::Variant::Outlined)
+              ? withAlpha(toColor(map.colorWarning, QColor("#faad14")), 0.12)
+              : transparent;
+    }
   }
 
   const AdSelect::ComponentTokens& tokens = input.componentTokens;
@@ -161,7 +201,13 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   }
   recomputeOptionPadding();
 
-  style.selectorBg = resolveTokenColor(tokens.selectorBg, style.selectorBg);
+  if (tokens.selectorBg.has_value()) {
+    style.selectorBg = toColor(tokens.selectorBg.value(), style.selectorBg);
+    if (input.variant != AdSelect::Variant::Filled) {
+      style.selectorHoverBg = style.selectorBg;
+      style.selectorActiveBg = style.selectorBg;
+    }
+  }
   style.selectorBorderColor = resolveTokenColor(tokens.selectorBorderColor, style.selectorBorderColor);
   style.selectorHoverBorderColor =
       resolveTokenColor(tokens.selectorHoverBorderColor, style.selectorHoverBorderColor);
@@ -193,11 +239,29 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   applySemanticSlot(semantic.prefix, &style.prefixColor, nullptr, nullptr);
   applySemanticSlot(semantic.suffix, &style.suffixColor, nullptr, nullptr);
 
+  if (input.variant != AdSelect::Variant::Filled) {
+    style.selectorHoverBg = style.selectorBg;
+    style.selectorActiveBg = style.selectorBg;
+  }
+
   if (input.disabled) {
-    style.selectorBg = style.disabledBg;
-    style.selectorBorderColor = style.disabledBorderColor;
-    style.selectorHoverBorderColor = style.disabledBorderColor;
-    style.selectorActiveBorderColor = style.disabledBorderColor;
+    if (input.variant == AdSelect::Variant::Borderless) {
+      style.selectorBg = transparent;
+      style.selectorHoverBg = transparent;
+      style.selectorActiveBg = transparent;
+      style.selectorBorderColor = transparent;
+      style.selectorHoverBorderColor = transparent;
+      style.selectorActiveBorderColor = transparent;
+      style.selectorFocusOutlineColor = transparent;
+    } else {
+      style.selectorBg = style.disabledBg;
+      style.selectorHoverBg = style.disabledBg;
+      style.selectorActiveBg = style.disabledBg;
+      style.selectorBorderColor = style.disabledBorderColor;
+      style.selectorHoverBorderColor = style.disabledBorderColor;
+      style.selectorActiveBorderColor = style.disabledBorderColor;
+      style.selectorFocusOutlineColor = transparent;
+    }
     style.selectorTextColor = style.disabledTextColor;
     style.placeholderColor = style.disabledTextColor;
     style.optionTextColor = style.disabledTextColor;

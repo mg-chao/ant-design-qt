@@ -19,6 +19,8 @@ class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QListView;
+class QMoveEvent;
+class QPaintEvent;
 class QToolButton;
 class QVBoxLayout;
 
@@ -316,8 +318,10 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
 
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
+  void paintEvent(QPaintEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
+  void moveEvent(QMoveEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
   void changeEvent(QEvent* event) override;
 
@@ -368,6 +372,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   void openPopup();
   void setOpenInternal(bool value, bool emitSignal);
   void updateFocusState();
+  void updateInteractionFocusOverlay();
 
   QObject* popupOwnerObject() const override;
   QWidget* popupAnchorWidget() const override;

@@ -1,6 +1,7 @@
 ﻿#include "select.h"
 
 #include "icons.h"
+#include "interaction_overlay_manager.h"
 #include "popup_placement.h"
 #include "select_style.h"
 #include "theme/theme.h"
@@ -15,7 +16,9 @@
 #include <QLineEdit>
 #include <QListView>
 #include <QMouseEvent>
+#include <QMoveEvent>
 #include <QItemSelectionModel>
+#include <QPaintEvent>
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScopedValueRollback>
@@ -193,6 +196,7 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
 AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
   setObjectName(QStringLiteral("adselect-root"));
   setAttribute(Qt::WA_Hover, true);
+  setAttribute(Qt::WA_StyledBackground, true);
   setFocusPolicy(Qt::StrongFocus);
 
   visualStyle_ = new detail::SelectVisualStyle();
@@ -287,6 +291,7 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 }
 
 AdSelect::~AdSelect() {
+  stopInteractionFocusForOwner(this);
   detail::setInWindowPopupHostOpen(this, false);
   if (popup_) {
     popup_->hide();
@@ -853,6 +858,11 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
   return QWidget::eventFilter(watched, event);
 }
 
+void AdSelect::paintEvent(QPaintEvent* event) {
+  QWidget::paintEvent(event);
+  updateInteractionFocusOverlay();
+}
+
 void AdSelect::mousePressEvent(QMouseEvent* event) {
   if (!disabled() && event && event->button() == Qt::LeftButton) {
     if (clearButton_ && clearButton_->geometry().contains(event->pos())) {
@@ -892,6 +902,11 @@ void AdSelect::keyPressEvent(QKeyEvent* event) {
   QWidget::keyPressEvent(event);
 }
 
+void AdSelect::moveEvent(QMoveEvent* event) {
+  QWidget::moveEvent(event);
+  updateInteractionFocusOverlay();
+}
+
 void AdSelect::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
   if (responsiveMaxTagCount_) {
@@ -900,11 +915,20 @@ void AdSelect::resizeEvent(QResizeEvent* event) {
   if (open_) {
     syncPopupGeometry();
   }
+  updateInteractionFocusOverlay();
 }
 
 void AdSelect::changeEvent(QEvent* event) {
   QWidget::changeEvent(event);
   if (!event) {
+    return;
+  }
+  if (event->type() == QEvent::Hide) {
+    stopInteractionFocusForOwner(this);
+    return;
+  }
+  if (event->type() == QEvent::Show) {
+    updateInteractionFocusOverlay();
     return;
   }
   if (event->type() == QEvent::EnabledChange || event->type() == QEvent::PaletteChange ||
@@ -1253,6 +1277,8 @@ void AdSelect::applyVisualStyle() {
                                                           : visualStyle_->selectorBorderColor.name(QColor::HexArgb);
   const QString hoverBorderColor = visualStyle_->selectorHoverBorderColor.name(QColor::HexArgb);
   const QString selectorBg = visualStyle_->selectorBg.name(QColor::HexArgb);
+  const QString hoverSelectorBg = visualStyle_->selectorHoverBg.name(QColor::HexArgb);
+  const QString activeSelectorBg = visualStyle_->selectorActiveBg.name(QColor::HexArgb);
   const QString textColor = visualStyle_->selectorTextColor.name(QColor::HexArgb);
   const QString placeholderColor = visualStyle_->placeholderColor.name(QColor::HexArgb);
   const QString prefixColor = visualStyle_->prefixColor.name(QColor::HexArgb);
@@ -1275,11 +1301,13 @@ void AdSelect::applyVisualStyle() {
                           "}"
                           "QWidget#adselect-root:hover {"
                           "  border-color: %5;"
+                          "  background: %6;"
                           "}"
                           "QWidget#adselect-root[focused=\"true\"] {"
-                          "  border-color: %6;"
+                          "  border-color: %7;"
+                          "  background: %8;"
                           "}"
-                          "QWidget#adselect-root[variant=\"%7\"] {"
+                          "QWidget#adselect-root[variant=\"%9\"] {"
                           "  border-top: 0px;"
                           "  border-left: 0px;"
                           "  border-right: 0px;"
@@ -1288,39 +1316,41 @@ void AdSelect::applyVisualStyle() {
                           "QLineEdit#adselect-input {"
                           "  border: none;"
                           "  background: transparent;"
-                          "  color: %8;"
-                          "  selection-background-color: %9;"
+                          "  color: %10;"
+                          "  selection-background-color: %11;"
                           "}"
                           "QLineEdit#adselect-input:disabled {"
-                          "  color: %10;"
+                          "  color: %12;"
                           "}"
                           "QLineEdit#adselect-input::placeholder {"
-                          "  color: %11;"
+                          "  color: %13;"
                           "}"
                           "QLabel#adselect-tags {"
-                          "  background: %12;"
-                          "  color: %13;"
+                          "  background: %14;"
+                          "  color: %15;"
                           "  border-radius: 4px;"
                           "  padding: 1px 6px;"
                           "}"
                           "QLabel#adselect-prefix {"
-                          "  color: %14;"
+                          "  color: %16;"
                           "}"
                           "QToolButton#adselect-suffix, QToolButton#adselect-clear {"
                           "  border: none;"
                           "  background: transparent;"
-                          "  color: %15;"
+                          "  color: %17;"
                           "  padding: 0px;"
                           "}"
                           "QToolButton#adselect-clear {"
-                          "  color: %16;"
+                          "  color: %18;"
                           "}")
                           .arg(selectorBg)
                           .arg(visualStyle_->metrics.borderWidth)
                           .arg(borderColor)
                           .arg(visualStyle_->metrics.borderRadius)
                           .arg(hoverBorderColor)
+                          .arg(hoverSelectorBg)
                           .arg(visualStyle_->selectorActiveBorderColor.name(QColor::HexArgb))
+                          .arg(activeSelectorBg)
                           .arg(static_cast<int>(Variant::Underlined))
                           .arg(textColor)
                           .arg(visualStyle_->optionSelectedBg.name(QColor::HexArgb))
@@ -1387,6 +1417,7 @@ void AdSelect::applyVisualStyle() {
     popup_->setStyleSheet(popupSheet);
   }
 
+  updateInteractionFocusOverlay();
   updatePrefixVisual();
   updateSuffixVisual();
   updateDisplay();
@@ -1725,6 +1756,7 @@ void AdSelect::ensurePopup() {
   QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
   popup_ = new QFrame(scopeWindow);
   popup_->setAttribute(Qt::WA_DeleteOnClose, false);
+  popup_->setAttribute(Qt::WA_StyledBackground, true);
   popup_->setObjectName(QStringLiteral("adselect-popup"));
   popup_->installEventFilter(this);
 
@@ -1928,6 +1960,42 @@ void AdSelect::popupRelayoutFromHost() {
   if (open_) {
     syncPopupGeometry();
   }
+}
+
+void AdSelect::updateInteractionFocusOverlay() {
+  if (!visualStyle_ || disabled() || !(hasFocusWithin_ || open_)) {
+    stopInteractionFocusForOwner(this);
+    return;
+  }
+
+  const QColor focusColor = visualStyle_->selectorFocusOutlineColor;
+  if (focusColor.alpha() <= 0 || visualStyle_->metrics.focusOutlineWidth <= 0.0) {
+    stopInteractionFocusForOwner(this);
+    return;
+  }
+
+  const qreal borderHalf = std::max<qreal>(0.0, visualStyle_->metrics.borderWidth / 2.0);
+  QRectF focusBaseRectInWindow =
+      rect().adjusted(borderHalf + 0.5, borderHalf + 0.5, -borderHalf - 0.5, -borderHalf - 0.5);
+
+  QWidget* hostWindow = window();
+  if (hostWindow) {
+    const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
+    focusBaseRectInWindow.translate(origin.x(), origin.y());
+  }
+
+  const qreal radius = std::max<qreal>(0.0, visualStyle_->metrics.borderRadius);
+  InteractionFocusRequest request;
+  request.owner = this;
+  request.baseRectInWindow = focusBaseRectInWindow;
+  request.topLeft = radius;
+  request.topRight = radius;
+  request.bottomRight = radius;
+  request.bottomLeft = radius;
+  request.color = focusColor;
+  request.strokeWidth = std::max<qreal>(1.0, visualStyle_->metrics.focusOutlineWidth);
+  request.offset = std::max<qreal>(0.0, visualStyle_->metrics.focusOutlineOffset);
+  triggerInteractionFocus(request);
 }
 
 void AdSelect::updateFocusState() {

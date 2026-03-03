@@ -13,6 +13,8 @@ struct SelectMetrics {
   int popupBorderRadius = 8;
   int optionBorderRadius = 4;
   int borderWidth = 1;
+  qreal focusOutlineWidth = 2.0;
+  qreal focusOutlineOffset = 0.0;
   int horizontalPadding = 11;
   int popupPadding = 4;
   int popupOffset = 4;
@@ -28,9 +30,12 @@ struct SelectMetrics {
 
 struct SelectVisualStyle {
   QColor selectorBg;
+  QColor selectorHoverBg;
+  QColor selectorActiveBg;
   QColor selectorBorderColor;
   QColor selectorHoverBorderColor;
   QColor selectorActiveBorderColor;
+  QColor selectorFocusOutlineColor;
   QColor selectorTextColor;
   QColor placeholderColor;
   QColor popupBg;

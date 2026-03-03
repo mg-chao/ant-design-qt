@@ -235,13 +235,10 @@ MenuVisualStyle makeLightStyle(const ThemeMapToken& map,
       resolveTokenColor(tokens.dangerItemSelectedBg, toColor(map.colorErrorBg, QColor("#fff2f0")));
 
   style.horizontalNormal = style.normal;
+  // Match antd theme.ts: horizontal hover text still comes from `itemHoverColor`.
+  // `horizontalItemHoverColor` is currently not consumed by the style rules.
   style.horizontalHover = style.hover;
   style.horizontalActive = style.horizontalHover;
-  const QColor horizontalHoverFallback = style.horizontalHover.text;
-  style.horizontalHover.text = tokens.horizontalItemHoverColor.has_value()
-                                   ? toColor(tokens.horizontalItemHoverColor.value(),
-                                             horizontalHoverFallback)
-                                   : horizontalHoverFallback;
   style.horizontalSelected.text = tokens.horizontalItemSelectedColor.has_value()
                                       ? toColor(tokens.horizontalItemSelectedColor.value(),
                                                 style.selected.text)
@@ -322,11 +319,9 @@ MenuVisualStyle makeDarkStyle(const ThemeMapToken& map,
       resolveTokenColorChain(tokens.darkDangerItemSelectedBg, tokens.dangerItemSelectedBg, dangerColor);
 
   style.horizontalNormal = style.normal;
+  // Match antd theme.ts: horizontal hover text still comes from `itemHoverColor`.
   style.horizontalHover = style.hover;
   style.horizontalActive = style.active;
-  style.horizontalHover.text = tokens.horizontalItemHoverColor.has_value()
-                                   ? toColor(tokens.horizontalItemHoverColor.value(), style.horizontalHover.text)
-                                   : style.horizontalHover.text;
   style.horizontalSelected.text = tokens.horizontalItemSelectedColor.has_value()
                                       ? toColor(tokens.horizontalItemSelectedColor.value(),
                                                 style.selected.text)

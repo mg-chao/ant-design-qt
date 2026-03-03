@@ -976,19 +976,28 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       state = style.disabled;
     } else if (horizontal) {
       state = style.horizontalNormal;
-      if (selected) {
+      if (entry.type == ItemType::SubMenu && subMenuSelected) {
+        // Match antd: submenu-selected keeps submenu title selected color.
+        // Horizontal selected state still controls active bar/background.
+        state = style.horizontalSelected;
+        if (style.subMenuItemSelectedColor.isValid()) {
+          state.text = style.subMenuItemSelectedColor;
+        } else if (style.selected.text.isValid()) {
+          state.text = style.selected.text;
+        }
+      } else if (selected) {
         state = style.horizontalSelected;
       } else if (entry.danger) {
         if (pressed) {
           state = style.dangerActive;
-        } else if (hovered || opened) {
+        } else if (hovered) {
           state = style.dangerHover;
         } else {
           state = style.danger;
         }
       } else if (pressed) {
         state = style.horizontalActive;
-      } else if (hovered || opened) {
+      } else if (hovered) {
         state = style.horizontalHover;
       }
     } else if (entry.type == ItemType::SubMenu && subMenuSelected) {
@@ -2241,7 +2250,9 @@ void AdMenu::activateEntry(int index, bool fromKeyboard) {
     emit sink->clicked(entry.key, mergedKeyPath);
 
     if (sink->mode_ != Mode::Inline || sink->inlineCollapsed_) {
-      sink->hidePopupAndDescendants(QString());
+      // Match antd popup behavior: selecting an item closes popup chains and
+      // clears opened submenu state so highlight is computed from selection only.
+      sink->applyOpenInternal({}, true);
     }
   } else if (rowIsOpenable(entry)) {
     emit sink->titleClicked(entry.key);

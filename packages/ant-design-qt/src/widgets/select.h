@@ -10,6 +10,7 @@
 #include <functional>
 #include <optional>
 
+#include "in_window_popup_host.h"
 #include "icons_types.h"
 
 class QAbstractListModel;
@@ -27,7 +28,7 @@ namespace detail {
 struct SelectVisualStyle;
 }
 
-class AdSelect final : public QWidget {
+class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   Q_OBJECT
 
   Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
@@ -363,12 +364,18 @@ class AdSelect final : public QWidget {
   void ensurePopup();
   void rebuildPopupExtraContent();
   void syncPopupGeometry();
-  void bindPopupScopeEvents();
-  void unbindPopupScopeEvents();
   void closePopup();
   void openPopup();
   void setOpenInternal(bool value, bool emitSignal);
   void updateFocusState();
+
+  QObject* popupOwnerObject() const override;
+  QWidget* popupAnchorWidget() const override;
+  QWidget* popupScopeWindow() const override;
+  bool popupIsVisible() const override;
+  bool popupContainsGlobalPos(const QPoint& globalPos) const override;
+  void popupCloseFromHost(detail::PopupCloseReason reason) override;
+  void popupRelayoutFromHost() override;
 
   Mode mode_ = Mode::Single;
   Size size_ = Size::Middle;
@@ -416,7 +423,6 @@ class AdSelect final : public QWidget {
   QToolButton* suffixButton_ = nullptr;
 
   QFrame* popup_ = nullptr;
-  QPointer<QWidget> popupScopeWindow_;
   QVBoxLayout* popupLayout_ = nullptr;
   QListView* listView_ = nullptr;
   QWidget* popupExtraContent_ = nullptr;

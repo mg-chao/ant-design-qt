@@ -12,6 +12,7 @@ HEADERS += \
     src/widgets/button.h \
     src/widgets/button_group.h \
     src/widgets/button_style.h \
+    src/widgets/in_window_popup_host.h \
     src/widgets/interaction_overlay_manager.h \
     src/widgets/menu.h \
     src/widgets/menu_style.h \
@@ -32,6 +33,7 @@ SOURCES += \
     src/widgets/button.cpp \
     src/widgets/button_group.cpp \
     src/widgets/button_style.cpp \
+    src/widgets/in_window_popup_host.cpp \
     src/widgets/interaction_overlay_manager.cpp \
     src/widgets/menu.cpp \
     src/widgets/menu_style.cpp \

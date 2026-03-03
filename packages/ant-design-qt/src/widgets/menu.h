@@ -17,6 +17,7 @@
 #include <functional>
 #include <optional>
 
+#include "in_window_popup_host.h"
 #include "icons_types.h"
 
 namespace adqt::widgets {
@@ -25,7 +26,7 @@ namespace detail {
 struct MenuVisualStyle;
 }
 
-class AdMenu final : public QWidget {
+class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
   Q_OBJECT
 
   Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
@@ -405,6 +406,15 @@ class AdMenu final : public QWidget {
   void positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord);
   void hidePopupAndDescendants(const QString& key);
   void clearDanglingPopups();
+  void syncInWindowPopupHostState();
+
+  QObject* popupOwnerObject() const override;
+  QWidget* popupAnchorWidget() const override;
+  QWidget* popupScopeWindow() const override;
+  bool popupIsVisible() const override;
+  bool popupContainsGlobalPos(const QPoint& globalPos) const override;
+  void popupCloseFromHost(detail::PopupCloseReason reason) override;
+  void popupRelayoutFromHost() override;
 
   QStringList mergeKeyPathWithPrefix(const QStringList& localPath) const;
 

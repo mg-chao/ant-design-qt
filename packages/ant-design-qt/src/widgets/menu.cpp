@@ -6,7 +6,6 @@
 #include "popup_placement.h"
 #include "theme/theme.h"
 
-#include <QApplication>
 #include <QCursor>
 #include <QEvent>
 #include <QFocusEvent>
@@ -48,17 +47,6 @@ QPoint mouseEventPos(const QMouseEvent* event) {
   return event->position().toPoint();
 #else
   return event->pos();
-#endif
-}
-
-QPoint mouseEventGlobalPos(const QMouseEvent* event) {
-  if (!event) {
-    return QPoint();
-  }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-  return event->globalPosition().toPoint();
-#else
-  return event->globalPos();
 #endif
 }
 
@@ -213,12 +201,6 @@ void detachSharedPopupOwner(SharedPopupHost* host) {
   }
 
   AdMenu* owner = host->ownerMenu.data();
-  if (host->scopeWindow) {
-    host->scopeWindow->removeEventFilter(owner);
-  }
-  if (qApp) {
-    qApp->removeEventFilter(owner);
-  }
   for (PopupLayer* layer : host->layers) {
     if (!layer) {
       continue;
@@ -394,14 +376,6 @@ void bindSharedPopupOwner(SharedPopupHost* host, AdMenu* owner) {
   if (!owner) {
     return;
   }
-  if (host->scopeWindow) {
-    host->scopeWindow->removeEventFilter(owner);
-    host->scopeWindow->installEventFilter(owner);
-  }
-  if (qApp) {
-    qApp->removeEventFilter(owner);
-    qApp->installEventFilter(owner);
-  }
   for (PopupLayer* layer : host->layers) {
     if (!layer) {
       continue;
@@ -489,6 +463,7 @@ AdMenu::~AdMenu() {
     bindSharedPopupOwner(host, nullptr);
     hidePopupLayersFrom(host, 0);
   }
+  detail::setInWindowPopupHostOpen(this, false);
 }
 
 AdMenu::Mode AdMenu::mode() const { return mode_; }
@@ -1412,30 +1387,6 @@ bool AdMenu::eventFilter(QObject* watched, QEvent* event) {
 
   SharedPopupHost* host = sharedPopupHostFor(this);
   if (host && host->ownerMenu == this) {
-    // Recreate Qt::Popup outside-click dismissal by observing mouse presses at app scope.
-    if (event->type() == QEvent::MouseButtonPress && anyPopupLayerVisible(host)) {
-      const auto* mouseEvent = static_cast<QMouseEvent*>(event);
-      const QPoint clickGlobalPos = mouseEventGlobalPos(mouseEvent);
-      const bool clickInScope = widgetContainsGlobalPos(host->scopeWindow, clickGlobalPos);
-      const bool clickInMenu = widgetContainsGlobalPos(this, clickGlobalPos);
-      const bool clickInPopup = anyPopupLayerContainsGlobalPos(host, clickGlobalPos);
-      if (clickInScope && !clickInMenu && !clickInPopup) {
-        applyOpenInternal({}, true);
-      }
-    }
-
-    if (watched == host->scopeWindow.data()) {
-      if (event->type() == QEvent::WindowDeactivate || event->type() == QEvent::Hide) {
-        if (!openKeys_.isEmpty()) {
-          applyOpenInternal({}, true);
-        } else {
-          hidePopupAndDescendants(QString());
-        }
-      } else if (event->type() == QEvent::Resize && anyPopupLayerVisible(host)) {
-        syncPopupVisibility();
-      }
-    }
-
     PopupLayer* watchedLayer = nullptr;
     const bool fromSharedPopup = [&]() {
       for (PopupLayer* layer : host->layers) {
@@ -1684,11 +1635,13 @@ void AdMenu::syncPopupVisibility() {
     return;
   }
 
+  const auto finalizeHostState = [this]() { syncInWindowPopupHostState(); };
   SharedPopupHost* host = sharedPopupHostFor(this);
   if (mode_ == Mode::Inline && !inlineCollapsed_) {
     if (host && host->ownerMenu == this) {
       hidePopupLayersFrom(host, 0);
     }
+    finalizeHostState();
     return;
   }
 
@@ -1703,6 +1656,7 @@ void AdMenu::syncPopupVisibility() {
       if (host && host->ownerMenu == this) {
         hidePopupLayersFrom(host, 0);
       }
+      finalizeHostState();
       return;
     }
   }
@@ -1711,6 +1665,7 @@ void AdMenu::syncPopupVisibility() {
     if (host && host->ownerMenu == this) {
       hidePopupLayersFrom(host, 0);
     }
+    finalizeHostState();
     return;
   }
 
@@ -1750,11 +1705,13 @@ void AdMenu::syncPopupVisibility() {
     if (host && host->ownerMenu == this) {
       hidePopupLayersFrom(host, 0);
     }
+    finalizeHostState();
     return;
   }
 
   host = ensureSharedPopupHost(this);
   if (!host || host->ownerMenu != this) {
+    finalizeHostState();
     return;
   }
 
@@ -1789,6 +1746,7 @@ void AdMenu::syncPopupVisibility() {
   }
 
   hidePopupLayersFrom(host, shownLayers);
+  finalizeHostState();
 }
 
 void AdMenu::syncTooltipForHoveredEntry() {
@@ -2857,11 +2815,13 @@ void AdMenu::hidePopupAndDescendants(const QString& key) {
 
   SharedPopupHost* host = sharedPopupHostFor(this);
   if (!host || host->ownerMenu != this) {
+    syncInWindowPopupHostState();
     return;
   }
 
   if (key.isEmpty()) {
     hidePopupLayersFrom(host, 0);
+    syncInWindowPopupHostState();
     return;
   }
 
@@ -2879,6 +2839,7 @@ void AdMenu::hidePopupAndDescendants(const QString& key) {
   if (hideFromIndex >= 0) {
     hidePopupLayersFrom(host, hideFromIndex);
   }
+  syncInWindowPopupHostState();
 }
 
 void AdMenu::clearDanglingPopups() {
@@ -2914,6 +2875,7 @@ void AdMenu::clearDanglingPopups() {
   }
 
   if (triggerSubMenuAction_ != TriggerSubMenuAction::Hover || !popupLikeMode) {
+    syncInWindowPopupHostState();
     return;
   }
 
@@ -2926,6 +2888,7 @@ void AdMenu::clearDanglingPopups() {
       host && host->ownerMenu == this && anyPopupLayerContainsGlobalPos(host, cursorPos);
 
   if (cursorInPopup) {
+    syncInWindowPopupHostState();
     return;
   }
 
@@ -2935,6 +2898,7 @@ void AdMenu::clearDanglingPopups() {
       if (!openKeys_.isEmpty()) {
         applyOpenInternal({}, true);
       }
+      syncInWindowPopupHostState();
       return;
     }
 
@@ -2950,13 +2914,58 @@ void AdMenu::clearDanglingPopups() {
     if (next != openKeys_) {
       applyOpenInternal(next, true);
     }
+    syncInWindowPopupHostState();
     return;
   }
 
   if (!openKeys_.isEmpty()) {
     applyOpenInternal({}, true);
   }
+  syncInWindowPopupHostState();
 }
+
+void AdMenu::syncInWindowPopupHostState() {
+  SharedPopupHost* host = sharedPopupHostFor(this);
+  const bool hasVisiblePopup =
+      host && host->ownerMenu == this && anyPopupLayerVisible(host);
+  detail::setInWindowPopupHostOpen(this, hasVisiblePopup);
+}
+
+QObject* AdMenu::popupOwnerObject() const { return const_cast<AdMenu*>(this); }
+
+QWidget* AdMenu::popupAnchorWidget() const { return const_cast<AdMenu*>(this); }
+
+QWidget* AdMenu::popupScopeWindow() const { return detail::resolvePopupScopeWindow(this); }
+
+bool AdMenu::popupIsVisible() const {
+  SharedPopupHost* host = sharedPopupHostFor(this);
+  return host && host->ownerMenu == this && anyPopupLayerVisible(host);
+}
+
+bool AdMenu::popupContainsGlobalPos(const QPoint& globalPos) const {
+  if (widgetContainsGlobalPos(this, globalPos)) {
+    return true;
+  }
+  SharedPopupHost* host = sharedPopupHostFor(this);
+  return host && host->ownerMenu == this &&
+         anyPopupLayerContainsGlobalPos(host, globalPos);
+}
+
+void AdMenu::popupCloseFromHost(detail::PopupCloseReason reason) {
+  Q_UNUSED(reason)
+
+  pendingHoverOpenKey_.clear();
+  hoverOpenTimer_.stop();
+  hoverCloseTimer_.stop();
+
+  if (!openKeys_.isEmpty()) {
+    applyOpenInternal({}, true);
+  } else {
+    hidePopupAndDescendants(QString());
+  }
+}
+
+void AdMenu::popupRelayoutFromHost() { syncPopupVisibility(); }
 
 QStringList AdMenu::mergeKeyPathWithPrefix(const QStringList& localPath) const {
   QStringList merged = localPath;

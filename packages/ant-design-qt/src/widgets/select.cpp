@@ -5,7 +5,6 @@
 #include "select_style.h"
 #include "theme/theme.h"
 
-#include <QApplication>
 #include <QAbstractItemView>
 #include <QEvent>
 #include <QFontMetrics>
@@ -33,17 +32,6 @@ namespace adqt::widgets {
 namespace {
 
 namespace outlined_icons = adqt::icons::outlined;
-
-QPoint mouseEventGlobalPos(const QMouseEvent* event) {
-  if (!event) {
-    return QPoint();
-  }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-  return event->globalPosition().toPoint();
-#else
-  return event->globalPos();
-#endif
-}
 
 QRect widgetGlobalRect(const QWidget* widget) {
   if (!widget) {
@@ -299,7 +287,7 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 }
 
 AdSelect::~AdSelect() {
-  unbindPopupScopeEvents();
+  detail::setInWindowPopupHostOpen(this, false);
   if (popup_) {
     popup_->hide();
     popup_->deleteLater();
@@ -773,31 +761,6 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
   }
 
-  if (open_) {
-    const bool watchedScopeWindow = popupScopeWindow_ && watched == popupScopeWindow_.data();
-    const bool watchedApp = qApp && watched == qApp;
-
-    if ((watchedScopeWindow || watchedApp) && event->type() == QEvent::MouseButtonPress) {
-      const auto* mouseEvent = static_cast<QMouseEvent*>(event);
-      const QPoint clickGlobalPos = mouseEventGlobalPos(mouseEvent);
-      const bool clickInScope =
-          popupScopeWindow_ ? widgetContainsGlobalPos(popupScopeWindow_.data(), clickGlobalPos) : true;
-      const bool clickInSelect = widgetContainsGlobalPos(this, clickGlobalPos);
-      const bool clickInPopup = widgetContainsGlobalPos(popup_, clickGlobalPos);
-      if (clickInScope && !clickInSelect && !clickInPopup) {
-        closePopup();
-      }
-    }
-
-    if (watchedScopeWindow) {
-      if (event->type() == QEvent::WindowDeactivate || event->type() == QEvent::Hide) {
-        closePopup();
-      } else if (event->type() == QEvent::Resize || event->type() == QEvent::Move) {
-        syncPopupGeometry();
-      }
-    }
-  }
-
   if (watched == lineEdit_) {
     if (event->type() == QEvent::MouseButtonPress) {
       if (!disabled() && !open_) {
@@ -865,14 +828,8 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
   } else if (watched == popup_) {
     if (event->type() == QEvent::Hide) {
       if (open_) {
-        open_ = false;
-        emit openChanged(false);
-        updateDisplay();
-        updateSuffixVisual();
+        setOpenInternal(false, true);
       }
-      unbindPopupScopeEvents();
-      hasFocusWithin_ = false;
-      updateFocusState();
     }
   } else if (watched == listView_ && event->type() == QEvent::KeyPress) {
     auto* keyEvent = static_cast<QKeyEvent*>(event);
@@ -1766,8 +1723,8 @@ void AdSelect::ensurePopup() {
   }
 
   QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
-  popup_ = new QFrame(scopeWindow,
-                      Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+  popup_ = new QFrame(scopeWindow);
+  popup_->setAttribute(Qt::WA_DeleteOnClose, false);
   popup_->setObjectName(QStringLiteral("adselect-popup"));
   popup_->installEventFilter(this);
 
@@ -1880,63 +1837,8 @@ void AdSelect::syncPopupGeometry() {
   popup_->move(popupTopLeft);
 }
 
-void AdSelect::bindPopupScopeEvents() {
-  QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
-
-  if (popup_ && scopeWindow && popup_->parentWidget() != scopeWindow) {
-    popup_->setParent(scopeWindow, popup_->windowFlags());
-  }
-
-  if (popupScopeWindow_ && popupScopeWindow_.data() != scopeWindow) {
-    popupScopeWindow_->removeEventFilter(this);
-    popupScopeWindow_.clear();
-  }
-
-  if (scopeWindow) {
-    scopeWindow->removeEventFilter(this);
-    scopeWindow->installEventFilter(this);
-    popupScopeWindow_ = scopeWindow;
-  }
-
-  if (qApp) {
-    qApp->removeEventFilter(this);
-    qApp->installEventFilter(this);
-  }
-}
-
-void AdSelect::unbindPopupScopeEvents() {
-  if (popupScopeWindow_) {
-    popupScopeWindow_->removeEventFilter(this);
-    popupScopeWindow_.clear();
-  }
-  if (qApp) {
-    qApp->removeEventFilter(this);
-  }
-}
-
 void AdSelect::closePopup() {
-  if (!open_) {
-    return;
-  }
-
-  open_ = false;
-  if (popup_) {
-    popup_->hide();
-  }
-  unbindPopupScopeEvents();
-  if (autoClearSearchValue_ && isSearchEnabledForCurrentMode()) {
-    setSearchText(QString());
-    if (lineEdit_) {
-      suppressLineEditChange_ = true;
-      lineEdit_->clear();
-      suppressLineEditChange_ = false;
-    }
-  }
-  emit openChanged(false);
-  hasFocusWithin_ = false;
-  updateFocusState();
-  updateDisplay();
-  updateSuffixVisual();
+  setOpenInternal(false, true);
 }
 
 void AdSelect::openPopup() {
@@ -1944,35 +1846,79 @@ void AdSelect::openPopup() {
     return;
   }
   ensurePopup();
-  bindPopupScopeEvents();
   refreshRows();
   rebuildPopupExtraContent();
   syncPopupGeometry();
-
-  if (popup_) {
-    popup_->show();
-    popup_->raise();
-  }
-  if (!open_) {
-    open_ = true;
-    emit openChanged(true);
-  }
-  hasFocusWithin_ = true;
-  updateFocusState();
-  updateDisplay();
-  updateSuffixVisual();
-
-  if (lineEdit_) {
-    lineEdit_->setFocus();
-    if (isSearchEnabledForCurrentMode()) {
-      lineEdit_->selectAll();
-    }
-  }
+  setOpenInternal(true, true);
 }
 
 void AdSelect::setOpenInternal(bool value, bool emitSignal) {
-  Q_UNUSED(value)
-  Q_UNUSED(emitSignal)
+  if (open_ == value) {
+    return;
+  }
+
+  open_ = value;
+  detail::setInWindowPopupHostOpen(this, open_);
+
+  if (open_) {
+    if (popup_) {
+      popup_->show();
+      popup_->raise();
+    }
+    hasFocusWithin_ = true;
+    updateFocusState();
+    updateDisplay();
+    updateSuffixVisual();
+    if (lineEdit_) {
+      lineEdit_->setFocus();
+      if (isSearchEnabledForCurrentMode()) {
+        lineEdit_->selectAll();
+      }
+    }
+  } else {
+    if (popup_) {
+      popup_->hide();
+    }
+    if (autoClearSearchValue_ && isSearchEnabledForCurrentMode()) {
+      setSearchText(QString());
+      if (lineEdit_) {
+        suppressLineEditChange_ = true;
+        lineEdit_->clear();
+        suppressLineEditChange_ = false;
+      }
+    }
+    hasFocusWithin_ = false;
+    updateFocusState();
+    updateDisplay();
+    updateSuffixVisual();
+  }
+
+  if (emitSignal) {
+    emit openChanged(open_);
+  }
+}
+
+QObject* AdSelect::popupOwnerObject() const { return const_cast<AdSelect*>(this); }
+
+QWidget* AdSelect::popupAnchorWidget() const { return const_cast<AdSelect*>(this); }
+
+QWidget* AdSelect::popupScopeWindow() const { return detail::resolvePopupScopeWindow(this); }
+
+bool AdSelect::popupIsVisible() const { return open_ && popup_ && popup_->isVisible(); }
+
+bool AdSelect::popupContainsGlobalPos(const QPoint& globalPos) const {
+  return widgetContainsGlobalPos(this, globalPos) || widgetContainsGlobalPos(popup_, globalPos);
+}
+
+void AdSelect::popupCloseFromHost(detail::PopupCloseReason reason) {
+  Q_UNUSED(reason)
+  closePopup();
+}
+
+void AdSelect::popupRelayoutFromHost() {
+  if (open_) {
+    syncPopupGeometry();
+  }
 }
 
 void AdSelect::updateFocusState() {

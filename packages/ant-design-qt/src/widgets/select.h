@@ -341,7 +341,9 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
     QString headerText;
   };
 
+  class PopupFrame;
   class OptionListModel;
+  class OptionListDelegate;
 
   bool isSearchEnabledForCurrentMode() const;
   bool isValueSelected(const QString& value) const;

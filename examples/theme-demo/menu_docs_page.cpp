@@ -7,6 +7,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMap>
+#include <QPalette>
 #include <QPainter>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -68,7 +69,9 @@ AdMenu::Item makeDivider(const QString& key, bool dashed = false) {
 QLabel* makeHintLabel(const QString& text, QWidget* parent = nullptr) {
   auto* label = new QLabel(text, parent);
   label->setWordWrap(true);
-  label->setStyleSheet("color: #8c8c8c;");
+  QPalette palette = label->palette();
+  palette.setColor(QPalette::WindowText, QColor("#8c8c8c"));
+  label->setPalette(palette);
   return label;
 }
 
@@ -831,12 +834,14 @@ QWidget* MenuDocsPage::buildCustomPopupRenderDemo() {
   menu->setPopupRender([](const AdMenu::PopupRenderContext& ctx, QWidget* defaultPopup) -> QWidget* {
     auto* panel = new QFrame();
     panel->setObjectName("customPopupPanel");
-    panel->setStyleSheet(
-        "QFrame#customPopupPanel {"
-        "  background: #ffffff;"
-        "  border: 1px solid #f0f0f0;"
-        "  border-radius: 8px;"
-        "}");
+    panel->setFrameShape(QFrame::StyledPanel);
+    panel->setFrameShadow(QFrame::Plain);
+    panel->setLineWidth(1);
+    panel->setAutoFillBackground(true);
+    QPalette panelPalette = panel->palette();
+    panelPalette.setColor(QPalette::Window, QColor("#ffffff"));
+    panelPalette.setColor(QPalette::Mid, QColor("#f0f0f0"));
+    panel->setPalette(panelPalette);
 
     auto* v = new QVBoxLayout(panel);
     v->setContentsMargins(12, 10, 12, 12);

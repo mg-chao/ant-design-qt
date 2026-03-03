@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPalette>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QTimer>
@@ -25,7 +26,9 @@ namespace {
 QLabel* makeHintLabel(const QString& text, QWidget* parent = nullptr) {
   auto* label = new QLabel(text, parent);
   label->setWordWrap(true);
-  label->setStyleSheet("color: #8c8c8c;");
+  QPalette palette = label->palette();
+  palette.setColor(QPalette::WindowText, QColor("#8c8c8c"));
+  label->setPalette(palette);
   return label;
 }
 

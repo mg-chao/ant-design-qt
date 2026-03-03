@@ -36,6 +36,29 @@ QColor withAlpha(const QColor& color, qreal alpha) {
   return updated;
 }
 
+QColor compositeOn(const QColor& foreground, const QColor& background) {
+  if (!foreground.isValid()) {
+    return background;
+  }
+  if (!background.isValid()) {
+    QColor opaque = foreground;
+    opaque.setAlpha(255);
+    return opaque;
+  }
+
+  const qreal alpha = std::clamp(static_cast<qreal>(foreground.alphaF()), qreal(0.0), qreal(1.0));
+  if (alpha >= 0.999) {
+    return foreground;
+  }
+
+  QColor mixed;
+  mixed.setRedF(foreground.redF() * alpha + background.redF() * (1.0 - alpha));
+  mixed.setGreenF(foreground.greenF() * alpha + background.greenF() * (1.0 - alpha));
+  mixed.setBlueF(foreground.blueF() * alpha + background.blueF() * (1.0 - alpha));
+  mixed.setAlpha(255);
+  return mixed;
+}
+
 void applySemanticSlot(const AdSelect::SemanticSlotStyle& slot,
                        QColor* textColor,
                        QColor* backgroundColor,
@@ -270,6 +293,13 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
     style.suffixColor = style.disabledTextColor;
     style.clearColor = style.disabledTextColor;
   }
+
+  const QColor containerBg = toColor(map.colorBgContainer, QColor("#ffffff"));
+  style.popupBg = compositeOn(style.popupBg, containerBg);
+  style.popupBorderColor = compositeOn(style.popupBorderColor, style.popupBg);
+  style.optionHoverBg = compositeOn(style.optionHoverBg, style.popupBg);
+  style.optionSelectedBg = compositeOn(style.optionSelectedBg, style.popupBg);
+  style.tagBg = compositeOn(style.tagBg, containerBg);
 
   return style;
 }

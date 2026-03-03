@@ -11,13 +11,14 @@
 #include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
 #include <QMouseEvent>
 #include <QMoveEvent>
-#include <QItemSelectionModel>
+#include <QPalette>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -27,6 +28,8 @@
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QStyle>
+#include <QStyleOptionViewItem>
+#include <QStyledItemDelegate>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -79,6 +82,75 @@ bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconT
   return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
 }
 
+bool setWidgetFontIfChanged(QWidget* widget, const QFont& font) {
+  if (!widget || widget->font() == font) {
+    return false;
+  }
+  widget->setFont(font);
+  return true;
+}
+
+bool setWidgetPaletteIfChanged(QWidget* widget, const QPalette& palette) {
+  if (!widget || widget->palette() == palette) {
+    return false;
+  }
+  widget->setPalette(palette);
+  return true;
+}
+
+bool setWidgetAutoFillBackgroundIfChanged(QWidget* widget, bool enabled) {
+  if (!widget || widget->autoFillBackground() == enabled) {
+    return false;
+  }
+  widget->setAutoFillBackground(enabled);
+  return true;
+}
+
+bool setWidgetMinimumHeightIfChanged(QWidget* widget, int height) {
+  if (!widget) {
+    return false;
+  }
+  const int normalized = std::max(0, height);
+  if (widget->minimumHeight() == normalized) {
+    return false;
+  }
+  widget->setMinimumHeight(normalized);
+  return true;
+}
+
+bool setWidgetFixedHeightIfChanged(QWidget* widget, int height) {
+  if (!widget) {
+    return false;
+  }
+  const int normalized = std::max(0, height);
+  bool changed = false;
+  if (widget->minimumHeight() != normalized) {
+    widget->setMinimumHeight(normalized);
+    changed = true;
+  }
+  if (widget->maximumHeight() != normalized) {
+    widget->setMaximumHeight(normalized);
+    changed = true;
+  }
+  return changed;
+}
+
+bool setLayoutContentsMarginsIfChanged(QLayout* layout, const QMargins& margins) {
+  if (!layout || layout->contentsMargins() == margins) {
+    return false;
+  }
+  layout->setContentsMargins(margins);
+  return true;
+}
+
+bool setLayoutSpacingIfChanged(QLayout* layout, int spacing) {
+  if (!layout || layout->spacing() == spacing) {
+    return false;
+  }
+  layout->setSpacing(spacing);
+  return true;
+}
+
 detail::PopupPlacement toPopupPlacement(AdSelect::Placement placement) {
   switch (placement) {
     case AdSelect::Placement::BottomLeft:
@@ -99,6 +171,8 @@ QPainterPath roundedRectPath(const QRectF& rect, qreal radius) {
   path.addRoundedRect(rect, clampedRadius, clampedRadius);
   return path;
 }
+
+constexpr int kSelectRowHeaderRole = Qt::UserRole + 97;
 
 }  // namespace
 
@@ -127,6 +201,10 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
     const ModelRow& row = rows_.at(index.row());
     const detail::SelectVisualStyle& style = *owner_->visualStyle_;
 
+    if (role == kSelectRowHeaderRole) {
+      return row.optionIndex < 0 || row.optionIndex >= owner_->options_.size();
+    }
+
     if (role == Qt::SizeHintRole) {
       return QSize(0, style.metrics.optionHeight);
     }
@@ -151,11 +229,7 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
 
     const Option& option = owner_->options_.at(row.optionIndex);
     if (role == Qt::DisplayRole) {
-      QString text = owner_->formattedOptionText(option);
-      if (owner_->mode_ != Mode::Single && owner_->isValueSelected(option.value)) {
-        text = QStringLiteral("\u2713 %1").arg(text);
-      }
-      return text;
+      return owner_->formattedOptionText(option);
     }
     if (role == Qt::ForegroundRole) {
       if (option.disabled) {
@@ -172,6 +246,9 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
         font.setWeight(QFont::DemiBold);
       }
       return font;
+    }
+    if (role == Qt::TextAlignmentRole) {
+      return static_cast<int>(Qt::AlignVCenter | Qt::AlignLeft);
     }
     if (role == Qt::UserRole) {
       return option.value;
@@ -203,6 +280,158 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
   QVector<ModelRow> rows_;
 };
 
+class AdSelect::PopupFrame final : public QFrame {
+ public:
+  explicit PopupFrame(QWidget* parent = nullptr) : QFrame(parent) {
+    setFrameShape(QFrame::NoFrame);
+    setAttribute(Qt::WA_Hover, true);
+  }
+
+  void setVisualStyle(const QColor& background, const QColor& borderColor, int borderRadius) {
+    const int normalizedRadius = std::max(0, borderRadius);
+    if (background_ == background && borderColor_ == borderColor &&
+        borderRadius_ == normalizedRadius) {
+      return;
+    }
+
+    background_ = background;
+    borderColor_ = borderColor;
+    borderRadius_ = normalizedRadius;
+    update();
+  }
+
+ protected:
+  void paintEvent(QPaintEvent* event) override {
+    Q_UNUSED(event)
+
+    const QRectF frameRect = rect().adjusted(0.5, 0.5, -0.5, -0.5);
+    if (!frameRect.isValid()) {
+      return;
+    }
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    if (background_.alpha() > 0) {
+      painter.fillRect(rect(), background_);
+    }
+
+    const QPainterPath framePath = roundedRectPath(frameRect, borderRadius_);
+    if (background_.alpha() > 0) {
+      painter.fillPath(framePath, background_);
+    }
+
+    if (borderColor_.alpha() > 0) {
+      QPen borderPen(borderColor_, 1.0, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
+      painter.setPen(borderPen);
+      painter.setBrush(Qt::NoBrush);
+      painter.drawPath(framePath);
+    }
+  }
+
+ private:
+  QColor background_;
+  QColor borderColor_;
+  int borderRadius_ = 0;
+};
+
+class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
+ public:
+  explicit OptionListDelegate(AdSelect* owner) : QStyledItemDelegate(owner), owner_(owner) {}
+
+  QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+    const QVariant candidate = index.data(Qt::SizeHintRole);
+    if (candidate.isValid()) {
+      const QSize size = candidate.toSize();
+      if (size.isValid()) {
+        return size;
+      }
+    }
+    return QStyledItemDelegate::sizeHint(option, index);
+  }
+
+  void paint(QPainter* painter,
+             const QStyleOptionViewItem& option,
+             const QModelIndex& index) const override {
+    if (!painter || !index.isValid() || !owner_ || !owner_->visualStyle_) {
+      QStyledItemDelegate::paint(painter, option, index);
+      return;
+    }
+
+    QStyleOptionViewItem itemOption(option);
+    initStyleOption(&itemOption, index);
+
+    const detail::SelectVisualStyle& style = *owner_->visualStyle_;
+    const bool isHeader = index.data(kSelectRowHeaderRole).toBool();
+    const bool isSelected = (itemOption.state & QStyle::State_Selected) != 0;
+    const bool isHovered = (itemOption.state & QStyle::State_MouseOver) != 0;
+    const bool isEnabled = (itemOption.state & QStyle::State_Enabled) != 0;
+    QColor background(Qt::transparent);
+    if (!isHeader && isEnabled) {
+      if (isSelected) {
+        background = style.optionSelectedBg;
+      } else if (isHovered) {
+        background = style.optionHoverBg;
+      }
+    }
+    const bool hasBackground = background.isValid() && background.alpha() > 0;
+    const int optionRadius = std::max(0, style.metrics.optionBorderRadius);
+    const bool drawRoundedBackground = hasBackground && optionRadius > 0;
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, drawRoundedBackground);
+
+    painter->fillRect(itemOption.rect, style.popupBg);
+
+    if (hasBackground) {
+      const QRectF backgroundRect = itemOption.rect.adjusted(2.0, 1.0, -2.0, -1.0);
+      if (backgroundRect.isValid()) {
+        if (drawRoundedBackground) {
+          painter->fillPath(roundedRectPath(backgroundRect, optionRadius), background);
+        } else {
+          painter->fillRect(backgroundRect.toAlignedRect(), background);
+        }
+      }
+    }
+
+    QFont textFont = itemOption.font;
+    const QVariant fontRole = index.data(Qt::FontRole);
+    if (fontRole.canConvert<QFont>()) {
+      textFont = qvariant_cast<QFont>(fontRole);
+    }
+    painter->setFont(textFont);
+
+    QColor textColor = style.optionTextColor;
+    const QVariant foregroundRole = index.data(Qt::ForegroundRole);
+    if (foregroundRole.canConvert<QColor>()) {
+      textColor = qvariant_cast<QColor>(foregroundRole);
+    } else if (!isEnabled) {
+      textColor = style.disabledTextColor;
+    }
+    painter->setPen(textColor);
+
+    Qt::Alignment textAlignment = Qt::AlignVCenter | Qt::AlignLeft;
+    const QVariant alignmentRole = index.data(Qt::TextAlignmentRole);
+    if (alignmentRole.isValid()) {
+      textAlignment = Qt::Alignment(alignmentRole.toInt());
+    }
+
+    const int horizontalPadding = std::max(0, style.metrics.optionPaddingHorizontal);
+    const int verticalPadding = std::max(0, style.metrics.optionPaddingVertical);
+    const QRect textRect = itemOption.rect.adjusted(
+        horizontalPadding, verticalPadding, -horizontalPadding, -verticalPadding);
+    const QFontMetrics metrics(textFont);
+    const QString text =
+        metrics.elidedText(itemOption.text, Qt::ElideRight, std::max(0, textRect.width()));
+    painter->drawText(textRect, textAlignment, text);
+
+    painter->restore();
+  }
+
+ private:
+  QPointer<AdSelect> owner_;
+};
+
 AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
   setObjectName(QStringLiteral("adselect-root"));
   setAttribute(Qt::WA_Hover, true);
@@ -223,18 +452,21 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
   rootLayout_->addWidget(prefixLabel_);
 
   contentHost_ = new QWidget(this);
+  contentHost_->setAutoFillBackground(false);
   contentLayout_ = new QHBoxLayout(contentHost_);
   contentLayout_->setContentsMargins(0, 0, 0, 0);
   contentLayout_->setSpacing(6);
 
   tagsSummaryLabel_ = new QLabel(contentHost_);
   tagsSummaryLabel_->setObjectName(QStringLiteral("adselect-tags"));
+  tagsSummaryLabel_->setMargin(3);
   tagsSummaryLabel_->setVisible(false);
   contentLayout_->addWidget(tagsSummaryLabel_);
 
   lineEdit_ = new QLineEdit(contentHost_);
   lineEdit_->setObjectName(QStringLiteral("adselect-input"));
   lineEdit_->setFrame(false);
+  lineEdit_->setAutoFillBackground(false);
   lineEdit_->setPlaceholderText(placeholder_);
   lineEdit_->installEventFilter(this);
   contentLayout_->addWidget(lineEdit_, 1);
@@ -782,11 +1014,9 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
         openPopup();
       }
     } else if (event->type() == QEvent::FocusIn) {
-      hasFocusWithin_ = true;
       updateFocusState();
     } else if (event->type() == QEvent::FocusOut) {
       if (!open_) {
-        hasFocusWithin_ = false;
         updateFocusState();
       }
     } else if (event->type() == QEvent::KeyPress) {
@@ -1380,141 +1610,160 @@ void AdSelect::applyVisualStyle() {
   input.baseFont = font();
   input.componentTokens = componentTokens_;
   input.semanticStyles = effectiveSemantic;
+  const detail::SelectVisualStyle previousStyle = *visualStyle_;
   *visualStyle_ = detail::resolveSelectVisualStyle(input);
+  const bool prefixIconStyleChanged =
+      previousStyle.prefixColor != visualStyle_->prefixColor ||
+      previousStyle.metrics.iconSize != visualStyle_->metrics.iconSize;
+  const bool suffixIconStyleChanged =
+      previousStyle.suffixColor != visualStyle_->suffixColor ||
+      previousStyle.metrics.iconSize != visualStyle_->metrics.iconSize;
+  const bool listDelegateStyleChanged =
+      previousStyle.popupBg != visualStyle_->popupBg ||
+      previousStyle.optionTextColor != visualStyle_->optionTextColor ||
+      previousStyle.optionHoverBg != visualStyle_->optionHoverBg ||
+      previousStyle.optionSelectedBg != visualStyle_->optionSelectedBg ||
+      previousStyle.optionSelectedColor != visualStyle_->optionSelectedColor ||
+      previousStyle.disabledTextColor != visualStyle_->disabledTextColor ||
+      previousStyle.metrics.optionBorderRadius != visualStyle_->metrics.optionBorderRadius ||
+      previousStyle.metrics.optionPaddingHorizontal != visualStyle_->metrics.optionPaddingHorizontal ||
+      previousStyle.metrics.optionPaddingVertical != visualStyle_->metrics.optionPaddingVertical ||
+      previousStyle.metrics.font != visualStyle_->metrics.font;
 
-  setFont(visualStyle_->metrics.font);
+  bool widgetStyleChanged = false;
+
+  widgetStyleChanged |= setWidgetFontIfChanged(this, visualStyle_->metrics.font);
   if (lineEdit_) {
-    lineEdit_->setFont(visualStyle_->metrics.font);
+    widgetStyleChanged |= setWidgetFontIfChanged(lineEdit_, visualStyle_->metrics.font);
   }
   if (tagsSummaryLabel_) {
-    tagsSummaryLabel_->setFont(visualStyle_->metrics.font);
+    widgetStyleChanged |= setWidgetFontIfChanged(tagsSummaryLabel_, visualStyle_->metrics.font);
   }
   if (prefixLabel_) {
-    prefixLabel_->setFont(visualStyle_->metrics.font);
+    widgetStyleChanged |= setWidgetFontIfChanged(prefixLabel_, visualStyle_->metrics.font);
   }
 
-  rootLayout_->setContentsMargins(visualStyle_->metrics.horizontalPadding, 0,
-                                  visualStyle_->metrics.horizontalPadding, 0);
-  rootLayout_->setSpacing(visualStyle_->metrics.spacing);
-  contentLayout_->setSpacing(visualStyle_->metrics.spacing);
+  widgetStyleChanged |= setLayoutContentsMarginsIfChanged(
+      rootLayout_, QMargins(visualStyle_->metrics.horizontalPadding, 0,
+                            visualStyle_->metrics.horizontalPadding, 0));
+  widgetStyleChanged |= setLayoutSpacingIfChanged(rootLayout_, visualStyle_->metrics.spacing);
+  widgetStyleChanged |= setLayoutSpacingIfChanged(contentLayout_, visualStyle_->metrics.spacing);
 
-  setMinimumHeight(visualStyle_->metrics.height);
-  setMaximumHeight(visualStyle_->metrics.height);
+  widgetStyleChanged |= setWidgetFixedHeightIfChanged(this, visualStyle_->metrics.height);
 
-  const QString textColor = visualStyle_->selectorTextColor.name(QColor::HexArgb);
-  const QString placeholderColor = visualStyle_->placeholderColor.name(QColor::HexArgb);
-  const QString prefixColor = visualStyle_->prefixColor.name(QColor::HexArgb);
-  const QString suffixColor = visualStyle_->suffixColor.name(QColor::HexArgb);
-  const QString clearColor = visualStyle_->clearColor.name(QColor::HexArgb);
-  const QString tagBg = visualStyle_->tagBg.name(QColor::HexArgb);
-  const QString tagColor = visualStyle_->tagTextColor.name(QColor::HexArgb);
   const bool openSingleDisplay =
       mode_ == Mode::Single && open_ && !isSearchEnabledForCurrentMode();
+  bool lineEditStyleChanged = false;
 
-  setProperty("openSingle", openSingleDisplay);
+  if (lineEdit_) {
+    QPalette inputPalette = lineEdit_->palette();
+    const QColor inputColor = openSingleDisplay ? visualStyle_->placeholderColor
+                                                : visualStyle_->selectorTextColor;
+    inputPalette.setColor(QPalette::Text, inputColor);
+    inputPalette.setColor(QPalette::Disabled, QPalette::Text, visualStyle_->disabledTextColor);
+    inputPalette.setColor(QPalette::Highlight, visualStyle_->optionSelectedBg);
+    inputPalette.setColor(QPalette::HighlightedText, visualStyle_->optionSelectedColor);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
+    inputPalette.setColor(QPalette::PlaceholderText, visualStyle_->placeholderColor);
+#endif
+    lineEditStyleChanged = setWidgetPaletteIfChanged(lineEdit_, inputPalette);
+    if (lineEditStyleChanged) {
+      lineEdit_->update();
+    }
+  }
 
-  QString rootSheet = QStringLiteral(
-                          "QLineEdit#adselect-input {"
-                          "  border: none;"
-                          "  background: transparent;"
-                          "  color: %1;"
-                          "  selection-background-color: %2;"
-                          "}"
-                          "QLineEdit#adselect-input:disabled {"
-                          "  color: %3;"
-                          "}"
-                          "QLineEdit#adselect-input::placeholder {"
-                          "  color: %4;"
-                          "}"
-                          "QLabel#adselect-tags {"
-                          "  background: %5;"
-                          "  color: %6;"
-                          "  border-radius: 4px;"
-                          "  padding: 1px 6px;"
-                          "}"
-                          "QLabel#adselect-prefix {"
-                          "  color: %7;"
-                          "}"
-                          "QToolButton#adselect-suffix, QToolButton#adselect-clear {"
-                          "  border: none;"
-                          "  background: transparent;"
-                          "  color: %8;"
-                          "  padding: 0px;"
-                          "}"
-                          "QToolButton#adselect-clear {"
-                          "  color: %9;"
-                          "}")
-                          .arg(textColor)
-                          .arg(visualStyle_->optionSelectedBg.name(QColor::HexArgb))
-                          .arg(visualStyle_->disabledTextColor.name(QColor::HexArgb))
-                          .arg(placeholderColor)
-                          .arg(tagBg)
-                          .arg(tagColor)
-                          .arg(prefixColor)
-                          .arg(suffixColor)
-                          .arg(clearColor);
+  bool tagsStyleChanged = false;
+  if (tagsSummaryLabel_) {
+    QPalette tagPalette = tagsSummaryLabel_->palette();
+    tagPalette.setColor(QPalette::Window, visualStyle_->tagBg);
+    tagPalette.setColor(QPalette::WindowText, visualStyle_->tagTextColor);
+    tagPalette.setColor(QPalette::Disabled, QPalette::WindowText, visualStyle_->disabledTextColor);
+    tagsStyleChanged |= setWidgetAutoFillBackgroundIfChanged(tagsSummaryLabel_, true);
+    tagsStyleChanged |= setWidgetPaletteIfChanged(tagsSummaryLabel_, tagPalette);
+    tagsStyleChanged |=
+        setWidgetMinimumHeightIfChanged(tagsSummaryLabel_, visualStyle_->metrics.tagHeight);
+    if (tagsStyleChanged) {
+      tagsSummaryLabel_->update();
+    }
+  }
 
-  rootSheet.append(
-      QStringLiteral("QWidget#adselect-root[openSingle=\"true\"] QLineEdit#adselect-input {"
-                     "  color: %1;"
-                     "}")
-          .arg(placeholderColor));
+  bool prefixPaletteChanged = false;
+  if (prefixLabel_) {
+    QPalette prefixPalette = prefixLabel_->palette();
+    prefixPalette.setColor(QPalette::WindowText, visualStyle_->prefixColor);
+    prefixPalette.setColor(QPalette::Disabled, QPalette::WindowText, visualStyle_->disabledTextColor);
+    prefixPaletteChanged = setWidgetPaletteIfChanged(prefixLabel_, prefixPalette);
+    if (prefixPaletteChanged) {
+      prefixLabel_->update();
+    }
+  }
 
-  setStyleSheet(rootSheet);
+  const auto applyToolButtonPalette = [this](QToolButton* button,
+                                             const QColor& textColor) -> bool {
+    if (!button || !visualStyle_) {
+      return false;
+    }
+    QPalette palette = button->palette();
+    palette.setColor(QPalette::ButtonText, textColor);
+    palette.setColor(QPalette::WindowText, textColor);
+    palette.setColor(QPalette::Text, textColor);
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, visualStyle_->disabledTextColor);
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, visualStyle_->disabledTextColor);
+    const bool changed = setWidgetPaletteIfChanged(button, palette);
+    if (changed) {
+      button->update();
+    }
+    return changed;
+  };
+  const bool suffixPaletteChanged = applyToolButtonPalette(suffixButton_, visualStyle_->suffixColor);
+  const bool clearPaletteChanged = applyToolButtonPalette(clearButton_, visualStyle_->clearColor);
 
+  bool popupStyleChanged = false;
   if (popup_) {
     if (popupLayout_) {
       const int popupPadding = visualStyle_->metrics.popupPadding;
-      popupLayout_->setContentsMargins(popupPadding, popupPadding, popupPadding, popupPadding);
-      popupLayout_->setSpacing(0);
+      popupStyleChanged |= setLayoutContentsMarginsIfChanged(
+          popupLayout_, QMargins(popupPadding, popupPadding, popupPadding, popupPadding));
+      popupStyleChanged |= setLayoutSpacingIfChanged(popupLayout_, 0);
     }
 
-    const QString popupSheet = QStringLiteral(
-                                   "QFrame#adselect-popup {"
-                                   "  background: %1;"
-                                   "  border: 1px solid %2;"
-                                   "  border-radius: %3px;"
-                                   "}"
-                                   "QListView#adselect-list {"
-                                   "  background: transparent;"
-                                   "  border: none;"
-                                   "  color: %4;"
-                                   "  outline: none;"
-                                   "}"
-                                   "QListView#adselect-list::item {"
-                                   "  padding: %5px %6px;"
-                                   "  border-radius: %7px;"
-                                   "}"
-                                   "QListView#adselect-list::item:hover {"
-                                   "  background: %8;"
-                                   "}"
-                                   "QListView#adselect-list::item:selected {"
-                                   "  background: %9;"
-                                   "  color: %10;"
-                                   "  font-weight: 600;"
-                                   "}")
-                                   .arg(visualStyle_->popupBg.name(QColor::HexArgb))
-                                   .arg(visualStyle_->popupBorderColor.name(QColor::HexArgb))
-                                   .arg(visualStyle_->metrics.popupBorderRadius)
-                                   .arg(visualStyle_->optionTextColor.name(QColor::HexArgb))
-                                   .arg(visualStyle_->metrics.optionPaddingVertical)
-                                   .arg(visualStyle_->metrics.optionPaddingHorizontal)
-                                   .arg(visualStyle_->metrics.optionBorderRadius)
-                                   .arg(visualStyle_->optionHoverBg.name(QColor::HexArgb))
-                                   .arg(visualStyle_->optionSelectedBg.name(QColor::HexArgb))
-                                   .arg(visualStyle_->optionSelectedColor.name(QColor::HexArgb));
-    popup_->setStyleSheet(popupSheet);
+    static_cast<PopupFrame*>(popup_)->setVisualStyle(
+        visualStyle_->popupBg, visualStyle_->popupBorderColor, visualStyle_->metrics.popupBorderRadius);
+
+    if (listView_) {
+      QPalette listPalette = listView_->palette();
+      listPalette.setColor(QPalette::Base, visualStyle_->popupBg);
+      listPalette.setColor(QPalette::Window, visualStyle_->popupBg);
+      listPalette.setColor(QPalette::Text, visualStyle_->optionTextColor);
+      listPalette.setColor(QPalette::Disabled, QPalette::Text, visualStyle_->disabledTextColor);
+      listPalette.setColor(QPalette::Highlight, visualStyle_->optionSelectedBg);
+      listPalette.setColor(QPalette::HighlightedText, visualStyle_->optionSelectedColor);
+      popupStyleChanged |= setWidgetPaletteIfChanged(listView_, listPalette);
+      if (QWidget* viewport = listView_->viewport()) {
+        popupStyleChanged |= setWidgetAutoFillBackgroundIfChanged(viewport, true);
+      }
+    }
   }
 
   updateInteractionFocusOverlay();
-  updatePrefixVisual();
-  updateSuffixVisual();
+  const bool hasPrefixIcon = prefixText_.trimmed().isEmpty() && adqt::icons::isValid(prefixIconToken_);
+  const bool shouldRefreshPrefixIcon = hasPrefixIcon && prefixIconStyleChanged;
+  const bool shouldRefreshSuffixIcon = !loading_ && suffixIconStyleChanged;
+  if (shouldRefreshPrefixIcon) {
+    updatePrefixVisual();
+  }
+  if (shouldRefreshSuffixIcon) {
+    updateSuffixVisual();
+  }
   updateDisplay();
   updateClearButton();
-  update();
-  if (listView_) {
-    listView_->setSpacing(0);
-    listView_->setUniformItemSizes(true);
+  if (widgetStyleChanged || lineEditStyleChanged || tagsStyleChanged || prefixPaletteChanged ||
+      suffixPaletteChanged || clearPaletteChanged || shouldRefreshPrefixIcon ||
+      shouldRefreshSuffixIcon) {
+    update();
+  }
+  if (listView_ && popup_ && popup_->isVisible() && listView_->viewport() &&
+      (popupStyleChanged || listDelegateStyleChanged)) {
     listView_->viewport()->update();
   }
 }
@@ -1843,9 +2092,8 @@ void AdSelect::ensurePopup() {
   }
 
   QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
-  popup_ = new QFrame(scopeWindow);
+  popup_ = new PopupFrame(scopeWindow);
   popup_->setAttribute(Qt::WA_DeleteOnClose, false);
-  popup_->setAttribute(Qt::WA_StyledBackground, true);
   popup_->setObjectName(QStringLiteral("adselect-popup"));
   popup_->installEventFilter(this);
 
@@ -1856,10 +2104,18 @@ void AdSelect::ensurePopup() {
   listView_ = new QListView(popup_);
   listView_->setObjectName(QStringLiteral("adselect-list"));
   listView_->setModel(listModel_);
+  listView_->setItemDelegate(new OptionListDelegate(this));
+  listView_->setFrameShape(QFrame::NoFrame);
   listView_->setSelectionMode(QAbstractItemView::SingleSelection);
   listView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
   listView_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   listView_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  listView_->setSpacing(0);
+  listView_->setUniformItemSizes(true);
+  listView_->setMouseTracking(true);
+  if (listView_->viewport()) {
+    listView_->viewport()->setMouseTracking(true);
+  }
   listView_->installEventFilter(this);
   popupLayout_->addWidget(listView_);
 
@@ -1996,9 +2252,7 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
       popup_->raise();
     }
     hasFocusWithin_ = true;
-    updateFocusState();
-    updateDisplay();
-    updateSuffixVisual();
+    applyVisualStyle();
     if (lineEdit_) {
       lineEdit_->setFocus();
       if (isSearchEnabledForCurrentMode()) {
@@ -2018,9 +2272,7 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
       }
     }
     hasFocusWithin_ = false;
-    updateFocusState();
-    updateDisplay();
-    updateSuffixVisual();
+    applyVisualStyle();
   }
 
   if (emitSignal) {
@@ -2088,8 +2340,14 @@ void AdSelect::updateInteractionFocusOverlay() {
 }
 
 void AdSelect::updateFocusState() {
-  hasFocusWithin_ = hasFocusWithin_ || (lineEdit_ && lineEdit_->hasFocus());
-  applyVisualStyle();
+  const bool nextFocus = open_ || (lineEdit_ && lineEdit_->hasFocus());
+  if (hasFocusWithin_ == nextFocus) {
+    updateInteractionFocusOverlay();
+    return;
+  }
+  hasFocusWithin_ = nextFocus;
+  updateInteractionFocusOverlay();
+  update();
 }
 
 }  // namespace adqt::widgets

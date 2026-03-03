@@ -5,11 +5,18 @@
 
 #include <QEvent>
 #include <QFrame>
+#include <QPalette>
+#include <QPainter>
+#include <QProxyStyle>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QStyle>
+#include <QStyleFactory>
+#include <QStyleOptionSlider>
 
 #include <algorithm>
+#include <cmath>
 
 namespace adqt::widgets {
 
@@ -29,10 +36,331 @@ QColor toColor(const QString& value, const QColor& fallback) {
   return color;
 }
 
-QColor withAlpha(const QColor& color, double alpha) {
-  QColor copy = color;
-  copy.setAlphaF(std::clamp(alpha, 0.0, 1.0));
-  return copy;
+QColor compositeOn(const QColor& foreground, const QColor& background) {
+  if (!foreground.isValid()) {
+    return background;
+  }
+  if (!background.isValid()) {
+    QColor opaque = foreground;
+    opaque.setAlpha(255);
+    return opaque;
+  }
+
+  const qreal alpha = std::clamp(static_cast<qreal>(foreground.alphaF()), qreal(0.0), qreal(1.0));
+  if (alpha >= 0.999) {
+    return foreground;
+  }
+
+  QColor mixed;
+  mixed.setRedF(foreground.redF() * alpha + background.redF() * (1.0 - alpha));
+  mixed.setGreenF(foreground.greenF() * alpha + background.greenF() * (1.0 - alpha));
+  mixed.setBlueF(foreground.blueF() * alpha + background.blueF() * (1.0 - alpha));
+  mixed.setAlpha(255);
+  return mixed;
+}
+
+QColor withAlpha(const QColor& color, qreal alpha) {
+  QColor updated = color;
+  updated.setAlphaF(std::clamp(alpha, qreal(0.0), qreal(1.0)));
+  return updated;
+}
+
+class OverlayScrollBarStyle final : public QProxyStyle {
+ public:
+  explicit OverlayScrollBarStyle(QStyle* baseStyle = nullptr) : QProxyStyle(baseStyle) {}
+
+  void drawComplexControl(ComplexControl control,
+                          const QStyleOptionComplex* option,
+                          QPainter* painter,
+                          const QWidget* widget) const override {
+    if (control != CC_ScrollBar || !option || !painter) {
+      QProxyStyle::drawComplexControl(control, option, painter, widget);
+      return;
+    }
+
+    const auto* sliderOption = qstyleoption_cast<const QStyleOptionSlider*>(option);
+    if (!sliderOption) {
+      QProxyStyle::drawComplexControl(control, option, painter, widget);
+      return;
+    }
+
+    const QRect grooveRect = scrollBarGrooveRect(sliderOption, widget);
+    if (!grooveRect.isValid()) {
+      return;
+    }
+
+    const QRect sliderRect = scrollBarSliderRect(sliderOption, widget);
+    const QColor trackColor = propertyColor(widget, "_adqt_track_color", QColor("#f0f0f0"));
+    const QColor handleBaseColor = propertyColor(widget, "_adqt_handle_color", QColor("#8c8c8c"));
+    const QColor handleHoverColor =
+        propertyColor(widget, "_adqt_handle_hover_color", handleBaseColor);
+
+    QColor handleColor = handleBaseColor;
+    const bool sliderActive = (sliderOption->activeSubControls & SC_ScrollBarSlider) != 0;
+    if (sliderActive && (sliderOption->state & State_MouseOver)) {
+      handleColor = handleHoverColor;
+    }
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setPen(Qt::NoPen);
+
+    const int grooveRadius = scrollBarRadius(widget, grooveRect);
+    if (trackColor.alpha() > 0) {
+      painter->setBrush(trackColor);
+      painter->drawRoundedRect(grooveRect.adjusted(0, 0, -1, -1), grooveRadius, grooveRadius);
+    }
+
+    if (sliderRect.isValid() && handleColor.alpha() > 0) {
+      const int handleRadius = scrollBarRadius(widget, sliderRect);
+      painter->setBrush(handleColor);
+      painter->drawRoundedRect(sliderRect.adjusted(0, 0, -1, -1), handleRadius, handleRadius);
+    }
+
+    painter->restore();
+  }
+
+  int pixelMetric(PixelMetric metric,
+                  const QStyleOption* option,
+                  const QWidget* widget) const override {
+    if (metric == PM_ScrollBarExtent && widget) {
+      const int extent = widget->property("_adqt_extent").toInt();
+      if (extent > 0) {
+        return extent;
+      }
+    }
+    if (metric == PM_ScrollBarSliderMin) {
+      return 24;
+    }
+    return QProxyStyle::pixelMetric(metric, option, widget);
+  }
+
+  SubControl hitTestComplexControl(ComplexControl control,
+                                   const QStyleOptionComplex* option,
+                                   const QPoint& pos,
+                                   const QWidget* widget) const override {
+    if (control != CC_ScrollBar || !option) {
+      return QProxyStyle::hitTestComplexControl(control, option, pos, widget);
+    }
+
+    const auto* sliderOption = qstyleoption_cast<const QStyleOptionSlider*>(option);
+    if (!sliderOption) {
+      return QProxyStyle::hitTestComplexControl(control, option, pos, widget);
+    }
+
+    const QRect grooveRect = scrollBarGrooveRect(sliderOption, widget);
+    if (!grooveRect.contains(pos)) {
+      return SC_None;
+    }
+
+    const QRect sliderRect = scrollBarSliderRect(sliderOption, widget);
+    if (sliderRect.isValid() && sliderRect.contains(pos)) {
+      return SC_ScrollBarSlider;
+    }
+
+    const bool vertical = sliderOption->orientation == Qt::Vertical;
+    if (vertical) {
+      return pos.y() < sliderRect.top() ? SC_ScrollBarSubPage : SC_ScrollBarAddPage;
+    }
+    return pos.x() < sliderRect.left() ? SC_ScrollBarSubPage : SC_ScrollBarAddPage;
+  }
+
+  QRect subControlRect(ComplexControl control,
+                       const QStyleOptionComplex* option,
+                       SubControl subControl,
+                       const QWidget* widget) const override {
+    if (control != CC_ScrollBar) {
+      return QProxyStyle::subControlRect(control, option, subControl, widget);
+    }
+
+    const auto* sliderOption = qstyleoption_cast<const QStyleOptionSlider*>(option);
+    if (!sliderOption) {
+      return QProxyStyle::subControlRect(control, option, subControl, widget);
+    }
+
+    if (subControl == SC_ScrollBarAddLine || subControl == SC_ScrollBarSubLine) {
+      return QRect();
+    }
+
+    const QRect grooveRect = scrollBarGrooveRect(sliderOption, widget);
+    const QRect sliderRect = scrollBarSliderRect(sliderOption, widget);
+    if (subControl == SC_ScrollBarGroove) {
+      return grooveRect;
+    }
+    if (subControl == SC_ScrollBarSlider) {
+      return sliderRect;
+    }
+    if (subControl == SC_ScrollBarSubPage) {
+      if (sliderOption->orientation == Qt::Vertical) {
+        return QRect(grooveRect.left(), grooveRect.top(), grooveRect.width(),
+                     std::max(0, sliderRect.top() - grooveRect.top()));
+      }
+      return QRect(grooveRect.left(), grooveRect.top(),
+                   std::max(0, sliderRect.left() - grooveRect.left()), grooveRect.height());
+    }
+    if (subControl == SC_ScrollBarAddPage) {
+      if (sliderOption->orientation == Qt::Vertical) {
+        const int top = sliderRect.bottom() + 1;
+        return QRect(grooveRect.left(), top, grooveRect.width(),
+                     std::max(0, grooveRect.bottom() - sliderRect.bottom()));
+      }
+      const int left = sliderRect.right() + 1;
+      return QRect(left, grooveRect.top(),
+                   std::max(0, grooveRect.right() - sliderRect.right()), grooveRect.height());
+    }
+
+    return QRect();
+  }
+
+ private:
+  static QColor propertyColor(const QWidget* widget, const char* key, const QColor& fallback) {
+    if (!widget) {
+      return fallback;
+    }
+    const QVariant value = widget->property(key);
+    if (value.canConvert<QColor>()) {
+      return value.value<QColor>();
+    }
+    return fallback;
+  }
+
+  static int scrollBarRadius(const QWidget* widget, const QRect& rect) {
+    if (!widget) {
+      return std::max(1, std::min(rect.width(), rect.height()) / 2);
+    }
+    const QVariant value = widget->property("_adqt_radius");
+    if (value.isValid()) {
+      const int configured = std::max(0, value.toInt());
+      return std::min(configured, std::min(rect.width(), rect.height()) / 2);
+    }
+    return std::max(1, std::min(rect.width(), rect.height()) / 2);
+  }
+
+  static QRect scrollBarGrooveRect(const QStyleOptionSlider* option, const QWidget* widget) {
+    if (!option) {
+      return QRect();
+    }
+    QRect groove = option->rect;
+    if (!widget) {
+      return groove;
+    }
+    const int inset = std::max(0, widget->property("_adqt_inset").toInt());
+    if (option->orientation == Qt::Vertical) {
+      groove.adjust(std::min(inset, std::max(0, groove.width() - 1)), 0, 0, 0);
+    } else {
+      groove.adjust(0, std::min(inset, std::max(0, groove.height() - 1)), 0, 0);
+    }
+    return groove;
+  }
+
+  QRect scrollBarSliderRect(const QStyleOptionSlider* option, const QWidget* widget) const {
+    if (!option) {
+      return QRect();
+    }
+    const QRect groove = scrollBarGrooveRect(option, widget);
+    if (!groove.isValid()) {
+      return QRect();
+    }
+
+    const bool vertical = option->orientation == Qt::Vertical;
+    const int trackLength = vertical ? groove.height() : groove.width();
+    if (trackLength <= 0) {
+      return QRect();
+    }
+
+    const int minSliderLength = pixelMetric(PM_ScrollBarSliderMin, option, widget);
+    const int minValue = option->minimum;
+    const int maxValue = option->maximum;
+    const int pageStep = std::max(0, option->pageStep);
+    const int range = std::max(0, maxValue - minValue);
+
+    int sliderLength = trackLength;
+    if (range > 0) {
+      const qreal denominator = static_cast<qreal>(range + pageStep);
+      const qreal ratio = denominator > 0.0 ? static_cast<qreal>(pageStep) / denominator : 0.0;
+      sliderLength = qBound(minSliderLength, static_cast<int>(std::round(trackLength * ratio)),
+                            trackLength);
+    }
+
+    const int available = std::max(0, trackLength - sliderLength);
+    const int sliderPos = QStyle::sliderPositionFromValue(
+        minValue, maxValue, option->sliderPosition, available, option->upsideDown);
+    if (vertical) {
+      return QRect(groove.left(), groove.top() + sliderPos, groove.width(), sliderLength);
+    }
+    return QRect(groove.left() + sliderPos, groove.top(), sliderLength, groove.height());
+  }
+};
+
+void ensureOverlayStyle(QScrollBar* bar) {
+  if (!bar || bar->property("_adqt_overlay_style_applied").toBool()) {
+    return;
+  }
+
+  QStyle* fusionStyle = QStyleFactory::create(QStringLiteral("Fusion"));
+  if (!fusionStyle) {
+    fusionStyle = bar->style();
+  }
+
+  auto* overlayStyle = new OverlayScrollBarStyle(fusionStyle);
+  overlayStyle->setParent(bar);
+  bar->setStyle(overlayStyle);
+  bar->setProperty("_adqt_overlay_style_applied", true);
+}
+
+bool setIntPropertyIfChanged(QWidget* widget, const char* key, int value) {
+  if (!widget || !key) {
+    return false;
+  }
+  const QVariant current = widget->property(key);
+  if (current.isValid() && current.toInt() == value) {
+    return false;
+  }
+  widget->setProperty(key, value);
+  return true;
+}
+
+bool setColorPropertyIfChanged(QWidget* widget, const char* key, const QColor& color) {
+  if (!widget || !key) {
+    return false;
+  }
+  const QVariant current = widget->property(key);
+  if (current.canConvert<QColor>() && qvariant_cast<QColor>(current) == color) {
+    return false;
+  }
+  widget->setProperty(key, color);
+  return true;
+}
+
+bool applyScrollBarPalette(QScrollBar* bar,
+                           const QColor& trackColor,
+                           const QColor& handleColor,
+                           const QColor& handlePressedColor) {
+  if (!bar) {
+    return false;
+  }
+
+  const QPalette currentPalette = bar->palette();
+  QPalette nextPalette = currentPalette;
+  nextPalette.setColor(QPalette::Window, trackColor);
+  nextPalette.setColor(QPalette::Base, trackColor);
+  nextPalette.setColor(QPalette::Button, handleColor);
+  nextPalette.setColor(QPalette::Mid, handleColor);
+  nextPalette.setColor(QPalette::Midlight, handleColor);
+  nextPalette.setColor(QPalette::Light, handleColor);
+  nextPalette.setColor(QPalette::Dark, handlePressedColor);
+  nextPalette.setColor(QPalette::Shadow, handlePressedColor);
+  nextPalette.setColor(QPalette::Highlight, handleColor);
+  nextPalette.setColor(QPalette::ButtonText, handleColor);
+  nextPalette.setColor(QPalette::Text, handleColor);
+  nextPalette.setColor(QPalette::Disabled, QPalette::Button, handleColor);
+  nextPalette.setColor(QPalette::Disabled, QPalette::Window, trackColor);
+
+  if (nextPalette == currentPalette) {
+    return false;
+  }
+  bar->setPalette(nextPalette);
+  return true;
 }
 
 }  // namespace
@@ -190,90 +518,69 @@ void AdScrollArea::resizeEvent(QResizeEvent* event) {
 void AdScrollArea::applyScrollBarStyle() {
   const adqt::theme::ThemeMapToken& map = adqt::theme::ThemeManager::instance().currentMapToken();
 
-  const QColor trackColor = withAlpha(toColor(map.colorTextQuaternary, QColor("#8c8c8c")), 0.18);
-  const QColor handleColor = withAlpha(toColor(map.colorTextSecondary, QColor("#595959")), 0.45);
-  const QColor handleHoverColor = withAlpha(toColor(map.colorText, QColor("#141414")), 0.60);
-  const QColor handlePressedColor = withAlpha(toColor(map.colorText, QColor("#141414")), 0.75);
-  const int collapsedVisualThickness = std::max(1, std::min(2, scrollBarThickness_));
-  const int collapsedInset = std::max(0, scrollBarThickness_ - collapsedVisualThickness);
+  const QColor baseColor = toColor(map.colorBgContainer, QColor("#ffffff"));
+  const QColor trackColor =
+      compositeOn(withAlpha(toColor(map.colorTextQuaternary, QColor("#8c8c8c")), 0.18), baseColor);
+  const QColor handleColor =
+      compositeOn(withAlpha(toColor(map.colorTextSecondary, QColor("#595959")), 0.45), trackColor);
+  const QColor handleHoverColor =
+      compositeOn(withAlpha(toColor(map.colorText, QColor("#141414")), 0.60), trackColor);
+  const QColor handlePressedColor = handleHoverColor;
+  const int thickness = std::max(6, scrollBarThickness_);
+  const int hoverThickness = thickness + std::max(1, thickness / 2);
+  const int verticalExtent = overlayHovered_ ? hoverThickness : thickness;
+  const int collapsedVisualThickness = 3;
+  const int collapsedInset = std::max(0, thickness - collapsedVisualThickness);
   const int visualInset = overlayHovered_ ? 0 : collapsedInset;
-  const int visualWidth = std::max(1, scrollBarThickness_ - visualInset);
-  const int visualRadius = overlayHovered_ ? scrollBarRadius_ : std::max(1, visualWidth / 2);
+  const int visualWidth = std::max(1, verticalExtent - visualInset);
+  const int visualRadius = std::max(1, (visualWidth + 1) / 2);
 
-  const QString sheet = QStringLiteral(
-                            "QScrollArea#adscrollarea {"
-                            "  border: none;"
-                            "  background: transparent;"
-                            "}"
-                            "QScrollBar#adscrollarea-overlay-vbar:vertical {"
-                            "  background: %1;"
-                            "  width: %2px;"
-                            "  margin: 0px 0px 0px %7px;"
-                            "  border: none;"
-                            "  border-radius: %8px;"
-                            "}"
-                            "QScrollBar#adscrollarea-overlay-vbar::handle:vertical {"
-                            "  background: %4;"
-                            "  min-height: 24px;"
-                            "  margin: 0px;"
-                            "  border-radius: %8px;"
-                            "}"
-                            "QScrollBar#adscrollarea-overlay-vbar::handle:vertical:hover {"
-                            "  background: %5;"
-                            "}"
-                            "QScrollBar#adscrollarea-overlay-vbar::handle:vertical:pressed {"
-                            "  background: %6;"
-                            "}"
-                            "QScrollBar#adscrollarea-overlay-vbar::add-line:vertical,"
-                            "QScrollBar#adscrollarea-overlay-vbar::sub-line:vertical {"
-                            "  width: 0px;"
-                            "  height: 0px;"
-                            "  border: none;"
-                            "  margin: 0px;"
-                            "}"
-                            "QScrollBar#adscrollarea-overlay-vbar::add-page:vertical,"
-                            "QScrollBar#adscrollarea-overlay-vbar::sub-page:vertical {"
-                            "  background: transparent;"
-                            "  margin: 0px;"
-                            "  border-radius: 0px;"
-                            "}"
-                            "QScrollBar:horizontal {"
-                            "  background: %1;"
-                            "  height: %2px;"
-                            "  margin: 0px 2px 0px 2px;"
-                            "  border: none;"
-                            "  border-radius: %3px;"
-                            "}"
-                            "QScrollBar::handle:horizontal {"
-                            "  background: %4;"
-                            "  min-width: 24px;"
-                            "  border-radius: %3px;"
-                            "}"
-                            "QScrollBar::handle:horizontal:hover {"
-                            "  background: %5;"
-                            "}"
-                            "QScrollBar::handle:horizontal:pressed {"
-                            "  background: %6;"
-                            "}"
-                            "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {"
-                            "  width: 0px;"
-                            "  height: 0px;"
-                            "  border: none;"
-                            "  margin: 0px;"
-                            "}"
-                            "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {"
-                            "  background: transparent;"
-                            "}")
-                            .arg(trackColor.name(QColor::HexArgb))
-                            .arg(scrollBarThickness_)
-                            .arg(scrollBarRadius_)
-                            .arg(handleColor.name(QColor::HexArgb))
-                            .arg(handleHoverColor.name(QColor::HexArgb))
-                            .arg(handlePressedColor.name(QColor::HexArgb))
-                            .arg(visualInset)
-                            .arg(visualRadius);
+  const auto applyPalette = [&](QScrollBar* bar,
+                                const QColor& barHandleColor,
+                                int extent,
+                                int inset,
+                                int radius) {
+    if (!bar) {
+      return;
+    }
+    ensureOverlayStyle(bar);
+    bool changed = false;
+    changed |= setIntPropertyIfChanged(bar, "_adqt_extent", std::max(1, extent));
+    changed |= setIntPropertyIfChanged(bar, "_adqt_inset", std::max(0, inset));
+    changed |= setIntPropertyIfChanged(bar, "_adqt_radius", std::max(0, radius));
+    changed |= setColorPropertyIfChanged(bar, "_adqt_track_color", trackColor);
+    changed |= setColorPropertyIfChanged(bar, "_adqt_handle_color", barHandleColor);
+    changed |= setColorPropertyIfChanged(bar, "_adqt_handle_hover_color", handleHoverColor);
+    changed |= setColorPropertyIfChanged(bar, "_adqt_handle_pressed_color", handlePressedColor);
+    if (!bar->hasMouseTracking()) {
+      bar->setMouseTracking(true);
+      changed = true;
+    }
+    changed |= applyScrollBarPalette(bar, trackColor, barHandleColor, handlePressedColor);
+    if (changed) {
+      bar->update();
+    }
+  };
 
-  setStyleSheet(sheet);
+  if (overlayVerticalScrollBar_) {
+    if (overlayVerticalScrollBar_->minimumWidth() != verticalExtent ||
+        overlayVerticalScrollBar_->maximumWidth() != verticalExtent) {
+      overlayVerticalScrollBar_->setFixedWidth(verticalExtent);
+    }
+    applyPalette(overlayVerticalScrollBar_, handleColor, verticalExtent, visualInset, visualRadius);
+  }
+
+  if (QScrollBar* hBar = horizontalScrollBar()) {
+    if (hBar->minimumHeight() != thickness || hBar->maximumHeight() != thickness) {
+      hBar->setFixedHeight(thickness);
+    }
+    applyPalette(hBar, handleColor, thickness, 0, std::max(1, thickness / 2));
+  }
+
+  updateOverlayGeometry();
+  if (viewport()) {
+    viewport()->update();
+  }
 }
 
 void AdScrollArea::syncContentSize() {
@@ -354,9 +661,11 @@ void AdScrollArea::updateOverlayGeometry() {
 
   const int margin = 2;
   const int thickness = std::max(6, scrollBarThickness_);
+  const int hoverThickness = thickness + std::max(1, thickness / 2);
+  const int overlayWidth = overlayHovered_ ? hoverThickness : thickness;
   const int height = std::max(0, viewport()->height() - margin * 2);
-  const int x = std::max(0, viewport()->width() - thickness - margin);
-  overlayVerticalScrollBar_->setGeometry(x, margin, thickness, height);
+  const int x = std::max(0, viewport()->width() - overlayWidth - margin);
+  overlayVerticalScrollBar_->setGeometry(x, margin, overlayWidth, height);
 }
 
 }  // namespace adqt::widgets

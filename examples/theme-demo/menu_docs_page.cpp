@@ -880,7 +880,16 @@ QWidget* MenuDocsPage::buildSemanticDemo() {
   menu->setMode(AdMenu::Mode::Horizontal);
   menu->setOpenKeys({"SubMenu"});
   menu->setSelectedKey("mail");
-  menu->setMinimumWidth(560);
+  const auto applySemanticDemoWidth = [menu](AdMenu::Mode mode) {
+    if (mode == AdMenu::Mode::Horizontal) {
+      menu->setMinimumWidth(560);
+      menu->setMaximumWidth(QWIDGETSIZE_MAX);
+    } else {
+      menu->setMinimumWidth(260);
+      menu->setMaximumWidth(260);
+    }
+  };
+  applySemanticDemoWidth(AdMenu::Mode::Horizontal);
 
   menu->setSemanticStyleResolver([](const AdMenu::StyleContext& ctx) {
     AdMenu::SemanticStyles styles;
@@ -898,18 +907,18 @@ QWidget* MenuDocsPage::buildSemanticDemo() {
     return styles;
   });
 
-  connect(modeBox, QOverload<int>::of(&QComboBox::currentIndexChanged), menu, [this, menu, modeBox](int) {
+  connect(modeBox, QOverload<int>::of(&QComboBox::currentIndexChanged), menu,
+          [this, menu, modeBox, applySemanticDemoWidth](int) {
     const auto mode = static_cast<AdMenu::Mode>(modeBox->currentData().toInt());
     menu->setMode(mode);
     if (mode == AdMenu::Mode::Horizontal) {
       menu->setItems(itemsHorizontal());
-      menu->setMinimumWidth(560);
     } else {
       QVector<AdMenu::Item> items = itemsHorizontal();
       items.append(makeGroup("grp", "Group", {makeLeaf("13", "Option 13"), makeLeaf("14", "Option 14")}));
       menu->setItems(items);
-      menu->setFixedWidth(260);
     }
+    applySemanticDemoWidth(mode);
     menu->setOpenKeys({"SubMenu"});
   });
 

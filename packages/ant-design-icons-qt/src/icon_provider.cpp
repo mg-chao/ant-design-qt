@@ -21,6 +21,42 @@ namespace adqt::icons::detail {
 
 namespace {
 
+constexpr int kDefaultPixmapCacheLimitKB = 8 * 1024;
+constexpr qreal kDprQuantizeStep = 0.25;
+constexpr qreal kDprMin = 1.0;
+constexpr qreal kDprMax = 4.0;
+constexpr qint64 kMaxCacheablePixmapBytes = 256 * 1024;
+
+qreal normalizeDevicePixelRatio(qreal devicePixelRatio) {
+  const qreal safe = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+  const qreal clamped = qBound(kDprMin, safe, kDprMax);
+  const qreal quantized = qRound(clamped / kDprQuantizeStep) * kDprQuantizeStep;
+  return qBound(kDprMin, quantized, kDprMax);
+}
+
+bool shouldCachePixmap(int pixelWidth, int pixelHeight) {
+  const qint64 safeW = qMax(1, pixelWidth);
+  const qint64 safeH = qMax(1, pixelHeight);
+  const qint64 approxBytes = safeW * safeH * 4;
+  return approxBytes <= kMaxCacheablePixmapBytes;
+}
+
+void applyGlobalOpacity(QPixmap& pixmap, qreal opacity) {
+  const qreal clamped = qBound(0.0, opacity, 1.0);
+  if (clamped >= 1.0) {
+    return;
+  }
+  if (clamped <= 0.0) {
+    pixmap.fill(Qt::transparent);
+    return;
+  }
+
+  QPainter painter(&pixmap);
+  painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+  const int alpha = qBound(0, qRound(clamped * 255.0), 255);
+  painter.fillRect(pixmap.rect(), QColor(0, 0, 0, alpha));
+}
+
 void ensureIconResources() {
   static bool initialized = false;
   if (!initialized) {
@@ -67,17 +103,20 @@ class IconRuntime final {
     const QSize effectiveSize = logicalSize.isValid() && !logicalSize.isEmpty()
                                     ? logicalSize
                                     : QSize(16, 16);
-    const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    const qreal dpr = normalizeDevicePixelRatio(devicePixelRatio);
     const int pixelW = qMax(1, qRound(effectiveSize.width() * dpr));
     const int pixelH = qMax(1, qRound(effectiveSize.height() * dpr));
+    const bool enablePixmapCache = shouldCachePixmap(pixelW, pixelH);
 
     const IconThemeSnapshot snapshot = resolveThemeSnapshot();
     const ResolvedColors colors = resolveColors(entry.theme, style, snapshot, mode);
     const QString key = cacheKey(index, effectiveSize, dpr, mode, state, colors);
 
-    QPixmap cached;
-    if (QPixmapCache::find(key, &cached)) {
-      return cached;
+    if (enablePixmapCache) {
+      QPixmap cached;
+      if (QPixmapCache::find(key, &cached)) {
+        return cached;
+      }
     }
 
     const QByteArray source = loadSvgSource(QString::fromLatin1(entry.qrcPath));
@@ -98,9 +137,18 @@ class IconRuntime final {
       painter.setRenderHint(QPainter::Antialiasing, true);
       renderer.render(&painter, QRectF(0, 0, pixelW, pixelH));
     }
+
+    // QtSvg may ignore alpha in `fill` color strings. Keep rgb replacement stable and
+    // apply final opacity on the rendered pixmap for non-twotone single-color icons.
+    if (entry.theme != IconTheme::TwoTone) {
+      applyGlobalOpacity(pm, colors.primary.alphaF());
+    }
+
     pm.setDevicePixelRatio(dpr);
 
-    QPixmapCache::insert(key, pm);
+    if (enablePixmapCache) {
+      QPixmapCache::insert(key, pm);
+    }
     return pm;
   }
 
@@ -269,7 +317,7 @@ class IconRuntime final {
 
   QMutex mutex_;
   IconThemeResolver resolver_;
-  int pixmapCacheLimitKB_ = 32 * 1024;
+  int pixmapCacheLimitKB_ = kDefaultPixmapCacheLimitKB;
   int svgSourceCacheMaxEntries_ = 128;
   QHash<QString, QByteArray> svgSourceCache_;
   QStringList svgSourceOrder_;

@@ -14,11 +14,12 @@ struct MenuStateStyle {
 
 struct MenuMetrics {
   int itemHeight = 40;
+  int horizontalLineHeight = 46;
   int itemPaddingInline = 16;
   int itemMarginInline = 4;
   int itemMarginBlock = 4;
   int itemBorderRadius = 8;
-  int horizontalItemBorderRadius = 8;
+  int horizontalItemBorderRadius = 0;
   int subMenuItemBorderRadius = 6;
   int popupBorderRadius = 8;
   int inlineIndent = 24;
@@ -26,6 +27,7 @@ struct MenuMetrics {
   int iconSize = 14;
   int iconMarginInlineEnd = 10;
   int activeBarWidth = 0;
+  int activeBarHeight = 2;
 
   int borderWidth = 1;
   int dividerMarginBlock = 1;
@@ -43,6 +45,7 @@ struct MenuVisualStyle {
   QColor borderColor;
   QColor dividerColor;
   QColor groupTitleColor;
+  QColor subMenuItemSelectedColor;
   QColor subMenuBackground;
   QColor popupBackground;
   QColor popupBorderColor;

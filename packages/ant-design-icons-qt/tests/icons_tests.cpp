@@ -18,6 +18,36 @@ QByteArray pngDigest(const QImage& image) {
   return QCryptographicHash::hash(bytes, QCryptographicHash::Sha1);
 }
 
+QColor averageVisibleColor(const QImage& image) {
+  qint64 red = 0;
+  qint64 green = 0;
+  qint64 blue = 0;
+  qint64 alpha = 0;
+  qint64 count = 0;
+
+  for (int y = 0; y < image.height(); ++y) {
+    for (int x = 0; x < image.width(); ++x) {
+      const QColor pixel = image.pixelColor(x, y);
+      if (pixel.alpha() == 0) {
+        continue;
+      }
+      red += pixel.red();
+      green += pixel.green();
+      blue += pixel.blue();
+      alpha += pixel.alpha();
+      ++count;
+    }
+  }
+
+  if (count == 0) {
+    return QColor();
+  }
+  return QColor(static_cast<int>(red / count),
+                static_cast<int>(green / count),
+                static_cast<int>(blue / count),
+                static_cast<int>(alpha / count));
+}
+
 class IconsTests final : public QObject {
   Q_OBJECT
 
@@ -91,6 +121,35 @@ class IconsTests final : public QObject {
     QVERIFY(!redImage.isNull());
     QVERIFY(!blueImage.isNull());
     QVERIFY(pngDigest(redImage) != pngDigest(blueImage));
+  }
+
+  void outlinedIconRespectsPrimaryAlpha() {
+    adqt::icons::IconToken opaque = adqt::icons::outlined::Mail();
+    opaque.style.primary = QColor(255, 255, 255, 255);
+    opaque.style.hasPrimary = true;
+
+    adqt::icons::IconToken translucent = adqt::icons::outlined::Mail();
+    translucent.style.primary = QColor(255, 255, 255, 166);
+    translucent.style.hasPrimary = true;
+
+    const QImage opaqueImage =
+        adqt::icons::renderIconPixmap(opaque, QSize(32, 32), 1.0, QIcon::Normal, QIcon::Off).toImage();
+    const QImage translucentImage =
+        adqt::icons::renderIconPixmap(translucent, QSize(32, 32), 1.0, QIcon::Normal, QIcon::Off).toImage();
+
+    QVERIFY(!opaqueImage.isNull());
+    QVERIFY(!translucentImage.isNull());
+
+    const QColor opaqueAvg = averageVisibleColor(opaqueImage);
+    const QColor translucentAvg = averageVisibleColor(translucentImage);
+    QVERIFY(opaqueAvg.isValid());
+    QVERIFY(translucentAvg.isValid());
+
+    // Semi-transparent white should remain white-ish, not turn black.
+    QVERIFY(translucentAvg.red() > 200);
+    QVERIFY(translucentAvg.green() > 200);
+    QVERIFY(translucentAvg.blue() > 200);
+    QVERIFY(translucentAvg.alpha() < opaqueAvg.alpha());
   }
 
   void themeResolverAffectsTwotone() {

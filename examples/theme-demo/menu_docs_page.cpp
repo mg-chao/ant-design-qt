@@ -342,7 +342,6 @@ QWidget* MenuDocsPage::buildTooltipDemo() {
   menu->setItems(itemsCollapsedInline());
   menu->setDefaultSelectedKeys({"1"});
   menu->setDefaultOpenKeys({"sub1"});
-  menu->setTooltipPlacement(AdMenu::TooltipPlacement::Left);
   menu->setFixedWidth(256);
 
   connect(collapseBtn, &QPushButton::clicked, this, [menu]() {
@@ -843,7 +842,10 @@ QWidget* MenuDocsPage::buildCustomPopupRenderDemo() {
     v->setContentsMargins(12, 10, 12, 12);
     v->setSpacing(8);
 
-    auto* title = new QLabel(ctx.item.title.isEmpty() ? ctx.item.label : ctx.item.title, panel);
+    const QString popupTitle =
+        (ctx.item.title.has_value() && !ctx.item.title.value().isEmpty()) ? ctx.item.title.value()
+                                                                           : ctx.item.label;
+    auto* title = new QLabel(popupTitle, panel);
     QFont titleFont = title->font();
     titleFont.setBold(true);
     title->setFont(titleFont);
@@ -941,7 +943,7 @@ QWidget* MenuDocsPage::buildApiOverview() {
       {"inlineIndent", "indent per nested level (px)"},
       {"triggerSubMenuAction", "hover | click"},
       {"subMenuOpenDelayMs / subMenuCloseDelayMs", "popup open/close delay in milliseconds"},
-      {"tooltipEnabled + tooltipPlacement", "tooltip behavior in inline-collapsed mode"},
+      {"tooltipEnabled", "tooltip behavior in inline-collapsed mode"},
       {"componentTokens", "component token overrides"},
       {"semanticStyles / semanticStyleResolver", "semantic style overrides"},
       {"popupRender", "custom popup renderer"},

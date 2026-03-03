@@ -42,7 +42,6 @@ class AdMenu final : public QWidget {
   Q_PROPERTY(int subMenuOpenDelayMs READ subMenuOpenDelayMs WRITE setSubMenuOpenDelayMs NOTIFY subMenuOpenDelayMsChanged)
   Q_PROPERTY(int subMenuCloseDelayMs READ subMenuCloseDelayMs WRITE setSubMenuCloseDelayMs NOTIFY subMenuCloseDelayMsChanged)
   Q_PROPERTY(bool tooltipEnabled READ tooltipEnabled WRITE setTooltipEnabled NOTIFY tooltipEnabledChanged)
-  Q_PROPERTY(TooltipPlacement tooltipPlacement READ tooltipPlacement WRITE setTooltipPlacement NOTIFY tooltipPlacementChanged)
   Q_PROPERTY(QString overflowedIndicatorText READ overflowedIndicatorText WRITE setOverflowedIndicatorText NOTIFY overflowedIndicatorTextChanged)
 
  public:
@@ -73,18 +72,10 @@ class AdMenu final : public QWidget {
   };
   Q_ENUM(TriggerSubMenuAction)
 
-  enum class TooltipPlacement {
-    Right,
-    Left,
-    Top,
-    Bottom,
-  };
-  Q_ENUM(TooltipPlacement)
-
   struct Item {
     QString key;
     QString label;
-    QString title;
+    std::optional<QString> title;
     QString extra;
     adqt::icons::IconToken icon;
     ItemType type = ItemType::Item;
@@ -114,17 +105,36 @@ class AdMenu final : public QWidget {
     std::optional<int> groupTitleLineHeight;
     std::optional<QString> popupBg;
     std::optional<QString> darkPopupBg;
+    std::optional<QString> itemBg;
+    std::optional<QString> subMenuItemBg;
+    std::optional<QString> itemActiveBg;
     std::optional<QString> itemHoverBg;
     std::optional<QString> itemHoverColor;
+    std::optional<QString> itemDisabledColor;
+    std::optional<QString> subMenuItemSelectedColor;
     std::optional<QString> horizontalItemHoverBg;
     std::optional<QString> horizontalItemHoverColor;
     std::optional<QString> horizontalItemSelectedBg;
     std::optional<QString> horizontalItemSelectedColor;
+    std::optional<QString> dangerItemColor;
+    std::optional<QString> dangerItemHoverColor;
+    std::optional<QString> dangerItemSelectedColor;
+    std::optional<QString> dangerItemActiveBg;
+    std::optional<QString> dangerItemSelectedBg;
     std::optional<QString> itemSelectedBg;
     std::optional<QString> itemSelectedColor;
     std::optional<QString> darkItemColor;
     std::optional<QString> darkItemBg;
     std::optional<QString> darkSubMenuItemBg;
+    std::optional<QString> darkGroupTitleColor;
+    std::optional<QString> darkItemHoverBg;
+    std::optional<QString> darkItemHoverColor;
+    std::optional<QString> darkItemDisabledColor;
+    std::optional<QString> darkDangerItemColor;
+    std::optional<QString> darkDangerItemHoverColor;
+    std::optional<QString> darkDangerItemSelectedColor;
+    std::optional<QString> darkDangerItemActiveBg;
+    std::optional<QString> darkDangerItemSelectedBg;
     std::optional<QString> darkItemSelectedColor;
     std::optional<QString> darkItemSelectedBg;
   };
@@ -221,9 +231,6 @@ class AdMenu final : public QWidget {
   bool tooltipEnabled() const;
   void setTooltipEnabled(bool value);
 
-  TooltipPlacement tooltipPlacement() const;
-  void setTooltipPlacement(TooltipPlacement value);
-
   QString overflowedIndicatorText() const;
   void setOverflowedIndicatorText(const QString& value);
 
@@ -273,7 +280,6 @@ class AdMenu final : public QWidget {
   void subMenuOpenDelayMsChanged(int value);
   void subMenuCloseDelayMsChanged(int value);
   void tooltipEnabledChanged(bool value);
-  void tooltipPlacementChanged(TooltipPlacement value);
   void overflowedIndicatorTextChanged(const QString& value);
   void componentTokensChanged();
   void semanticStylesChanged();
@@ -324,6 +330,7 @@ class AdMenu final : public QWidget {
     QPointer<AdMenu> popupMenu;
     QString key;
     QRect triggerRect;
+    QPoint popupOffset;
   };
 
   bool rowIsInteractive(const VisibleEntry& row) const;
@@ -338,6 +345,7 @@ class AdMenu final : public QWidget {
   void rebuildDepthMaps();
   void rebuildSelectedSubMenuKeys();
   void ensureDefaultStatesApplied();
+  bool shouldShowPopupForEntry(const VisibleEntry& entry) const;
   void syncPopupVisibility();
   void syncTooltipForHoveredEntry();
 
@@ -389,7 +397,8 @@ class AdMenu final : public QWidget {
 
   void requestHoverOpen(const QString& key);
   void requestHoverClose();
-  void showTooltipForEntry(const VisibleEntry& entry, const QPoint& globalPos);
+  void hideTooltip();
+  QString tooltipTextForEntry(const VisibleEntry& entry) const;
 
   PopupRecord* ensurePopupForEntry(const VisibleEntry& entry);
   void positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord);
@@ -430,7 +439,6 @@ class AdMenu final : public QWidget {
   int subMenuOpenDelayMs_ = 0;
   int subMenuCloseDelayMs_ = 100;
   bool tooltipEnabled_ = true;
-  TooltipPlacement tooltipPlacement_ = TooltipPlacement::Right;
   QString overflowedIndicatorText_ = "...";
 
   ComponentTokens componentTokens_;

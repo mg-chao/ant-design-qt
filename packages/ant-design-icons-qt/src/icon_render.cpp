@@ -9,15 +9,9 @@ namespace {
 
 QString toSvgColor(const QColor& color) {
   QColor safe = color.isValid() ? color : QColor(QStringLiteral("#000000"));
-  if (safe.alpha() >= 255) {
-    return safe.name(QColor::HexRgb);
-  }
-
-  return QStringLiteral("rgba(%1,%2,%3,%4)")
-      .arg(safe.red())
-      .arg(safe.green())
-      .arg(safe.blue())
-      .arg(QString::number(safe.alphaF(), 'f', 3));
+  // QtSvg does not reliably support `fill="rgba(...)"` or 8-digit hex colors.
+  // Always emit opaque rgb hex and let the caller apply alpha post-render.
+  return safe.name(QColor::HexRgb);
 }
 
 void replaceRegex(QString& text, const QString& pattern, const QString& replacement) {

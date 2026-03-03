@@ -32,6 +32,25 @@ QColor withAlpha(const QColor& color, double alpha) {
   return copy;
 }
 
+QColor resolveTokenColor(const std::optional<QString>& token, const QColor& fallback) {
+  if (!token.has_value()) {
+    return fallback;
+  }
+  return toColor(token.value(), fallback);
+}
+
+QColor resolveTokenColorChain(const std::optional<QString>& primaryToken,
+                             const std::optional<QString>& secondaryToken,
+                             const QColor& fallback) {
+  if (primaryToken.has_value()) {
+    return toColor(primaryToken.value(), fallback);
+  }
+  if (secondaryToken.has_value()) {
+    return toColor(secondaryToken.value(), fallback);
+  }
+  return fallback;
+}
+
 void applyTokenOverrides(MenuMetrics& metrics, const AdMenu::ComponentTokens& tokens) {
   if (tokens.itemHeight.has_value()) {
     metrics.itemHeight = std::max(20, tokens.itemHeight.value());
@@ -104,6 +123,9 @@ void applySemanticStyles(const AdMenu::SemanticStyles& semantic, MenuVisualStyle
   if (semantic.itemTitle.textColor.has_value()) {
     style.groupTitleColor = semantic.itemTitle.textColor.value();
   }
+  if (semantic.subMenuItemTitle.textColor.has_value()) {
+    style.subMenuItemSelectedColor = semantic.subMenuItemTitle.textColor.value();
+  }
 
   if (semantic.popup.backgroundColor.has_value()) {
     style.popupBackground = semantic.popup.backgroundColor.value();
@@ -120,11 +142,13 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   MenuMetrics metrics;
 
   metrics.itemHeight = std::max(28, qRound(map.controlHeightLG));
+  metrics.horizontalLineHeight = std::max(metrics.itemHeight, qRound(map.controlHeightLG * 1.15));
   metrics.itemPaddingInline = std::max(8, qRound(map.sizeMS));
   metrics.itemMarginInline = std::max(2, qRound(map.sizeXXS));
   metrics.itemMarginBlock = std::max(1, qRound(map.sizeXXS));
   metrics.itemBorderRadius = std::max(0, qRound(map.borderRadiusLG));
-  metrics.horizontalItemBorderRadius = metrics.itemBorderRadius;
+  // antd default for horizontal mode is radius 0.
+  metrics.horizontalItemBorderRadius = 0;
   metrics.subMenuItemBorderRadius = std::max(0, qRound(map.borderRadiusSM));
   metrics.popupBorderRadius = std::max(0, qRound(map.borderRadiusLG));
   metrics.inlineIndent = 24;
@@ -136,6 +160,7 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   metrics.iconSize = std::max(12, itemFontSize);
   metrics.iconMarginInlineEnd = std::max(6, qRound(map.controlHeightSM - map.fontSize));
   metrics.activeBarWidth = 0;
+  metrics.activeBarHeight = std::max(1, qRound(map.lineWidthBold));
 
   metrics.borderWidth = std::max(1, qRound(map.lineWidth));
   metrics.dividerMarginBlock = metrics.borderWidth;
@@ -149,6 +174,9 @@ MenuMetrics resolveMetrics(const ThemeMapToken& map,
   metrics.horizontalSpacing = 0;
 
   applyTokenOverrides(metrics, tokenOverrides);
+  // Keep horizontal line-height at least item height, matching antd horizontal defaults.
+  metrics.horizontalLineHeight =
+      std::max(metrics.itemHeight, std::max(1, qRound(map.controlHeightLG * 1.15)));
   return metrics;
 }
 
@@ -158,51 +186,51 @@ MenuVisualStyle makeLightStyle(const ThemeMapToken& map,
   MenuVisualStyle style;
   style.metrics = resolveMetrics(map, baseFont, tokens);
 
-  style.menuBackground = toColor(map.colorBgContainer, QColor("#ffffff"));
+  style.menuBackground =
+      resolveTokenColor(tokens.itemBg, toColor(map.colorBgContainer, QColor("#ffffff")));
   style.borderColor = toColor(map.colorBorderSecondary, QColor("#f0f0f0"));
   style.dividerColor = style.borderColor;
   style.groupTitleColor = toColor(map.colorTextTertiary, QColor("#8c8c8c"));
-  style.subMenuBackground = toColor(map.colorFillQuaternary, QColor(0, 0, 0, 5));
-  style.popupBackground =
-      tokens.popupBg.has_value() ? toColor(tokens.popupBg.value(), style.menuBackground)
-                                 : toColor(map.colorBgElevated, QColor("#ffffff"));
+  style.subMenuBackground =
+      resolveTokenColor(tokens.subMenuItemBg, toColor(map.colorFillQuaternary, QColor("#fafafa")));
+  style.popupBackground = resolveTokenColor(tokens.popupBg, toColor(map.colorBgElevated, QColor("#ffffff")));
   style.popupBorderColor = style.borderColor;
 
   style.normal.text = toColor(map.colorText, QColor("#141414"));
   style.normal.background = QColor(0, 0, 0, 0);
 
-  style.hover.text = tokens.itemHoverColor.has_value()
-                         ? toColor(tokens.itemHoverColor.value(), toColor(map.colorText, QColor("#141414")))
-                         : toColor(map.colorText, QColor("#141414"));
-  style.hover.background = tokens.itemHoverBg.has_value()
-                               ? toColor(tokens.itemHoverBg.value(),
-                                         toColor(map.colorFillSecondary, QColor("#f5f5f5")))
-                               : toColor(map.colorFillSecondary, QColor("#f5f5f5"));
+  style.hover.text = resolveTokenColor(tokens.itemHoverColor, toColor(map.colorText, QColor("#141414")));
+  style.hover.background =
+      resolveTokenColor(tokens.itemHoverBg, toColor(map.colorFillSecondary, QColor("#f5f5f5")));
 
   style.active.text = toColor(map.colorText, QColor("#141414"));
-  style.active.background = toColor(map.colorPrimaryBg, QColor("#e6f4ff"));
+  style.active.background =
+      resolveTokenColor(tokens.itemActiveBg, toColor(map.colorFillTertiary, QColor("#f0f0f0")));
 
-  style.selected.text = tokens.itemSelectedColor.has_value()
-                            ? toColor(tokens.itemSelectedColor.value(), QColor("#1677ff"))
-                            : toColor(map.colorPrimary, QColor("#1677ff"));
-  style.selected.background = tokens.itemSelectedBg.has_value()
-                                  ? toColor(tokens.itemSelectedBg.value(), QColor("#e6f4ff"))
-                                  : toColor(map.colorPrimaryBg, QColor("#e6f4ff"));
+  style.selected.text =
+      resolveTokenColor(tokens.itemSelectedColor, toColor(map.colorPrimary, QColor("#1677ff")));
+  style.selected.background =
+      resolveTokenColor(tokens.itemSelectedBg, toColor(map.colorPrimaryBg, QColor("#e6f4ff")));
+  style.subMenuItemSelectedColor = resolveTokenColor(tokens.subMenuItemSelectedColor, style.selected.text);
 
-  style.disabled.text = toColor(map.colorTextQuaternary, QColor("#bfbfbf"));
+  style.disabled.text =
+      resolveTokenColor(tokens.itemDisabledColor, toColor(map.colorTextQuaternary, QColor("#bfbfbf")));
   style.disabled.background = QColor(0, 0, 0, 0);
 
-  style.danger.text = toColor(map.colorError, QColor("#ff4d4f"));
+  style.danger.text =
+      resolveTokenColor(tokens.dangerItemColor, toColor(map.colorError, QColor("#ff4d4f")));
   style.danger.background = QColor(0, 0, 0, 0);
 
-  style.dangerHover.text = toColor(map.colorError, QColor("#ff4d4f"));
+  style.dangerHover.text = resolveTokenColor(tokens.dangerItemHoverColor, style.danger.text);
   style.dangerHover.background = style.hover.background;
 
-  style.dangerActive.text = toColor(map.colorError, QColor("#ff4d4f"));
-  style.dangerActive.background = toColor(map.colorErrorBg, QColor("#fff2f0"));
+  style.dangerActive.text = style.danger.text;
+  style.dangerActive.background =
+      resolveTokenColor(tokens.dangerItemActiveBg, toColor(map.colorErrorBg, QColor("#fff2f0")));
 
-  style.dangerSelected.text = toColor(map.colorError, QColor("#ff4d4f"));
-  style.dangerSelected.background = toColor(map.colorErrorBg, QColor("#fff2f0"));
+  style.dangerSelected.text = resolveTokenColor(tokens.dangerItemSelectedColor, style.danger.text);
+  style.dangerSelected.background =
+      resolveTokenColor(tokens.dangerItemSelectedBg, toColor(map.colorErrorBg, QColor("#fff2f0")));
 
   style.horizontalNormal = style.normal;
   style.horizontalHover = style.hover;
@@ -237,63 +265,59 @@ MenuVisualStyle makeDarkStyle(const ThemeMapToken& map,
   MenuVisualStyle style;
   style.metrics = resolveMetrics(map, baseFont, tokens);
 
-  const QColor textDark = toColor(map.colorTextSecondary, withAlpha(QColor("#ffffff"), 0.65));
+  const QColor primaryColor = toColor(map.colorPrimary, QColor("#1677ff"));
   const QColor textLight = toColor(map.colorWhite, QColor("#ffffff"));
+  const QColor textDark = withAlpha(textLight, 0.65);
   const QColor dangerColor = toColor(map.colorError, QColor("#ff4d4f"));
+  const QColor dangerHoverColor = toColor(map.colorErrorHover, QColor("#ff7875"));
+  const QColor transparent(0, 0, 0, 0);
 
-  style.menuBackground = tokens.darkItemBg.has_value() ? toColor(tokens.darkItemBg.value(), QColor("#001529"))
-                                                        : QColor("#001529");
-  style.borderColor = QColor(0, 0, 0, 0);
-  style.dividerColor = withAlpha(QColor("#ffffff"), 0.12);
-  style.groupTitleColor = textDark;
+  style.menuBackground = resolveTokenColor(tokens.darkItemBg, QColor("#001529"));
+  style.borderColor = transparent;
+  style.dividerColor = withAlpha(textLight, 0.12);
+  style.groupTitleColor = resolveTokenColor(tokens.darkGroupTitleColor, textDark);
   style.subMenuBackground =
-      tokens.darkSubMenuItemBg.has_value() ? toColor(tokens.darkSubMenuItemBg.value(), QColor("#000c17"))
-                                           : QColor("#000c17");
-  style.popupBackground = tokens.darkPopupBg.has_value()
-                              ? toColor(tokens.darkPopupBg.value(), style.menuBackground)
-                              : style.menuBackground;
-  style.popupBorderColor =
-      toColor(map.colorBorderSecondary, withAlpha(QColor("#ffffff"), 0.12));
+      resolveTokenColorChain(tokens.darkSubMenuItemBg, tokens.subMenuItemBg, QColor("#000c17"));
+  style.popupBackground = resolveTokenColorChain(tokens.darkPopupBg, tokens.popupBg, style.menuBackground);
+  style.popupBorderColor = toColor(map.colorBorderSecondary, withAlpha(textLight, 0.12));
 
-  style.normal.text =
-      tokens.darkItemColor.has_value() ? toColor(tokens.darkItemColor.value(), textDark) : textDark;
-  style.normal.background = QColor(0, 0, 0, 0);
+  style.normal.text = resolveTokenColor(tokens.darkItemColor, textDark);
+  style.normal.background = transparent;
 
-  style.hover.text = tokens.itemHoverColor.has_value() ? toColor(tokens.itemHoverColor.value(), textLight)
-                                                        : textLight;
-  style.hover.background = tokens.itemHoverBg.has_value()
-                               ? toColor(tokens.itemHoverBg.value(), QColor(0, 0, 0, 0))
-                               : QColor(0, 0, 0, 0);
+  style.hover.text = resolveTokenColorChain(tokens.darkItemHoverColor, tokens.itemHoverColor, textLight);
+  style.hover.background =
+      resolveTokenColorChain(tokens.darkItemHoverBg, tokens.itemHoverBg, transparent);
 
   style.active.text = textLight;
-  style.active.background = QColor(0, 0, 0, 0);
+  style.active.background = resolveTokenColor(tokens.itemActiveBg, transparent);
 
   style.selected.text =
-      tokens.darkItemSelectedColor.has_value()
-          ? toColor(tokens.darkItemSelectedColor.value(), textLight)
-          : (tokens.itemSelectedColor.has_value() ? toColor(tokens.itemSelectedColor.value(), textLight)
-                                                  : textLight);
+      resolveTokenColorChain(tokens.darkItemSelectedColor, tokens.itemSelectedColor, textLight);
   style.selected.background =
-      tokens.darkItemSelectedBg.has_value()
-          ? toColor(tokens.darkItemSelectedBg.value(), toColor(map.colorPrimary, QColor("#1677ff")))
-          : (tokens.itemSelectedBg.has_value()
-                 ? toColor(tokens.itemSelectedBg.value(), toColor(map.colorPrimary, QColor("#1677ff")))
-                 : toColor(map.colorPrimary, QColor("#1677ff")));
+      resolveTokenColorChain(tokens.darkItemSelectedBg, tokens.itemSelectedBg, primaryColor);
+  style.subMenuItemSelectedColor =
+      resolveTokenColor(tokens.subMenuItemSelectedColor, style.selected.text);
 
-  style.disabled.text = withAlpha(QColor("#ffffff"), 0.25);
-  style.disabled.background = QColor(0, 0, 0, 0);
+  style.disabled.text =
+      resolveTokenColorChain(tokens.darkItemDisabledColor, tokens.itemDisabledColor, withAlpha(textLight, 0.25));
+  style.disabled.background = transparent;
 
-  style.danger.text = dangerColor;
-  style.danger.background = QColor(0, 0, 0, 0);
+  style.danger.text = resolveTokenColorChain(tokens.darkDangerItemColor, tokens.dangerItemColor, dangerColor);
+  style.danger.background = transparent;
 
-  style.dangerHover.text = toColor(map.colorErrorHover, QColor("#ff7875"));
-  style.dangerHover.background = QColor(0, 0, 0, 0);
+  style.dangerHover.text = resolveTokenColorChain(tokens.darkDangerItemHoverColor,
+                                                  tokens.dangerItemHoverColor,
+                                                  dangerHoverColor);
+  style.dangerHover.background = style.hover.background;
 
-  style.dangerActive.text = textLight;
-  style.dangerActive.background = dangerColor;
+  style.dangerActive.text =
+      resolveTokenColorChain(tokens.darkDangerItemSelectedColor, tokens.dangerItemSelectedColor, textLight);
+  style.dangerActive.background =
+      resolveTokenColorChain(tokens.darkDangerItemActiveBg, tokens.dangerItemActiveBg, dangerColor);
 
-  style.dangerSelected.text = textLight;
-  style.dangerSelected.background = dangerColor;
+  style.dangerSelected.text = style.dangerActive.text;
+  style.dangerSelected.background =
+      resolveTokenColorChain(tokens.darkDangerItemSelectedBg, tokens.dangerItemSelectedBg, dangerColor);
 
   style.horizontalNormal = style.normal;
   style.horizontalHover = style.hover;
@@ -314,6 +338,9 @@ MenuVisualStyle makeDarkStyle(const ThemeMapToken& map,
     style.horizontalHover.background =
         toColor(tokens.horizontalItemHoverBg.value(), style.horizontalHover.background);
   }
+
+  // Match antd dark token override: menuDarkToken.activeBarHeight = 0.
+  style.metrics.activeBarHeight = 0;
 
   return style;
 }

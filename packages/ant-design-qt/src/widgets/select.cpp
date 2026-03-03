@@ -166,7 +166,11 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
       return style.optionTextColor;
     }
     if (role == Qt::FontRole) {
-      return style.metrics.font;
+      QFont font = style.metrics.font;
+      if (owner_->isValueSelected(option.value)) {
+        font.setWeight(QFont::DemiBold);
+      }
+      return font;
     }
     if (role == Qt::UserRole) {
       return option.value;
@@ -1218,7 +1222,7 @@ void AdSelect::updateSuffixVisual() {
 
   adqt::icons::IconToken icon = suffixIconToken_;
   if (!adqt::icons::isValid(icon)) {
-    icon = open_ ? outlined_icons::Up() : outlined_icons::Down();
+    icon = outlined_icons::Down();
   }
   if (adqt::icons::isValid(icon)) {
     icon.style.primary = visualStyle_->suffixColor;
@@ -1234,7 +1238,7 @@ void AdSelect::updateSuffixVisual() {
     }
   }
 
-  suffixButton_->setText(open_ ? QStringLiteral("^") : QStringLiteral("v"));
+  suffixButton_->setText(QStringLiteral("v"));
 }
 
 void AdSelect::applyVisualStyle() {
@@ -1299,9 +1303,12 @@ void AdSelect::applyVisualStyle() {
   const QString clearColor = visualStyle_->clearColor.name(QColor::HexArgb);
   const QString tagBg = visualStyle_->tagBg.name(QColor::HexArgb);
   const QString tagColor = visualStyle_->tagTextColor.name(QColor::HexArgb);
+  const bool openSingleDisplay =
+      mode_ == Mode::Single && open_ && !isSearchEnabledForCurrentMode();
 
   setProperty("focused", hasFocusWithin_ || open_);
   setProperty("variant", static_cast<int>(variant_));
+  setProperty("openSingle", openSingleDisplay);
 
   QString rootSheet = QStringLiteral(
                           "QWidget#adselect-root {"
@@ -1371,10 +1378,21 @@ void AdSelect::applyVisualStyle() {
   if (variant_ == Variant::Borderless) {
     rootSheet.append(QStringLiteral("QWidget#adselect-root { border-color: transparent; }"));
   }
+  rootSheet.append(
+      QStringLiteral("QWidget#adselect-root[openSingle=\"true\"] QLineEdit#adselect-input {"
+                     "  color: %1;"
+                     "}")
+          .arg(placeholderColor));
 
   setStyleSheet(rootSheet);
 
   if (popup_) {
+    if (popupLayout_) {
+      const int popupPadding = visualStyle_->metrics.popupPadding;
+      popupLayout_->setContentsMargins(popupPadding, popupPadding, popupPadding, popupPadding);
+      popupLayout_->setSpacing(0);
+    }
+
     const QString popupSheet = QStringLiteral(
                                    "QFrame#adselect-popup {"
                                    "  background: %1;"
@@ -1388,20 +1406,24 @@ void AdSelect::applyVisualStyle() {
                                    "  outline: none;"
                                    "}"
                                    "QListView#adselect-list::item {"
-                                   "  padding-left: 10px;"
-                                   "  padding-right: 10px;"
+                                   "  padding: %5px %6px;"
+                                   "  border-radius: %7px;"
                                    "}"
                                    "QListView#adselect-list::item:hover {"
-                                   "  background: %5;"
+                                   "  background: %8;"
                                    "}"
                                    "QListView#adselect-list::item:selected {"
-                                   "  background: %6;"
-                                   "  color: %7;"
+                                   "  background: %9;"
+                                   "  color: %10;"
+                                   "  font-weight: 600;"
                                    "}")
                                    .arg(visualStyle_->popupBg.name(QColor::HexArgb))
                                    .arg(visualStyle_->popupBorderColor.name(QColor::HexArgb))
-                                   .arg(visualStyle_->metrics.borderRadius)
+                                   .arg(visualStyle_->metrics.popupBorderRadius)
                                    .arg(visualStyle_->optionTextColor.name(QColor::HexArgb))
+                                   .arg(visualStyle_->metrics.optionPaddingVertical)
+                                   .arg(visualStyle_->metrics.optionPaddingHorizontal)
+                                   .arg(visualStyle_->metrics.optionBorderRadius)
                                    .arg(visualStyle_->optionHoverBg.name(QColor::HexArgb))
                                    .arg(visualStyle_->optionSelectedBg.name(QColor::HexArgb))
                                    .arg(visualStyle_->optionSelectedColor.name(QColor::HexArgb));
@@ -1744,13 +1766,14 @@ void AdSelect::ensurePopup() {
   }
 
   QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
-  popup_ = new QFrame(scopeWindow, Qt::Popup | Qt::FramelessWindowHint);
+  popup_ = new QFrame(scopeWindow,
+                      Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
   popup_->setObjectName(QStringLiteral("adselect-popup"));
   popup_->installEventFilter(this);
 
   popupLayout_ = new QVBoxLayout(popup_);
   popupLayout_->setContentsMargins(4, 4, 4, 4);
-  popupLayout_->setSpacing(4);
+  popupLayout_->setSpacing(0);
 
   listView_ = new QListView(popup_);
   listView_->setObjectName(QStringLiteral("adselect-list"));
@@ -1806,11 +1829,11 @@ void AdSelect::syncPopupGeometry() {
   }
 
   const int rowCount = std::max(1, static_cast<int>(rows_.size()));
-  const int listHeight = std::min(visualStyle_->metrics.popupMaxHeight,
-                                  rowCount * visualStyle_->metrics.optionHeight + 8);
+  const int listHeight =
+      std::min(visualStyle_->metrics.popupMaxHeight, rowCount * visualStyle_->metrics.optionHeight);
   if (listView_) {
-    listView_->setMinimumHeight(std::max(visualStyle_->metrics.optionHeight * 2, listHeight));
-    listView_->setMaximumHeight(visualStyle_->metrics.popupMaxHeight);
+    listView_->setMinimumHeight(std::max(visualStyle_->metrics.optionHeight, listHeight));
+    listView_->setMaximumHeight(std::max(visualStyle_->metrics.optionHeight, listHeight));
   }
 
   popup_->adjustSize();
@@ -1832,7 +1855,29 @@ void AdSelect::syncPopupGeometry() {
 
   const detail::PopupPlacementOutput placementOutput =
       detail::resolvePopupPlacement(placementInput);
-  popup_->move(placementOutput.topLeft);
+  QPoint popupTopLeft = placementOutput.topLeft;
+  const int popupOffset = std::max(0, visualStyle_->metrics.popupOffset);
+  if (popupOffset > 0) {
+    switch (placementOutput.placement) {
+      case detail::PopupPlacement::BottomLeft:
+      case detail::PopupPlacement::BottomRight:
+        popupTopLeft.ry() += popupOffset;
+        break;
+      case detail::PopupPlacement::TopLeft:
+      case detail::PopupPlacement::TopRight:
+        popupTopLeft.ry() -= popupOffset;
+        break;
+      case detail::PopupPlacement::RightTop:
+        popupTopLeft.rx() += popupOffset;
+        break;
+      case detail::PopupPlacement::LeftTop:
+        popupTopLeft.rx() -= popupOffset;
+        break;
+    }
+    popupTopLeft = detail::clampPopupTopLeft(popupTopLeft, popup_->size(), placementInput.bounds);
+  }
+
+  popup_->move(popupTopLeft);
 }
 
 void AdSelect::bindPopupScopeEvents() {

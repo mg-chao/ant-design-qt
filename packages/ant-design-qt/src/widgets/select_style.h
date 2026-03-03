@@ -10,10 +10,16 @@ namespace adqt::widgets::detail {
 struct SelectMetrics {
   int height = 32;
   int borderRadius = 6;
+  int popupBorderRadius = 8;
+  int optionBorderRadius = 4;
   int borderWidth = 1;
   int horizontalPadding = 11;
+  int popupPadding = 4;
+  int popupOffset = 4;
   int popupMaxHeight = 256;
   int optionHeight = 32;
+  int optionPaddingHorizontal = 12;
+  int optionPaddingVertical = 5;
   int tagHeight = 20;
   int iconSize = 14;
   int spacing = 6;

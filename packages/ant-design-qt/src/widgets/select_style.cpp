@@ -62,36 +62,53 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   style.optionTextColor = style.selectorTextColor;
   style.optionHoverBg = toColor(map.colorFillSecondary, QColor("#f5f5f5"));
   style.optionSelectedBg = toColor(map.colorPrimaryBg, QColor("#e6f4ff"));
-  style.optionSelectedColor = toColor(map.colorPrimary, QColor("#1677ff"));
+  style.optionSelectedColor = toColor(map.colorText, QColor("#141414"));
   style.tagBg = toColor(map.colorFillSecondary, QColor("#f5f5f5"));
   style.tagTextColor = style.selectorTextColor;
   style.clearColor = toColor(map.colorTextTertiary, QColor("#8c8c8c"));
   style.prefixColor = toColor(map.colorTextSecondary, QColor("#595959"));
-  style.suffixColor = style.prefixColor;
+  style.suffixColor = toColor(map.colorTextQuaternary, QColor("#bfbfbf"));
   style.disabledTextColor = toColor(map.colorTextQuaternary, QColor("#bfbfbf"));
-  style.disabledBg = toColor(map.colorBgContainer, QColor("#f5f5f5"));
-  style.disabledBorderColor = toColor(map.colorBorderSecondary, QColor("#e5e5e5"));
+  style.disabledBg = toColor(map.colorFillTertiary, QColor("#f5f5f5"));
+  style.disabledBorderColor = toColor(map.colorBorderDisabled, QColor("#d9d9d9"));
 
   style.metrics.font = input.baseFont;
   style.metrics.font.setPixelSize(std::max(12, qRound(map.fontSize)));
   style.metrics.height = std::max(24, qRound(map.controlHeight));
   style.metrics.borderRadius = std::max(0, qRound(map.borderRadius));
+  style.metrics.popupBorderRadius = std::max(0, qRound(map.borderRadiusLG));
+  style.metrics.optionBorderRadius = std::max(0, qRound(map.borderRadiusSM));
   style.metrics.borderWidth = std::max(1, qRound(map.lineWidth));
-  style.metrics.horizontalPadding = std::max(8, qRound(map.sizeMS));
+  style.metrics.horizontalPadding = std::max(8, qRound(map.sizeSM - map.lineWidth));
+  style.metrics.popupPadding = std::max(2, qRound(map.sizeXXS));
+  style.metrics.popupOffset = std::max(2, qRound(map.sizeXXS));
   style.metrics.popupMaxHeight = 256;
   style.metrics.optionHeight = std::max(24, qRound(map.controlHeight));
+  style.metrics.optionPaddingHorizontal = std::max(8, qRound(map.sizeSM));
   style.metrics.tagHeight = std::max(18, qRound(map.controlHeightSM));
-  style.metrics.iconSize = std::max(12, qRound(map.fontSize));
-  style.metrics.spacing = std::max(4, qRound(map.sizeXS));
+  style.metrics.iconSize = std::max(10, qRound(map.fontSizeSM));
+  style.metrics.spacing = std::max(4, qRound(map.sizeXXS * 1.5));
+
+  double optionLineHeight = map.lineHeight;
+  auto recomputeOptionPadding = [&style, &optionLineHeight]() {
+    const int fontPixelSize = style.metrics.font.pixelSize();
+    const double textHeight = static_cast<double>(std::max(1, fontPixelSize)) * optionLineHeight;
+    style.metrics.optionPaddingVertical =
+        std::max(0, qRound((style.metrics.optionHeight - textHeight) / 2.0));
+  };
+  recomputeOptionPadding();
 
   if (input.size == AdSelect::Size::Large) {
     style.metrics.height = std::max(style.metrics.height, qRound(map.controlHeightLG));
     style.metrics.optionHeight = std::max(style.metrics.optionHeight, qRound(map.controlHeightLG));
+    optionLineHeight = map.lineHeightLG;
   } else if (input.size == AdSelect::Size::Small) {
     style.metrics.height = std::max(24, qRound(map.controlHeightSM));
     style.metrics.optionHeight = std::max(24, qRound(map.controlHeightSM));
     style.metrics.font.setPixelSize(std::max(12, qRound(map.fontSizeSM)));
+    optionLineHeight = map.lineHeightSM;
   }
+  recomputeOptionPadding();
 
   if (input.variant == AdSelect::Variant::Filled) {
     style.selectorBg = toColor(map.colorFillTertiary, QColor("#f5f5f5"));
@@ -110,15 +127,11 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
     style.selectorBorderColor = errorColor;
     style.selectorHoverBorderColor = errorColor;
     style.selectorActiveBorderColor = errorColor;
-    style.optionSelectedColor = errorColor;
-    style.optionSelectedBg = toColor(map.colorErrorBg, QColor("#fff2f0"));
   } else if (input.status == AdSelect::Status::Warning) {
     const QColor warningColor = toColor(map.colorWarning, QColor("#faad14"));
     style.selectorBorderColor = warningColor;
     style.selectorHoverBorderColor = warningColor;
     style.selectorActiveBorderColor = warningColor;
-    style.optionSelectedColor = warningColor;
-    style.optionSelectedBg = toColor(map.colorWarningBg, QColor("#fffbe6"));
   }
 
   const AdSelect::ComponentTokens& tokens = input.componentTokens;
@@ -146,6 +159,7 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   if (tokens.iconSize.has_value()) {
     style.metrics.iconSize = std::max(10, tokens.iconSize.value());
   }
+  recomputeOptionPadding();
 
   style.selectorBg = resolveTokenColor(tokens.selectorBg, style.selectorBg);
   style.selectorBorderColor = resolveTokenColor(tokens.selectorBorderColor, style.selectorBorderColor);

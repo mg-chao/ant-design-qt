@@ -19,6 +19,9 @@
 #include <QMoveEvent>
 #include <QItemSelectionModel>
 #include <QPaintEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPen>
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScopedValueRollback>
@@ -88,6 +91,13 @@ detail::PopupPlacement toPopupPlacement(AdSelect::Placement placement) {
       return detail::PopupPlacement::TopRight;
   }
   return detail::PopupPlacement::BottomLeft;
+}
+
+QPainterPath roundedRectPath(const QRectF& rect, qreal radius) {
+  const qreal clampedRadius = std::clamp(radius, 0.0, std::min(rect.width(), rect.height()) / 2.0);
+  QPainterPath path;
+  path.addRoundedRect(rect, clampedRadius, clampedRadius);
+  return path;
 }
 
 }  // namespace
@@ -860,7 +870,120 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
 
 void AdSelect::paintEvent(QPaintEvent* event) {
   QWidget::paintEvent(event);
+  QPainter painter(this);
+  paintSelectorShell(painter);
   updateInteractionFocusOverlay();
+}
+
+QRectF AdSelect::selectorPaintRect() const {
+  if (!visualStyle_) {
+    return rect();
+  }
+
+  const qreal borderHalf = std::max<qreal>(0.0, visualStyle_->metrics.borderWidth / 2.0);
+  return rect().adjusted(borderHalf + 0.5, borderHalf + 0.5, -borderHalf - 0.5, -borderHalf - 0.5);
+}
+
+QColor AdSelect::resolveSelectorBgColor() const {
+  if (!visualStyle_) {
+    return QColor();
+  }
+
+  if (disabled()) {
+    return visualStyle_->selectorBg;
+  }
+  if (hasFocusWithin_ || open_) {
+    return visualStyle_->selectorActiveBg;
+  }
+  if (hovered_) {
+    return visualStyle_->selectorHoverBg;
+  }
+  return visualStyle_->selectorBg;
+}
+
+QColor AdSelect::resolveSelectorBorderColor() const {
+  if (!visualStyle_) {
+    return QColor();
+  }
+
+  if (disabled()) {
+    return visualStyle_->selectorBorderColor;
+  }
+  if (hasFocusWithin_ || open_) {
+    return visualStyle_->selectorActiveBorderColor;
+  }
+  if (hovered_) {
+    return visualStyle_->selectorHoverBorderColor;
+  }
+  return visualStyle_->selectorBorderColor;
+}
+
+qreal AdSelect::resolveSelectorRadius() const {
+  if (!visualStyle_) {
+    return 0.0;
+  }
+  if (variant_ == Variant::Underlined) {
+    return 0.0;
+  }
+  return std::max<qreal>(0.0, visualStyle_->metrics.borderRadius);
+}
+
+void AdSelect::paintSelectorShell(QPainter& painter) const {
+  if (!visualStyle_) {
+    return;
+  }
+
+  const QRectF shellRect = selectorPaintRect();
+  if (!shellRect.isValid() || shellRect.width() <= 0.0 || shellRect.height() <= 0.0) {
+    return;
+  }
+
+  const QColor background = resolveSelectorBgColor();
+  const QColor border = resolveSelectorBorderColor();
+  const qreal borderWidth = std::max<qreal>(0.0, visualStyle_->metrics.borderWidth);
+  const qreal radius = resolveSelectorRadius();
+
+  painter.save();
+  painter.setRenderHint(QPainter::Antialiasing, true);
+
+  const QPainterPath shellPath = roundedRectPath(shellRect, radius);
+  if (background.alpha() > 0) {
+    painter.fillPath(shellPath, background);
+  }
+
+  if (variant_ == Variant::Underlined) {
+    if (borderWidth > 0.0 && border.alpha() > 0) {
+      QPen underlinePen(border, borderWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin);
+      painter.setPen(underlinePen);
+      painter.setBrush(Qt::NoBrush);
+      const qreal y = shellRect.bottom();
+      painter.drawLine(QPointF(shellRect.left(), y), QPointF(shellRect.right(), y));
+    }
+  } else if (borderWidth > 0.0 && border.alpha() > 0) {
+    QPen borderPen(border, borderWidth, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
+    painter.setPen(borderPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(shellPath);
+  }
+
+  painter.restore();
+}
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+void AdSelect::enterEvent(QEnterEvent* event) {
+  QWidget::enterEvent(event);
+#else
+void AdSelect::enterEvent(QEvent* event) {
+  QWidget::enterEvent(event);
+#endif
+  hovered_ = true;
+  update();
+}
+
+void AdSelect::leaveEvent(QEvent* event) {
+  QWidget::leaveEvent(event);
+  hovered_ = false;
+  update();
 }
 
 void AdSelect::mousePressEvent(QMouseEvent* event) {
@@ -924,6 +1047,7 @@ void AdSelect::changeEvent(QEvent* event) {
     return;
   }
   if (event->type() == QEvent::Hide) {
+    hovered_ = false;
     stopInteractionFocusForOwner(this);
     return;
   }
@@ -933,10 +1057,14 @@ void AdSelect::changeEvent(QEvent* event) {
   }
   if (event->type() == QEvent::EnabledChange || event->type() == QEvent::PaletteChange ||
       event->type() == QEvent::FontChange) {
+    if (event->type() == QEvent::EnabledChange && disabled()) {
+      hovered_ = false;
+    }
     applyVisualStyle();
     updateDisplay();
     updateClearButton();
     updateSuffixVisual();
+    update();
   }
 }
 
@@ -1273,12 +1401,6 @@ void AdSelect::applyVisualStyle() {
   setMinimumHeight(visualStyle_->metrics.height);
   setMaximumHeight(visualStyle_->metrics.height);
 
-  const QString borderColor = (hasFocusWithin_ || open_) ? visualStyle_->selectorActiveBorderColor.name(QColor::HexArgb)
-                                                          : visualStyle_->selectorBorderColor.name(QColor::HexArgb);
-  const QString hoverBorderColor = visualStyle_->selectorHoverBorderColor.name(QColor::HexArgb);
-  const QString selectorBg = visualStyle_->selectorBg.name(QColor::HexArgb);
-  const QString hoverSelectorBg = visualStyle_->selectorHoverBg.name(QColor::HexArgb);
-  const QString activeSelectorBg = visualStyle_->selectorActiveBg.name(QColor::HexArgb);
   const QString textColor = visualStyle_->selectorTextColor.name(QColor::HexArgb);
   const QString placeholderColor = visualStyle_->placeholderColor.name(QColor::HexArgb);
   const QString prefixColor = visualStyle_->prefixColor.name(QColor::HexArgb);
@@ -1289,69 +1411,39 @@ void AdSelect::applyVisualStyle() {
   const bool openSingleDisplay =
       mode_ == Mode::Single && open_ && !isSearchEnabledForCurrentMode();
 
-  setProperty("focused", hasFocusWithin_ || open_);
-  setProperty("variant", static_cast<int>(variant_));
   setProperty("openSingle", openSingleDisplay);
 
   QString rootSheet = QStringLiteral(
-                          "QWidget#adselect-root {"
-                          "  background: %1;"
-                          "  border: %2px solid %3;"
-                          "  border-radius: %4px;"
-                          "}"
-                          "QWidget#adselect-root:hover {"
-                          "  border-color: %5;"
-                          "  background: %6;"
-                          "}"
-                          "QWidget#adselect-root[focused=\"true\"] {"
-                          "  border-color: %7;"
-                          "  background: %8;"
-                          "}"
-                          "QWidget#adselect-root[variant=\"%9\"] {"
-                          "  border-top: 0px;"
-                          "  border-left: 0px;"
-                          "  border-right: 0px;"
-                          "  border-radius: 0px;"
-                          "}"
                           "QLineEdit#adselect-input {"
                           "  border: none;"
                           "  background: transparent;"
-                          "  color: %10;"
-                          "  selection-background-color: %11;"
+                          "  color: %1;"
+                          "  selection-background-color: %2;"
                           "}"
                           "QLineEdit#adselect-input:disabled {"
-                          "  color: %12;"
+                          "  color: %3;"
                           "}"
                           "QLineEdit#adselect-input::placeholder {"
-                          "  color: %13;"
+                          "  color: %4;"
                           "}"
                           "QLabel#adselect-tags {"
-                          "  background: %14;"
-                          "  color: %15;"
+                          "  background: %5;"
+                          "  color: %6;"
                           "  border-radius: 4px;"
                           "  padding: 1px 6px;"
                           "}"
                           "QLabel#adselect-prefix {"
-                          "  color: %16;"
+                          "  color: %7;"
                           "}"
                           "QToolButton#adselect-suffix, QToolButton#adselect-clear {"
                           "  border: none;"
                           "  background: transparent;"
-                          "  color: %17;"
+                          "  color: %8;"
                           "  padding: 0px;"
                           "}"
                           "QToolButton#adselect-clear {"
-                          "  color: %18;"
+                          "  color: %9;"
                           "}")
-                          .arg(selectorBg)
-                          .arg(visualStyle_->metrics.borderWidth)
-                          .arg(borderColor)
-                          .arg(visualStyle_->metrics.borderRadius)
-                          .arg(hoverBorderColor)
-                          .arg(hoverSelectorBg)
-                          .arg(visualStyle_->selectorActiveBorderColor.name(QColor::HexArgb))
-                          .arg(activeSelectorBg)
-                          .arg(static_cast<int>(Variant::Underlined))
                           .arg(textColor)
                           .arg(visualStyle_->optionSelectedBg.name(QColor::HexArgb))
                           .arg(visualStyle_->disabledTextColor.name(QColor::HexArgb))
@@ -1362,9 +1454,6 @@ void AdSelect::applyVisualStyle() {
                           .arg(suffixColor)
                           .arg(clearColor);
 
-  if (variant_ == Variant::Borderless) {
-    rootSheet.append(QStringLiteral("QWidget#adselect-root { border-color: transparent; }"));
-  }
   rootSheet.append(
       QStringLiteral("QWidget#adselect-root[openSingle=\"true\"] QLineEdit#adselect-input {"
                      "  color: %1;"

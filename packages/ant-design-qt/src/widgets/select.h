@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QRectF>
 #include <QPointer>
 #include <QString>
 #include <QStringList>
@@ -21,6 +22,8 @@ class QLineEdit;
 class QListView;
 class QMoveEvent;
 class QPaintEvent;
+class QEnterEvent;
+class QPainter;
 class QToolButton;
 class QVBoxLayout;
 
@@ -319,6 +322,12 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  void enterEvent(QEnterEvent* event) override;
+#else
+  void enterEvent(QEvent* event) override;
+#endif
+  void leaveEvent(QEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void moveEvent(QMoveEvent* event) override;
@@ -372,6 +381,11 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   void openPopup();
   void setOpenInternal(bool value, bool emitSignal);
   void updateFocusState();
+  QRectF selectorPaintRect() const;
+  QColor resolveSelectorBgColor() const;
+  QColor resolveSelectorBorderColor() const;
+  qreal resolveSelectorRadius() const;
+  void paintSelectorShell(QPainter& painter) const;
   void updateInteractionFocusOverlay();
 
   QObject* popupOwnerObject() const override;
@@ -434,6 +448,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   OptionListModel* listModel_ = nullptr;
   QVector<ModelRow> rows_;
 
+  bool hovered_ = false;
   bool hasFocusWithin_ = false;
   bool suppressLineEditChange_ = false;
   bool applyingVisualStyle_ = false;

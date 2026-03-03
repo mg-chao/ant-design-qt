@@ -3,6 +3,7 @@
 #include "icons.h"
 #include "generated/icon_manifest.h"
 #include "menu_style.h"
+#include "popup_placement.h"
 #include "theme/theme.h"
 
 #include <QApplication>
@@ -206,14 +207,6 @@ QHash<QWidget*, SharedPopupHost*>& sharedPopupHosts() {
   return hosts;
 }
 
-QWidget* popupScopeWindowFor(const AdMenu* menu) {
-  if (!menu) {
-    return nullptr;
-  }
-  QWidget* scopeWindow = menu->window();
-  return scopeWindow ? scopeWindow : const_cast<AdMenu*>(menu);
-}
-
 void detachSharedPopupOwner(SharedPopupHost* host) {
   if (!host || !host->ownerMenu) {
     return;
@@ -374,7 +367,7 @@ void destroySharedPopupHost(QWidget* scopeWindow) {
 }
 
 SharedPopupHost* sharedPopupHostFor(const AdMenu* menu) {
-  QWidget* scopeWindow = popupScopeWindowFor(menu);
+  QWidget* scopeWindow = detail::resolvePopupScopeWindow(menu);
   if (!scopeWindow) {
     return nullptr;
   }
@@ -429,7 +422,7 @@ void bindSharedPopupOwner(SharedPopupHost* host, AdMenu* owner) {
 }
 
 SharedPopupHost* ensureSharedPopupHost(AdMenu* ownerMenu) {
-  QWidget* scopeWindow = popupScopeWindowFor(ownerMenu);
+  QWidget* scopeWindow = detail::resolvePopupScopeWindow(ownerMenu);
   if (!scopeWindow) {
     return nullptr;
   }
@@ -1667,7 +1660,7 @@ bool AdMenu::shouldShowPopupForEntry(const VisibleEntry& entry) const {
     return false;
   }
 
-  QWidget* scopeWindow = popupScopeWindowFor(this);
+  QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
   if (!scopeWindow) {
     return false;
   }
@@ -2804,52 +2797,38 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
 
   QPoint preferredPos;
   if (mode_ == Mode::Horizontal) {
-    const QPoint triggerTopLeft = mapTo(scopeWindow, triggerRect.topLeft());
-    QPoint downPos(triggerTopLeft.x() + horizontalPopupAlignOffset,
-                   triggerTopLeft.y() + triggerRect.height());
-    QPoint upPos(triggerTopLeft.x() + horizontalPopupAlignOffset,
-                 triggerTopLeft.y() - popupSize.height());
-    downPos += totalOffset;
-    upPos += totalOffset;
+    detail::PopupPlacementInput placementInput;
+    placementInput.anchorTopLeft =
+        mapTo(scopeWindow, triggerRect.topLeft()) + QPoint(horizontalPopupAlignOffset, 0);
+    placementInput.anchorSize = triggerRect.size();
+    placementInput.popupSize = popupSize;
+    placementInput.bounds = scopeWindow->rect();
+    placementInput.preferredPlacement = detail::PopupPlacement::BottomLeft;
+    placementInput.offset = totalOffset;
 
-    bool useUpPlacement = false;
-    if (downPos.y() + popupSize.height() > scopeWindow->rect().bottom() + 1 &&
-        upPos.y() >= scopeWindow->rect().top()) {
-      useUpPlacement = true;
-    }
+    auto placementResult = detail::resolvePopupPlacement(placementInput);
+    bool useUpPlacement = placementResult.placement == detail::PopupPlacement::TopLeft;
 
     if (popupLayout && horizontalPopupGap > 0) {
       const int topGap = useUpPlacement ? 0 : horizontalPopupGap;
       const int bottomGap = useUpPlacement ? horizontalPopupGap : 0;
       popupLayout->setContentsMargins(0, topGap, 0, bottomGap);
       popupSize = measurePopupSize();
-
-      downPos = QPoint(triggerTopLeft.x() + horizontalPopupAlignOffset,
-                       triggerTopLeft.y() + triggerRect.height());
-      upPos = QPoint(triggerTopLeft.x() + horizontalPopupAlignOffset,
-                     triggerTopLeft.y() - popupSize.height());
-      downPos += totalOffset;
-      upPos += totalOffset;
-
-      useUpPlacement = false;
-      if (downPos.y() + popupSize.height() > scopeWindow->rect().bottom() + 1 &&
-          upPos.y() >= scopeWindow->rect().top()) {
-        useUpPlacement = true;
-      }
+      placementInput.popupSize = popupSize;
+      placementResult = detail::resolvePopupPlacement(placementInput);
     }
-    preferredPos = useUpPlacement ? upPos : downPos;
+    preferredPos = placementResult.topLeft;
   } else {
-    const QPoint triggerTopLeft = mapTo(scopeWindow, triggerRect.topLeft());
-    QPoint rightPos(triggerTopLeft.x() + triggerRect.width(), triggerTopLeft.y());
-    QPoint leftPos(triggerTopLeft.x() - popupSize.width(), triggerTopLeft.y());
-    rightPos += totalOffset;
-    leftPos += totalOffset;
+    detail::PopupPlacementInput placementInput;
+    placementInput.anchorTopLeft = mapTo(scopeWindow, triggerRect.topLeft());
+    placementInput.anchorSize = triggerRect.size();
+    placementInput.popupSize = popupSize;
+    placementInput.bounds = scopeWindow->rect();
+    placementInput.preferredPlacement = detail::PopupPlacement::RightTop;
+    placementInput.offset = totalOffset;
 
-    bool useLeftPlacement = false;
-    if (rightPos.x() + popupSize.width() > scopeWindow->rect().right() + 1 &&
-        leftPos.x() >= scopeWindow->rect().left()) {
-      useLeftPlacement = true;
-    }
+    auto placementResult = detail::resolvePopupPlacement(placementInput);
+    bool useLeftPlacement = placementResult.placement == detail::PopupPlacement::LeftTop;
 
     if (popupLayout && sidePopupGap > 0) {
       // Match antd submenu placement classes:
@@ -2859,31 +2838,12 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
       const int rightGap = useLeftPlacement ? sidePopupGap : 0;
       popupLayout->setContentsMargins(leftGap, 0, rightGap, 0);
       popupSize = measurePopupSize();
-
-      rightPos = QPoint(triggerTopLeft.x() + triggerRect.width(), triggerTopLeft.y());
-      leftPos = QPoint(triggerTopLeft.x() - popupSize.width(), triggerTopLeft.y());
-      rightPos += totalOffset;
-      leftPos += totalOffset;
-
-      useLeftPlacement = false;
-      if (rightPos.x() + popupSize.width() > scopeWindow->rect().right() + 1 &&
-          leftPos.x() >= scopeWindow->rect().left()) {
-        useLeftPlacement = true;
-      }
+      placementInput.popupSize = popupSize;
+      placementResult = detail::resolvePopupPlacement(placementInput);
     }
 
-    preferredPos = useLeftPlacement ? leftPos : rightPos;
+    preferredPos = placementResult.topLeft;
   }
-
-  // Final clamp keeps popup fully inside the host window content rect.
-  const QRect bounds = scopeWindow->rect();
-  const int minX = bounds.left();
-  const int minY = bounds.top();
-  const int maxX = std::max(minX, bounds.right() - popupSize.width() + 1);
-  const int maxY = std::max(minY, bounds.bottom() - popupSize.height() + 1);
-
-  preferredPos.setX(std::clamp(preferredPos.x(), minX, maxX));
-  preferredPos.setY(std::clamp(preferredPos.y(), minY, maxY));
 
   popupRecord.popup->move(preferredPos);
 }

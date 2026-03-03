@@ -1,6 +1,7 @@
 ﻿#include "select.h"
 
 #include "icons.h"
+#include "popup_placement.h"
 #include "select_style.h"
 #include "theme/theme.h"
 
@@ -9,7 +10,6 @@
 #include <QEvent>
 #include <QFontMetrics>
 #include <QFrame>
-#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -20,12 +20,10 @@
 #include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScopedValueRollback>
-#include <QScreen>
 #include <QSet>
 #include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
-#include <QWindow>
 
 #include <algorithm>
 #include <utility>
@@ -35,6 +33,29 @@ namespace adqt::widgets {
 namespace {
 
 namespace outlined_icons = adqt::icons::outlined;
+
+QPoint mouseEventGlobalPos(const QMouseEvent* event) {
+  if (!event) {
+    return QPoint();
+  }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  return event->globalPosition().toPoint();
+#else
+  return event->globalPos();
+#endif
+}
+
+QRect widgetGlobalRect(const QWidget* widget) {
+  if (!widget) {
+    return QRect();
+  }
+  return QRect(widget->mapToGlobal(QPoint(0, 0)), widget->size());
+}
+
+bool widgetContainsGlobalPos(const QWidget* widget, const QPoint& globalPos) {
+  const QRect globalRect = widgetGlobalRect(widget);
+  return globalRect.isValid() && globalRect.contains(globalPos);
+}
 
 QStringList uniqueStringList(const QStringList& values) {
   QStringList out;
@@ -62,6 +83,20 @@ bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconS
 
 bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
   return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
+}
+
+detail::PopupPlacement toPopupPlacement(AdSelect::Placement placement) {
+  switch (placement) {
+    case AdSelect::Placement::BottomLeft:
+      return detail::PopupPlacement::BottomLeft;
+    case AdSelect::Placement::BottomRight:
+      return detail::PopupPlacement::BottomRight;
+    case AdSelect::Placement::TopLeft:
+      return detail::PopupPlacement::TopLeft;
+    case AdSelect::Placement::TopRight:
+      return detail::PopupPlacement::TopRight;
+  }
+  return detail::PopupPlacement::BottomLeft;
 }
 
 }  // namespace
@@ -260,6 +295,7 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 }
 
 AdSelect::~AdSelect() {
+  unbindPopupScopeEvents();
   if (popup_) {
     popup_->hide();
     popup_->deleteLater();
@@ -729,6 +765,35 @@ QSize AdSelect::minimumSizeHint() const {
 }
 
 bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
+  if (!watched || !event) {
+    return QWidget::eventFilter(watched, event);
+  }
+
+  if (open_) {
+    const bool watchedScopeWindow = popupScopeWindow_ && watched == popupScopeWindow_.data();
+    const bool watchedApp = qApp && watched == qApp;
+
+    if ((watchedScopeWindow || watchedApp) && event->type() == QEvent::MouseButtonPress) {
+      const auto* mouseEvent = static_cast<QMouseEvent*>(event);
+      const QPoint clickGlobalPos = mouseEventGlobalPos(mouseEvent);
+      const bool clickInScope =
+          popupScopeWindow_ ? widgetContainsGlobalPos(popupScopeWindow_.data(), clickGlobalPos) : true;
+      const bool clickInSelect = widgetContainsGlobalPos(this, clickGlobalPos);
+      const bool clickInPopup = widgetContainsGlobalPos(popup_, clickGlobalPos);
+      if (clickInScope && !clickInSelect && !clickInPopup) {
+        closePopup();
+      }
+    }
+
+    if (watchedScopeWindow) {
+      if (event->type() == QEvent::WindowDeactivate || event->type() == QEvent::Hide) {
+        closePopup();
+      } else if (event->type() == QEvent::Resize || event->type() == QEvent::Move) {
+        syncPopupGeometry();
+      }
+    }
+  }
+
   if (watched == lineEdit_) {
     if (event->type() == QEvent::MouseButtonPress) {
       if (!disabled() && !open_) {
@@ -801,6 +866,7 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
         updateDisplay();
         updateSuffixVisual();
       }
+      unbindPopupScopeEvents();
       hasFocusWithin_ = false;
       updateFocusState();
     }
@@ -1677,7 +1743,8 @@ void AdSelect::ensurePopup() {
     return;
   }
 
-  popup_ = new QFrame(nullptr, Qt::Popup | Qt::FramelessWindowHint);
+  QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
+  popup_ = new QFrame(scopeWindow, Qt::Popup | Qt::FramelessWindowHint);
   popup_->setObjectName(QStringLiteral("adselect-popup"));
   popup_->installEventFilter(this);
 
@@ -1756,27 +1823,50 @@ void AdSelect::syncPopupGeometry() {
   popupW = std::max(120, popupW);
   popup_->resize(popupW, popup_->sizeHint().height());
 
-  QPoint pos;
-  if (placement_ == Placement::BottomLeft) {
-    pos = mapToGlobal(QPoint(0, height()));
-  } else if (placement_ == Placement::BottomRight) {
-    pos = mapToGlobal(QPoint(width(), height()));
-    pos.rx() -= popup_->width();
-  } else if (placement_ == Placement::TopLeft) {
-    pos = mapToGlobal(QPoint(0, 0));
-    pos.ry() -= popup_->height();
-  } else {
-    pos = mapToGlobal(QPoint(width(), 0));
-    pos.rx() -= popup_->width();
-    pos.ry() -= popup_->height();
+  detail::PopupPlacementInput placementInput;
+  placementInput.anchorTopLeft = mapToGlobal(QPoint(0, 0));
+  placementInput.anchorSize = QSize(width(), height());
+  placementInput.popupSize = popup_->size();
+  placementInput.bounds = detail::popupBoundsInGlobal(detail::resolvePopupScopeWindow(this));
+  placementInput.preferredPlacement = toPopupPlacement(placement_);
+
+  const detail::PopupPlacementOutput placementOutput =
+      detail::resolvePopupPlacement(placementInput);
+  popup_->move(placementOutput.topLeft);
+}
+
+void AdSelect::bindPopupScopeEvents() {
+  QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
+
+  if (popup_ && scopeWindow && popup_->parentWidget() != scopeWindow) {
+    popup_->setParent(scopeWindow, popup_->windowFlags());
   }
 
-  const QRect bounds = popupScreenBounds();
-  int x = pos.x();
-  int y = pos.y();
-  x = std::clamp(x, bounds.left(), bounds.right() - popup_->width() + 1);
-  y = std::clamp(y, bounds.top(), bounds.bottom() - popup_->height() + 1);
-  popup_->move(QPoint(x, y));
+  if (popupScopeWindow_ && popupScopeWindow_.data() != scopeWindow) {
+    popupScopeWindow_->removeEventFilter(this);
+    popupScopeWindow_.clear();
+  }
+
+  if (scopeWindow) {
+    scopeWindow->removeEventFilter(this);
+    scopeWindow->installEventFilter(this);
+    popupScopeWindow_ = scopeWindow;
+  }
+
+  if (qApp) {
+    qApp->removeEventFilter(this);
+    qApp->installEventFilter(this);
+  }
+}
+
+void AdSelect::unbindPopupScopeEvents() {
+  if (popupScopeWindow_) {
+    popupScopeWindow_->removeEventFilter(this);
+    popupScopeWindow_.clear();
+  }
+  if (qApp) {
+    qApp->removeEventFilter(this);
+  }
 }
 
 void AdSelect::closePopup() {
@@ -1788,6 +1878,7 @@ void AdSelect::closePopup() {
   if (popup_) {
     popup_->hide();
   }
+  unbindPopupScopeEvents();
   if (autoClearSearchValue_ && isSearchEnabledForCurrentMode()) {
     setSearchText(QString());
     if (lineEdit_) {
@@ -1808,6 +1899,7 @@ void AdSelect::openPopup() {
     return;
   }
   ensurePopup();
+  bindPopupScopeEvents();
   refreshRows();
   rebuildPopupExtraContent();
   syncPopupGeometry();
@@ -1836,20 +1928,6 @@ void AdSelect::openPopup() {
 void AdSelect::setOpenInternal(bool value, bool emitSignal) {
   Q_UNUSED(value)
   Q_UNUSED(emitSignal)
-}
-
-QRect AdSelect::popupScreenBounds() const {
-  QScreen* screen = nullptr;
-  if (window() && window()->windowHandle()) {
-    screen = window()->windowHandle()->screen();
-  }
-  if (!screen) {
-    screen = QGuiApplication::screenAt(mapToGlobal(rect().center()));
-  }
-  if (!screen) {
-    screen = QGuiApplication::primaryScreen();
-  }
-  return screen ? screen->availableGeometry() : QRect(0, 0, 1920, 1080);
 }
 
 void AdSelect::updateFocusState() {

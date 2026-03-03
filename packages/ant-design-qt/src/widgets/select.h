@@ -363,10 +363,11 @@ class AdSelect final : public QWidget {
   void ensurePopup();
   void rebuildPopupExtraContent();
   void syncPopupGeometry();
+  void bindPopupScopeEvents();
+  void unbindPopupScopeEvents();
   void closePopup();
   void openPopup();
   void setOpenInternal(bool value, bool emitSignal);
-  QRect popupScreenBounds() const;
   void updateFocusState();
 
   Mode mode_ = Mode::Single;
@@ -415,6 +416,7 @@ class AdSelect final : public QWidget {
   QToolButton* suffixButton_ = nullptr;
 
   QFrame* popup_ = nullptr;
+  QPointer<QWidget> popupScopeWindow_;
   QVBoxLayout* popupLayout_ = nullptr;
   QListView* listView_ = nullptr;
   QWidget* popupExtraContent_ = nullptr;

@@ -378,7 +378,8 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   void applyVisualStyle();
   void refreshRows();
   QVector<int> filteredOptionIndexes() const;
-  void syncCurrentListRow();
+  void syncCurrentListRow(const QString& preferredValue = QString(),
+                          bool preserveScrollPosition = false);
   bool addTagValue(const QString& value);
   void ensureTagOptionExists(const QString& value);
   void consumeTokenizedInput(const QString& text);
@@ -417,6 +418,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   bool open_ = false;
   bool searchEnabled_ = false;
   QString searchText_;
+  QString inputMethodPreeditText_;
   int maxCount_ = -1;
   int maxTagCount_ = -1;
   bool responsiveMaxTagCount_ = false;
@@ -469,6 +471,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   bool hasFocusWithin_ = false;
   bool suppressLineEditChange_ = false;
   bool applyingVisualStyle_ = false;
+  bool preservePopupScrollOnRefresh_ = false;
 };
 
 }  // namespace adqt::widgets

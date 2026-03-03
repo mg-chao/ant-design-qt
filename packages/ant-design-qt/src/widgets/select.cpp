@@ -14,6 +14,7 @@
 #include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QInputMethodEvent>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QLabel>
@@ -28,6 +29,7 @@
 #include <QPen>
 #include <QRegularExpression>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QStyle>
@@ -47,6 +49,7 @@ namespace outlined_icons = adqt::icons::outlined;
 namespace filled_icons = adqt::icons::filled;
 namespace twotone_icons = adqt::icons::twotone;
 constexpr char kSuffixSpinnerFrameKey[] = "AdSelect.SuffixSpinnerFrame";
+constexpr char kShowLayoutRefreshKey[] = "AdSelect.ShowLayoutRefresh";
 
 QRect widgetGlobalRect(const QWidget* widget) {
   if (!widget) {
@@ -81,7 +84,8 @@ QString escapedForRegex(const QString& text) {
 
 bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
   return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.primary == rhs.primary && lhs.secondary == rhs.secondary;
+         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
+         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
 }
 
 bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
@@ -171,6 +175,23 @@ bool setWidgetFixedHeightIfChanged(QWidget* widget, int height) {
   return changed;
 }
 
+bool resetWidgetHeightConstraintsIfChanged(QWidget* widget) {
+  if (!widget) {
+    return false;
+  }
+
+  bool changed = false;
+  if (widget->minimumHeight() != 0) {
+    widget->setMinimumHeight(0);
+    changed = true;
+  }
+  if (widget->maximumHeight() != QWIDGETSIZE_MAX) {
+    widget->setMaximumHeight(QWIDGETSIZE_MAX);
+    changed = true;
+  }
+  return changed;
+}
+
 bool setWidgetFixedWidthIfChanged(QWidget* widget, int width) {
   if (!widget) {
     return false;
@@ -249,6 +270,53 @@ QPainterPath roundedRectPath(const QRectF& rect, qreal radius) {
   const qreal clampedRadius = std::clamp(radius, 0.0, std::min(rect.width(), rect.height()) / 2.0);
   QPainterPath path;
   path.addRoundedRect(rect, clampedRadius, clampedRadius);
+  return path;
+}
+
+QPainterPath roundedRectPath(const QRectF& rect,
+                             qreal topLeft,
+                             qreal topRight,
+                             qreal bottomRight,
+                             qreal bottomLeft) {
+  const qreal w = std::max(rect.width(), 0.0);
+  const qreal h = std::max(rect.height(), 0.0);
+  const qreal maxRadius = std::min(w, h) / 2.0;
+
+  topLeft = std::clamp(topLeft, 0.0, maxRadius);
+  topRight = std::clamp(topRight, 0.0, maxRadius);
+  bottomRight = std::clamp(bottomRight, 0.0, maxRadius);
+  bottomLeft = std::clamp(bottomLeft, 0.0, maxRadius);
+
+  const qreal left = rect.left();
+  const qreal top = rect.top();
+  const qreal right = left + rect.width();
+  const qreal bottom = top + rect.height();
+
+  QPainterPath path;
+  path.moveTo(left + topLeft, top);
+  path.lineTo(right - topRight, top);
+  if (topRight > 0.0) {
+    path.arcTo(QRectF(right - 2.0 * topRight, top, 2.0 * topRight, 2.0 * topRight), 90.0, -90.0);
+  }
+  path.lineTo(right, bottom - bottomRight);
+  if (bottomRight > 0.0) {
+    path.arcTo(QRectF(right - 2.0 * bottomRight,
+                      bottom - 2.0 * bottomRight,
+                      2.0 * bottomRight,
+                      2.0 * bottomRight),
+               0.0,
+               -90.0);
+  }
+  path.lineTo(left + bottomLeft, bottom);
+  if (bottomLeft > 0.0) {
+    path.arcTo(QRectF(left, bottom - 2.0 * bottomLeft, 2.0 * bottomLeft, 2.0 * bottomLeft), 270.0,
+               -90.0);
+  }
+  path.lineTo(left, top + topLeft);
+  if (topLeft > 0.0) {
+    path.arcTo(QRectF(left, top, 2.0 * topLeft, 2.0 * topLeft), 180.0, -90.0);
+  }
+  path.closeSubpath();
   return path;
 }
 
@@ -467,11 +535,16 @@ class TagChipWidget final : public QWidget {
     setAutoFillBackground(false);
   }
 
-  void setVisualStyle(const QColor& background, const QColor& borderColor, int borderRadius, int borderWidth) {
+  void setVisualStyle(const QColor& background,
+                      const QColor& borderColor,
+                      int borderRadius,
+                      int borderWidth,
+                      int blockInset) {
     const int normalizedRadius = std::max(0, borderRadius);
     const int normalizedBorderWidth = std::max(0, borderWidth);
+    const int normalizedBlockInset = std::max(0, blockInset);
     if (background_ == background && borderColor_ == borderColor && borderRadius_ == normalizedRadius &&
-        borderWidth_ == normalizedBorderWidth) {
+        borderWidth_ == normalizedBorderWidth && blockInset_ == normalizedBlockInset) {
       return;
     }
 
@@ -479,19 +552,25 @@ class TagChipWidget final : public QWidget {
     borderColor_ = borderColor;
     borderRadius_ = normalizedRadius;
     borderWidth_ = normalizedBorderWidth;
+    blockInset_ = normalizedBlockInset;
     update();
   }
 
- protected:
+  protected:
   void paintEvent(QPaintEvent* event) override {
     Q_UNUSED(event)
 
+    const int safeBlockInset = std::clamp(blockInset_, 0, std::max(0, height() / 2));
     const qreal borderWidth =
         (borderColor_.isValid() && borderColor_.alpha() > 0 && borderWidth_ > 0)
             ? static_cast<qreal>(borderWidth_)
             : 0.0;
     const qreal inset = borderWidth > 0.0 ? borderWidth * 0.5 : 0.0;
-    const QRectF chipRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
+    const QRectF chipRect =
+        QRectF(rect()).adjusted(inset,
+                                inset + static_cast<qreal>(safeBlockInset),
+                                -inset,
+                                -inset - static_cast<qreal>(safeBlockInset));
     if (!chipRect.isValid()) {
       return;
     }
@@ -516,6 +595,7 @@ class TagChipWidget final : public QWidget {
   QColor borderColor_;
   int borderRadius_ = 0;
   int borderWidth_ = 0;
+  int blockInset_ = 0;
 };
 
 class AdSelect::OptionListModel final : public QAbstractListModel {
@@ -816,6 +896,8 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
       emptyIconStyle.hasPrimary = true;
       emptyIconStyle.secondary = style.emptyContentColor;
       emptyIconStyle.hasSecondary = true;
+      emptyIconStyle.tertiary = style.emptyShadowColor;
+      emptyIconStyle.hasTertiary = true;
       const adqt::icons::IconToken emptyIcon = twotone_icons::EmptySimple(emptyIconStyle);
       const qreal dpr = owner_->devicePixelRatioF();
       const QPixmap iconPixmap =
@@ -840,10 +922,35 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
     }
 
     if (hasBackground) {
-      const QRectF backgroundRect(itemOption.rect);
+      QRectF backgroundRect(itemOption.rect);
       if (backgroundRect.isValid()) {
         if (drawRoundedBackground) {
-          painter->fillPath(roundedRectPath(backgroundRect, optionRadius), background);
+          qreal topLeftRadius = static_cast<qreal>(optionRadius);
+          qreal topRightRadius = static_cast<qreal>(optionRadius);
+          qreal bottomRightRadius = static_cast<qreal>(optionRadius);
+          qreal bottomLeftRadius = static_cast<qreal>(optionRadius);
+          if (optionSelected) {
+            const bool hasSelectedPrev = rowHasSelectedOption(index.row() - 1);
+            const bool hasSelectedNext = rowHasSelectedOption(index.row() + 1);
+            if (hasSelectedPrev) {
+              topLeftRadius = 0.0;
+              topRightRadius = 0.0;
+              // Overlap by half pixel to avoid anti-aliased seams between joined rows.
+              backgroundRect.adjust(0.0, -0.5, 0.0, 0.0);
+            }
+            if (hasSelectedNext) {
+              bottomRightRadius = 0.0;
+              bottomLeftRadius = 0.0;
+              // Overlap by half pixel to avoid anti-aliased seams between joined rows.
+              backgroundRect.adjust(0.0, 0.0, 0.0, 0.5);
+            }
+          }
+          painter->fillPath(roundedRectPath(backgroundRect,
+                                            topLeftRadius,
+                                            topRightRadius,
+                                            bottomRightRadius,
+                                            bottomLeftRadius),
+                            background);
         } else {
           painter->fillRect(backgroundRect.toAlignedRect(), background);
         }
@@ -910,6 +1017,19 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
   }
 
  private:
+  bool rowHasSelectedOption(int row) const {
+    if (!owner_ || row < 0 || row >= owner_->rows_.size()) {
+      return false;
+    }
+    const AdSelect::ModelRow& modelRow = owner_->rows_.at(row);
+    if (modelRow.header || modelRow.empty || modelRow.optionIndex < 0 ||
+        modelRow.optionIndex >= owner_->options_.size()) {
+      return false;
+    }
+    const Option& modelOption = owner_->options_.at(modelRow.optionIndex);
+    return owner_->isValueSelected(modelOption.value);
+  }
+
   QPointer<AdSelect> owner_;
 };
 
@@ -1071,6 +1191,7 @@ void AdSelect::setMode(Mode value) {
 
   enforceMaxCount();
   updateInputMode();
+  applyVisualStyle();
   refreshRows();
   updateDisplay();
   updateClearButton();
@@ -1185,6 +1306,9 @@ QString AdSelect::searchText() const { return searchText_; }
 void AdSelect::setSearchText(const QString& value) {
   if (searchText_ == value) {
     return;
+  }
+  if (!inputMethodPreeditText_.isEmpty()) {
+    inputMethodPreeditText_.clear();
   }
   searchText_ = value;
   emit searchTextChanged(searchText_);
@@ -1564,6 +1688,20 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
       if (!open_) {
         updateFocusState();
       }
+      if (mode_ != Mode::Single && !inputMethodPreeditText_.isEmpty()) {
+        inputMethodPreeditText_.clear();
+        updateDisplay();
+      }
+    } else if (event->type() == QEvent::InputMethod) {
+      if (mode_ != Mode::Single) {
+        const auto* inputMethodEvent = static_cast<const QInputMethodEvent*>(event);
+        const QString preeditText =
+            inputMethodEvent ? inputMethodEvent->preeditString() : QString();
+        if (inputMethodPreeditText_ != preeditText) {
+          inputMethodPreeditText_ = preeditText;
+          updateDisplay();
+        }
+      }
     } else if (event->type() == QEvent::KeyPress) {
       auto* keyEvent = static_cast<QKeyEvent*>(event);
       if (lineEdit_->isReadOnly() && keyEvent->matches(QKeySequence::SelectAll)) {
@@ -1797,8 +1935,15 @@ void AdSelect::mousePressEvent(QMouseEvent* event) {
       } else {
         openPopup();
       }
-    } else if (!open_) {
-      openPopup();
+    } else {
+      // Keep Ant Design selector behavior: clicking selector content should
+      // always activate the input, even when dropdown is already open.
+      if (lineEdit_ && !lineEdit_->hasFocus()) {
+        lineEdit_->setFocus(Qt::MouseFocusReason);
+      }
+      if (!open_) {
+        openPopup();
+      }
     }
   }
   QWidget::mousePressEvent(event);
@@ -1853,6 +1998,7 @@ void AdSelect::changeEvent(QEvent* event) {
     return;
   }
   if (event->type() == QEvent::Hide) {
+    detail::cancelTimingTask(this, QString::fromLatin1(kShowLayoutRefreshKey));
     hovered_ = false;
     clearHovered_ = false;
     updateClearButton();
@@ -1861,6 +2007,16 @@ void AdSelect::changeEvent(QEvent* event) {
   }
   if (event->type() == QEvent::Show) {
     updateInteractionFocusOverlay();
+    if (mode_ != Mode::Single || responsiveMaxTagCount_) {
+      detail::deferTimingTask(this, QString::fromLatin1(kShowLayoutRefreshKey), [this]() {
+        if (!isVisible()) {
+          return;
+        }
+        updateDisplay();
+        updateClearButton();
+        updateAccessoryGeometry();
+      });
+    }
     return;
   }
   if (event->type() == QEvent::EnabledChange || event->type() == QEvent::PaletteChange ||
@@ -1983,19 +2139,16 @@ int AdSelect::responsiveVisibleTagCount(const QStringList& labels, int available
       std::max(8, visualStyle_ ? (visualStyle_->metrics.iconSize - 2) : 10);
   const int interTagGap =
       std::max(2, visualStyle_ ? visualStyle_->metrics.tagItemGap : 4);
-
   int usedWidth = 0;
   int count = 0;
   for (const QString& label : labels) {
     const int width = fm.horizontalAdvance(label) + tagPaddingStart + tagPaddingEnd +
                       removeIconWidth + tagInnerGap;
-    if (count > 0) {
-      usedWidth += interTagGap;
-    }
-    if (count > 0 && usedWidth + width > availableWidth) {
+    const int gap = count > 0 ? interTagGap : 0;
+    if (count > 0 && usedWidth + gap + width > availableWidth) {
       break;
     }
-    usedWidth += width;
+    usedWidth += gap + width;
     ++count;
   }
   return std::max(1, count);
@@ -2050,10 +2203,14 @@ void AdSelect::rebuildTagWidgets() {
   }
   visibleCount = std::clamp(visibleCount, 0, static_cast<int>(labels.size()));
   const int hiddenCount = labels.size() - visibleCount;
+  const bool hasPrefix = prefixLabel_ && prefixLabel_->isVisible();
 
   const int tagHeight = std::max(16, visualStyle_ ? visualStyle_->metrics.tagHeight : 20);
   const int tagRadius = std::max(0, visualStyle_ ? visualStyle_->metrics.tagBorderRadius : 4);
   const int tagBorderWidth = std::max(0, visualStyle_ ? visualStyle_->metrics.borderWidth : 1);
+  const int tagItemMargin =
+      std::max(0, visualStyle_ ? visualStyle_->metrics.tagItemMargin : 2);
+  const int tagOuterHeight = std::max(1, tagHeight + tagItemMargin * 2);
   const int tagPaddingStart =
       std::max(4, visualStyle_ ? visualStyle_->metrics.tagPaddingInlineStart : 8);
   const int tagPaddingEnd =
@@ -2071,8 +2228,10 @@ void AdSelect::rebuildTagWidgets() {
 
   const auto buildTag = [this,
                          tagHeight,
+                         tagOuterHeight,
                          tagRadius,
                          tagBorderWidth,
+                         tagItemMargin,
                          tagPaddingStart,
                          tagPaddingEnd,
                          tagGap,
@@ -2081,23 +2240,24 @@ void AdSelect::rebuildTagWidgets() {
                          tagBorderColor,
                          tagTextColor,
                          disabledTextColor,
-                         removeColor,
-                         removeHoverColor](const QString& text,
-                                           const QString& value,
-                                           bool removable) {
+                          removeColor,
+                          removeHoverColor](const QString& text,
+                                            const QString& value,
+                                            bool removable) {
     auto* chip = new TagChipWidget(tagsContainer_);
     chip->setObjectName(QStringLiteral("adselect-tag-item"));
     chip->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    setWidgetFixedHeightIfChanged(chip, tagHeight);
+    setWidgetFixedHeightIfChanged(chip, tagOuterHeight);
 
     auto* chipLayout = new QHBoxLayout(chip);
-    chipLayout->setContentsMargins(tagPaddingStart, 0, tagPaddingEnd, 0);
+    chipLayout->setContentsMargins(tagPaddingStart, tagItemMargin, tagPaddingEnd, tagItemMargin);
     chipLayout->setSpacing(tagGap);
 
     auto* label = new QLabel(text, chip);
     label->setObjectName(QStringLiteral("adselect-tag-text"));
-    label->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    label->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    setWidgetFixedHeightIfChanged(label, std::max(1, tagHeight - tagBorderWidth * 2));
     chipLayout->addWidget(label);
 
     QPalette chipPalette = chip->palette();
@@ -2111,7 +2271,7 @@ void AdSelect::rebuildTagWidgets() {
     labelPalette.setColor(QPalette::Disabled, QPalette::WindowText, disabledTextColor);
     label->setPalette(labelPalette);
 
-    chip->setVisualStyle(tagBg, tagBorderColor, tagRadius, tagBorderWidth);
+    chip->setVisualStyle(tagBg, tagBorderColor, tagRadius, tagBorderWidth, tagItemMargin);
 
     setWidgetCursorIfChanged(chip, selectorCursorShape());
     setWidgetCursorIfChanged(label, selectorCursorShape());
@@ -2153,6 +2313,7 @@ void AdSelect::rebuildTagWidgets() {
         if (value.isEmpty() || disabled()) {
           return;
         }
+        const bool shouldRestoreInputFocus = open_ && lineEdit_ && !lineEdit_->isReadOnly();
         const int index = values_.indexOf(value);
         if (index < 0) {
           return;
@@ -2164,6 +2325,9 @@ void AdSelect::rebuildTagWidgets() {
         refreshRows();
         updateDisplay();
         updateClearButton();
+        if (shouldRestoreInputFocus && lineEdit_ && !lineEdit_->hasFocus()) {
+          lineEdit_->setFocus(Qt::MouseFocusReason);
+        }
       });
       chipLayout->addWidget(removeButton, 0, Qt::AlignVCenter);
     }
@@ -2171,25 +2335,28 @@ void AdSelect::rebuildTagWidgets() {
     tagsLayout_->addWidget(chip);
   };
 
+  bool hasRenderedTag = false;
   for (int i = 0; i < visibleCount && i < labels.size() && i < values_.size(); ++i) {
     buildTag(labels.at(i), values_.at(i), true);
+    hasRenderedTag = true;
   }
   if (hiddenCount > 0) {
     buildTag(QStringLiteral("+%1...").arg(hiddenCount), QString(), false);
-  }
-
-  const bool hasPrefix = prefixLabel_ && prefixLabel_->isVisible();
-  if (!hasPrefix && visibleCount == 0 && hiddenCount == 0 && visualStyle_) {
-    auto* spacer = new QWidget(tagsContainer_);
-    spacer->setObjectName(QStringLiteral("adselect-tag-leading-spacer"));
-    spacer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    spacer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    spacer->setFixedWidth(std::max(0, visualStyle_->metrics.multipleItemPaddingHorizontal));
-    spacer->setFixedHeight(std::max(1, tagHeight));
-    tagsLayout_->addWidget(spacer);
+    hasRenderedTag = true;
   }
 
   if (lineEdit_ && lineEdit_->parentWidget() == tagsContainer_) {
+    if (!hasPrefix && !hasRenderedTag && visualStyle_) {
+      auto* spacer = new QWidget(tagsContainer_);
+      spacer->setObjectName(QStringLiteral("adselect-tag-leading-spacer"));
+      spacer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+      spacer->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+      const int leadingInset = std::max(0, visualStyle_->metrics.multipleItemPaddingHorizontal);
+      const int itemGap = std::max(0, tagsLayout_->spacing());
+      spacer->setFixedWidth(std::max(0, leadingInset - itemGap));
+      spacer->setFixedHeight(std::max(1, tagOuterHeight));
+      tagsLayout_->addWidget(spacer);
+    }
     tagsLayout_->addWidget(lineEdit_);
   }
 
@@ -2367,18 +2534,21 @@ void AdSelect::updateDisplay() {
   suppressLineEditChange_ = true;
 
   if (mode_ == Mode::Single) {
+    if (!inputMethodPreeditText_.isEmpty()) {
+      inputMethodPreeditText_.clear();
+    }
     clearTagWidgets();
     tagsContainer_->setVisible(false);
     tagsContainer_->setToolTip(QString());
     const QString label = value_.isEmpty() ? QString() : fallbackSelectedLabel(value_);
-    if (open_ && isSearchEnabledForCurrentMode()) {
-      lineEdit_->setText(searchText_);
-    } else {
-      lineEdit_->setText(label);
+    const QString targetText = (open_ && isSearchEnabledForCurrentMode()) ? searchText_ : label;
+    if (lineEdit_->text() != targetText) {
+      lineEdit_->setText(targetText);
     }
     lineEdit_->setPlaceholderText(placeholder_);
     lineEdit_->setToolTip(label);
     lineEdit_->setTextMargins(0, 0, 0, 0);
+    resetWidgetHeightConstraintsIfChanged(lineEdit_);
     if (placeholderLabel_) {
       placeholderLabel_->setVisible(false);
     }
@@ -2386,21 +2556,42 @@ void AdSelect::updateDisplay() {
     rebuildTagWidgets();
 
     if (open_) {
-      lineEdit_->setText(searchText_);
+      if (lineEdit_->text() != searchText_) {
+        lineEdit_->setText(searchText_);
+      }
     } else {
-      lineEdit_->clear();
+      if (!inputMethodPreeditText_.isEmpty()) {
+        inputMethodPreeditText_.clear();
+      }
+      if (!lineEdit_->text().isEmpty()) {
+        lineEdit_->clear();
+      }
     }
     lineEdit_->setPlaceholderText(QString());
     lineEdit_->setToolTip(QString());
     lineEdit_->setTextMargins(0, 0, 0, 0);
     const QFontMetrics inputMetrics(lineEdit_->font());
     const QString inputText = lineEdit_->text();
+    QString effectiveInputText = inputText;
+    if (!inputMethodPreeditText_.isEmpty()) {
+      const qsizetype cursorPosition =
+          std::clamp(static_cast<qsizetype>(lineEdit_->cursorPosition()), qsizetype(0),
+                     effectiveInputText.size());
+      effectiveInputText.insert(cursorPosition, inputMethodPreeditText_);
+    }
     const int inputWidth =
-        inputText.isEmpty() ? 4 : std::max(4, inputMetrics.horizontalAdvance(inputText + QStringLiteral(" ")) + 2);
+        effectiveInputText.isEmpty()
+            ? 4
+            : std::max(4, inputMetrics.horizontalAdvance(effectiveInputText + QStringLiteral(" ")) + 2);
     setWidgetFixedWidthIfChanged(lineEdit_, inputWidth);
+    const int tagHeight = std::max(16, visualStyle_ ? visualStyle_->metrics.tagHeight : 20);
+    const int tagItemMargin =
+        std::max(0, visualStyle_ ? visualStyle_->metrics.tagItemMargin : 2);
+    setWidgetFixedHeightIfChanged(lineEdit_, std::max(1, tagHeight + tagItemMargin * 2));
 
     if (placeholderLabel_) {
-      const bool showPlaceholder = values_.isEmpty() && inputText.isEmpty() && !placeholder_.trimmed().isEmpty();
+      const bool showPlaceholder =
+          values_.isEmpty() && effectiveInputText.isEmpty() && !placeholder_.trimmed().isEmpty();
       placeholderLabel_->setText(placeholder_);
       placeholderLabel_->setVisible(showPlaceholder);
     }
@@ -2415,9 +2606,12 @@ void AdSelect::updateMultipleSelectorHeight() {
     return;
   }
 
-  int availableWidth = tagsContainer_->width();
-  if (availableWidth <= 0 && contentHost_) {
-    availableWidth = contentHost_->width();
+  int availableWidth = tagsContainer_->contentsRect().width();
+  if (contentHost_) {
+    availableWidth = std::max(availableWidth, contentHost_->contentsRect().width());
+  }
+  if (availableWidth <= 0) {
+    availableWidth = contentsRect().width();
   }
   if (availableWidth <= 0) {
     availableWidth = std::max(1, width());
@@ -2430,7 +2624,8 @@ void AdSelect::updateMultipleSelectorHeight() {
     tagsHeight = tagsLayout_->sizeHint().height();
   }
 
-  const int minTagsHeight = std::max(16, visualStyle_->metrics.tagHeight);
+  const int minTagsHeight = std::max(
+      16, visualStyle_->metrics.tagHeight + std::max(0, visualStyle_->metrics.tagItemMargin) * 2);
   tagsHeight = std::max(minTagsHeight, tagsHeight);
   setWidgetFixedHeightIfChanged(tagsContainer_, tagsHeight);
 
@@ -2438,14 +2633,16 @@ void AdSelect::updateMultipleSelectorHeight() {
     const bool hasPrefix = prefixLabel_ && prefixLabel_->isVisible();
     const int inset =
         hasPrefix ? 0 : std::max(0, visualStyle_->metrics.multipleItemPaddingHorizontal);
-    const int labelWidth = std::max(0, tagsContainer_->width() - inset);
+    const int labelWidth = std::max(0, availableWidth - inset);
     placeholderLabel_->setGeometry(inset, 0, labelWidth, tagsHeight);
     placeholderLabel_->raise();
   }
 
   const QMargins rootMargins = rootLayout_->contentsMargins();
-  const int targetHeight =
-      std::max(visualStyle_->metrics.height, tagsHeight + rootMargins.top() + rootMargins.bottom());
+  const bool wrappedToMultipleLines = tagsHeight > minTagsHeight;
+  const int expandedHeight = tagsHeight + rootMargins.top() + rootMargins.bottom();
+  const int targetHeight = wrappedToMultipleLines ? std::max(visualStyle_->metrics.height, expandedHeight)
+                                                  : visualStyle_->metrics.height;
   setWidgetFixedHeightIfChanged(this, targetHeight);
   updateGeometry();
 }
@@ -2505,14 +2702,24 @@ void AdSelect::updateClearVisual() {
 }
 
 void AdSelect::updateAccessoryGeometry() {
-  if (!clearButton_ || !visualStyle_) {
+  if (!visualStyle_) {
     return;
   }
 
   const int iconSize = std::max(10, visualStyle_->metrics.iconSize);
+  if (suffixButton_) {
+    // Keep suffix footprint aligned with clear overlay, matching Ant Design:
+    // clear is absolutely positioned over the suffix slot when it appears.
+    suffixButton_->setFixedSize(iconSize, iconSize);
+  }
+
+  if (!clearButton_) {
+    return;
+  }
   clearButton_->setFixedSize(iconSize, iconSize);
 
-  const int endInset = std::max(0, visualStyle_->metrics.horizontalPadding);
+  const int borderInset = std::max(0, visualStyle_->metrics.borderWidth);
+  const int endInset = std::max(0, visualStyle_->metrics.horizontalPadding) + borderInset;
   const int x = std::max(0, width() - endInset - iconSize);
   const int y = std::max(0, (height() - iconSize) / 2);
   clearButton_->move(x, y);
@@ -2699,10 +2906,18 @@ void AdSelect::applyVisualStyle() {
   }
 
   const bool multipleMode = mode_ != Mode::Single;
-  const int startPadding = multipleMode ? std::max(0, visualStyle_->metrics.multiplePaddingInlineStart)
-                                        : std::max(0, visualStyle_->metrics.horizontalPadding);
-  const int endPadding = std::max(0, visualStyle_->metrics.horizontalPadding);
-  const int verticalPadding = multipleMode ? std::max(0, visualStyle_->metrics.multiplePaddingVertical) : 0;
+  // QLayout margins are measured from the widget outer rect, while CSS padding
+  // is measured from the inner border edge (border-box). Add border inset to
+  // match Ant Design's selector content positioning.
+  const int borderInset = std::max(0, visualStyle_->metrics.borderWidth);
+  const int baseStartPadding = multipleMode ? std::max(0, visualStyle_->metrics.multiplePaddingInlineStart)
+                                            : std::max(0, visualStyle_->metrics.horizontalPadding);
+  const int baseEndPadding = std::max(0, visualStyle_->metrics.horizontalPadding);
+  const int baseVerticalPadding =
+      multipleMode ? std::max(0, visualStyle_->metrics.multiplePaddingVertical) : 0;
+  const int startPadding = baseStartPadding + borderInset;
+  const int endPadding = baseEndPadding + borderInset;
+  const int verticalPadding = baseVerticalPadding + borderInset;
   widgetStyleChanged |= setLayoutContentsMarginsIfChanged(
       rootLayout_, QMargins(startPadding, verticalPadding, endPadding, verticalPadding));
   widgetStyleChanged |= setLayoutSpacingIfChanged(rootLayout_, visualStyle_->metrics.spacing);
@@ -2841,6 +3056,28 @@ void AdSelect::applyVisualStyle() {
 }
 
 void AdSelect::refreshRows() {
+  const bool preserveScrollPosition =
+      preservePopupScrollOnRefresh_ && open_ && mode_ != Mode::Single;
+  preservePopupScrollOnRefresh_ = false;
+
+  int preservedScrollValue = -1;
+  QString preservedCurrentValue;
+  if (preserveScrollPosition && listView_ && popupScrollArea_) {
+    if (QScrollBar* scrollBar = popupScrollArea_->verticalScrollBar()) {
+      preservedScrollValue = scrollBar->value();
+    }
+    const QModelIndex currentIndex = listView_->currentIndex();
+    if (currentIndex.isValid()) {
+      const int currentRow = currentIndex.row();
+      if (currentRow >= 0 && currentRow < rows_.size()) {
+        const ModelRow& modelRow = rows_.at(currentRow);
+        if (modelRow.optionIndex >= 0 && modelRow.optionIndex < options_.size()) {
+          preservedCurrentValue = options_.at(modelRow.optionIndex).value;
+        }
+      }
+    }
+  }
+
   QVector<ModelRow> nextRows;
   const QVector<int> filtered = filteredOptionIndexes();
 
@@ -2886,12 +3123,17 @@ void AdSelect::refreshRows() {
   if (listModel_) {
     listModel_->setRows(rows_);
   }
-  syncCurrentListRow();
+  syncCurrentListRow(preservedCurrentValue, preserveScrollPosition);
   if (listView_ && listView_->viewport()) {
     syncPopupOptionCursor(listView_->viewport()->mapFromGlobal(QCursor::pos()));
   }
   if (popupIsVisible()) {
     syncPopupGeometry();
+  }
+  if (preserveScrollPosition && preservedScrollValue >= 0 && popupScrollArea_) {
+    if (QScrollBar* scrollBar = popupScrollArea_->verticalScrollBar()) {
+      scrollBar->setValue(preservedScrollValue);
+    }
   }
 }
 
@@ -2941,12 +3183,25 @@ QVector<int> AdSelect::filteredOptionIndexes() const {
   return indexes;
 }
 
-void AdSelect::syncCurrentListRow() {
+void AdSelect::syncCurrentListRow(const QString& preferredValue, bool preserveScrollPosition) {
   if (!listView_ || rows_.isEmpty()) {
     return;
   }
 
   int targetRow = -1;
+  if (!preferredValue.isEmpty()) {
+    for (int row = 0; row < rows_.size(); ++row) {
+      const ModelRow& modelRow = rows_.at(row);
+      if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
+        continue;
+      }
+      if (options_.at(modelRow.optionIndex).value == preferredValue) {
+        targetRow = row;
+        break;
+      }
+    }
+  }
+
   if (mode_ == Mode::Single && !value_.isEmpty()) {
     for (int row = 0; row < rows_.size(); ++row) {
       const ModelRow& modelRow = rows_.at(row);
@@ -2980,7 +3235,7 @@ void AdSelect::syncCurrentListRow() {
     if (mode_ == Mode::Single && listView_->selectionModel()) {
       listView_->selectionModel()->select(targetIndex, QItemSelectionModel::ClearAndSelect);
     }
-    if (popupScrollArea_) {
+    if (!preserveScrollPosition && popupScrollArea_) {
       const QRect targetRect = listView_->visualRect(targetIndex);
       if (targetRect.isValid()) {
         const int margin = visualStyle_ ? std::max(2, visualStyle_->metrics.optionHeight / 2) : 8;
@@ -3125,6 +3380,8 @@ void AdSelect::toggleSelectionForOption(const Option& option) {
     return;
   }
 
+  const bool shouldRestoreInputFocus = open_ && lineEdit_ && !lineEdit_->isReadOnly();
+
   const int index = values_.indexOf(option.value);
   if (index >= 0) {
     values_.removeAt(index);
@@ -3140,14 +3397,19 @@ void AdSelect::toggleSelectionForOption(const Option& option) {
   emit valuesChanged(values_);
   emitSelectionChangedSignals();
   if (autoClearSearchValue_ && isSearchEnabledForCurrentMode()) {
+    preservePopupScrollOnRefresh_ = true;
     setSearchText(QString());
     suppressLineEditChange_ = true;
     lineEdit_->clear();
     suppressLineEditChange_ = false;
   }
+  preservePopupScrollOnRefresh_ = true;
   refreshRows();
   updateDisplay();
   updateClearButton();
+  if (shouldRestoreInputFocus && lineEdit_ && !lineEdit_->hasFocus()) {
+    lineEdit_->setFocus(Qt::MouseFocusReason);
+  }
 }
 
 void AdSelect::selectSingleValue(const QString& value, bool emitSignals) {
@@ -3400,6 +3662,22 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
     }
     hasFocusWithin_ = false;
     applyVisualStyle();
+  }
+
+  // In filled/multiple mode most content surfaces are transparent. Make sure
+  // they repaint when open state changes shell background/border colors.
+  update();
+  if (contentHost_) {
+    contentHost_->update();
+  }
+  if (tagsContainer_ && tagsContainer_->isVisible()) {
+    tagsContainer_->update();
+  }
+  if (lineEdit_) {
+    lineEdit_->update();
+  }
+  if (placeholderLabel_ && placeholderLabel_->isVisible()) {
+    placeholderLabel_->update();
   }
 
   updateSuffixVisual();

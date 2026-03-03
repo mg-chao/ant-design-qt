@@ -152,6 +152,29 @@ class IconsTests final : public QObject {
     QVERIFY(translucentAvg.alpha() < opaqueAvg.alpha());
   }
 
+  void twotoneEmptySimpleRespectsExplicitTertiaryColor() {
+    adqt::icons::IconToken base = adqt::icons::twotone::EmptySimple();
+    base.style.primary = QColor(QStringLiteral("#d9d9d9"));
+    base.style.hasPrimary = true;
+    base.style.secondary = QColor(QStringLiteral("#fafafa"));
+    base.style.hasSecondary = true;
+    base.style.tertiary = QColor(QStringLiteral("#f5f5f5"));
+    base.style.hasTertiary = true;
+
+    adqt::icons::IconToken mutated = base;
+    mutated.style.tertiary = QColor(QStringLiteral("#d9d9d9"));
+    mutated.style.hasTertiary = true;
+
+    const QImage first =
+        adqt::icons::renderIconPixmap(base, QSize(64, 41), 1.0, QIcon::Normal, QIcon::Off).toImage();
+    const QImage second =
+        adqt::icons::renderIconPixmap(mutated, QSize(64, 41), 1.0, QIcon::Normal, QIcon::Off).toImage();
+
+    QVERIFY(!first.isNull());
+    QVERIFY(!second.isNull());
+    QVERIFY(pngDigest(first) != pngDigest(second));
+  }
+
   void themeResolverAffectsTwotone() {
     adqt::icons::setThemeResolver([] {
       adqt::icons::IconThemeSnapshot snapshot;

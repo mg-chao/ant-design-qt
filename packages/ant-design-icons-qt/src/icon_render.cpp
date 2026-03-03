@@ -2,6 +2,7 @@
 
 #include <QRegularExpression>
 #include <QtGlobal>
+#include <cstring>
 
 namespace adqt::icons::detail {
 
@@ -55,24 +56,42 @@ QColor deriveSecondaryColor(const QColor& primary) {
 
 QByteArray applyColorsToSvg(const QByteArray& source,
                             IconTheme theme,
+                            const char* iconName,
                             const QColor& primary,
-                            const QColor& secondary) {
+                            const QColor& secondary,
+                            const QColor& tertiary) {
   QString svg = QString::fromUtf8(source);
   const QString primaryToken = toSvgColor(primary);
   const QString secondaryToken = toSvgColor(secondary);
+  const QString tertiaryToken = toSvgColor(tertiary);
+  constexpr auto kPrimaryPlaceholder = "__ADQT_ICON_PRIMARY__";
+  constexpr auto kSecondaryPlaceholder = "__ADQT_ICON_SECONDARY__";
+  constexpr auto kTertiaryPlaceholder = "__ADQT_ICON_TERTIARY__";
 
   if (theme == IconTheme::TwoTone) {
-    replaceRegex(svg, QStringLiteral("#333333|#333"), primaryToken);
-    replaceRegex(svg, QStringLiteral("#E6E6E6|#D9D9D9|#D8D8D8"), secondaryToken);
-    replaceRegex(svg, QStringLiteral("currentColor"), primaryToken);
+    // Use placeholders first to avoid replacement collisions between final color values.
+    replaceRegex(svg, QStringLiteral("#333333|#333"), QString::fromLatin1(kPrimaryPlaceholder));
+    replaceRegex(svg,
+                 QStringLiteral("#E6E6E6|#D9D9D9|#D8D8D8"),
+                 QString::fromLatin1(kSecondaryPlaceholder));
+    replaceRegex(svg, QStringLiteral("currentColor"), QString::fromLatin1(kPrimaryPlaceholder));
+    if (iconName && std::strcmp(iconName, "empty-simple") == 0) {
+      replaceRegex(svg,
+                   QStringLiteral("#F5F5F5|#F5F5F7"),
+                   QString::fromLatin1(kTertiaryPlaceholder));
+    }
   } else {
     // Upstream SVGs are not fully normalized: many paths omit `fill` and would stay black.
     // Align with Ant Design behavior by making non-twotone icons inherit currentColor.
     ensureRootFillInheritsCurrentColor(svg);
-    replaceRegex(svg, QStringLiteral("currentColor"), primaryToken);
-    replaceRegex(svg, QStringLiteral("#333333|#333"), primaryToken);
-    replaceRegex(svg, QStringLiteral("#000000|#000"), primaryToken);
+    replaceRegex(svg, QStringLiteral("currentColor"), QString::fromLatin1(kPrimaryPlaceholder));
+    replaceRegex(svg, QStringLiteral("#333333|#333"), QString::fromLatin1(kPrimaryPlaceholder));
+    replaceRegex(svg, QStringLiteral("#000000|#000"), QString::fromLatin1(kPrimaryPlaceholder));
   }
+
+  svg.replace(QString::fromLatin1(kPrimaryPlaceholder), primaryToken, Qt::CaseSensitive);
+  svg.replace(QString::fromLatin1(kSecondaryPlaceholder), secondaryToken, Qt::CaseSensitive);
+  svg.replace(QString::fromLatin1(kTertiaryPlaceholder), tertiaryToken, Qt::CaseSensitive);
 
   return svg.toUtf8();
 }

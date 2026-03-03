@@ -6,10 +6,14 @@
 #include <QElapsedTimer>
 #include <QIcon>
 #include <QImage>
+#include <QInputMethodEvent>
+#include <QLineEdit>
+#include <QListView>
 #include <QPushButton>
 #include <QToolButton>
 #include <QWidget>
 
+#include <algorithm>
 #include <numeric>
 
 #include "theme/theme_manager.h"
@@ -86,6 +90,13 @@ QToolButton* findVisibleIconButton(QWidget* root) {
     }
   }
   return nullptr;
+}
+
+QToolButton* findToolButton(QWidget* root, const QString& objectName) {
+  if (!root) {
+    return nullptr;
+  }
+  return root->findChild<QToolButton*>(objectName, Qt::FindChildrenRecursively);
 }
 
 QWidget* findInteractionOverlayWidget(QWidget* window) {
@@ -419,6 +430,200 @@ class TimingRefactorTests final : public QObject {
     QCOMPARE(iconDigest(spinnerButton->icon()), settledDigest);
   }
 
+  void select_clearOverlayOccupiesSuffixSlot() {
+    AdSelect select;
+    AdSelect::Option option;
+    option.value = QStringLiteral("lucy");
+    option.label = QStringLiteral("Lucy");
+    select.setOptions({option});
+    select.setAllowClear(true);
+    select.setValue(option.value);
+    select.resize(280, 40);
+    select.show();
+
+    QTest::qWait(30);
+    QToolButton* suffixButton = findToolButton(&select, QStringLiteral("adselect-suffix"));
+    QToolButton* clearButton = findToolButton(&select, QStringLiteral("adselect-clear"));
+    QVERIFY(suffixButton != nullptr);
+    QVERIFY(clearButton != nullptr);
+
+    QTest::mouseMove(&select, select.rect().center());
+    QTRY_VERIFY_WITH_TIMEOUT(clearButton->isVisible(), 400);
+    QVERIFY(suffixButton->isVisible());
+
+    QCOMPARE(clearButton->size(), suffixButton->size());
+    QCOMPARE(clearButton->geometry(), suffixButton->geometry());
+  }
+
+  void select_multipleOptionClickRestoresInputFocus() {
+    AdSelect select;
+    select.setMode(AdSelect::Mode::Multiple);
+
+    AdSelect::Option lucy;
+    lucy.value = QStringLiteral("lucy");
+    lucy.label = QStringLiteral("Lucy");
+
+    AdSelect::Option jack;
+    jack.value = QStringLiteral("jack");
+    jack.label = QStringLiteral("Jack");
+
+    select.setOptions({lucy, jack});
+    select.resize(280, 40);
+    select.show();
+
+    QLineEdit* input = select.findChild<QLineEdit*>(QStringLiteral("adselect-input"));
+    QVERIFY(input != nullptr);
+
+    select.setOpen(true);
+
+    QWidget* scopeWindow = select.window();
+    QVERIFY(scopeWindow != nullptr);
+    QListView* listView =
+        scopeWindow->findChild<QListView*>(QStringLiteral("adselect-list"), Qt::FindChildrenRecursively);
+    QTRY_VERIFY_WITH_TIMEOUT(listView != nullptr, 400);
+
+    auto* model = listView->model();
+    QVERIFY(model != nullptr);
+
+    QModelIndex targetIndex;
+    for (int row = 0; row < model->rowCount(); ++row) {
+      const QModelIndex index = model->index(row, 0);
+      if ((model->flags(index) & Qt::ItemIsSelectable) != 0) {
+        targetIndex = index;
+        break;
+      }
+    }
+    QVERIFY(targetIndex.isValid());
+
+    QTRY_VERIFY_WITH_TIMEOUT(listView->visualRect(targetIndex).isValid(), 400);
+    QTest::mouseClick(listView->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      listView->visualRect(targetIndex).center());
+
+    QTRY_VERIFY_WITH_TIMEOUT(input->hasFocus(), 400);
+    QCOMPARE(select.values(), QStringList({QStringLiteral("lucy")}));
+  }
+
+  void select_multipleImePreeditExpandsInputWidth() {
+    AdSelect select;
+    select.setMode(AdSelect::Mode::Multiple);
+    select.resize(280, 40);
+    select.show();
+
+    QLineEdit* input = select.findChild<QLineEdit*>(QStringLiteral("adselect-input"));
+    QVERIFY(input != nullptr);
+
+    select.setOpen(true);
+    QTRY_VERIFY_WITH_TIMEOUT(select.open(), 400);
+
+    input->setFocus();
+    QTRY_VERIFY_WITH_TIMEOUT(input->hasFocus(), 400);
+    QCoreApplication::processEvents();
+
+    const int baseWidth = input->width();
+    QVERIFY(baseWidth >= 4);
+
+    const QList<QInputMethodEvent::Attribute> emptyAttributes;
+    QInputMethodEvent composingEvent(QStringLiteral("pinyinshurufangfa"), emptyAttributes);
+    QCoreApplication::sendEvent(input, &composingEvent);
+    QCoreApplication::processEvents();
+    const int composingWidth = input->width();
+    QVERIFY(composingWidth > baseWidth);
+
+    QInputMethodEvent clearComposingEvent(QString(), emptyAttributes);
+    QCoreApplication::sendEvent(input, &clearComposingEvent);
+    QCoreApplication::processEvents();
+    QCOMPARE(input->width(), baseWidth);
+  }
+
+  void select_filledMultipleSelectorRepaintsAfterPopupClose() {
+    QWidget host;
+    host.resize(440, 200);
+
+    AdSelect select(&host);
+    select.setMode(AdSelect::Mode::Multiple);
+    select.setVariant(AdSelect::Variant::Filled);
+
+    AdSelect::Option lucy;
+    lucy.value = QStringLiteral("lucy");
+    lucy.label = QStringLiteral("Lucy");
+
+    AdSelect::Option jack;
+    jack.value = QStringLiteral("jack");
+    jack.label = QStringLiteral("Jack");
+
+    select.setOptions({lucy, jack});
+    select.setGeometry(40, 48, 320, 40);
+
+    host.show();
+    QTRY_VERIFY_WITH_TIMEOUT(host.isVisible(), 400);
+    QTRY_VERIFY_WITH_TIMEOUT(select.isVisible(), 400);
+
+    QTest::mouseMove(&host, QPoint(5, 5));
+    QCoreApplication::processEvents();
+
+    auto colorDistance = [](const QColor& lhs, const QColor& rhs) -> int {
+      return std::abs(lhs.red() - rhs.red()) + std::abs(lhs.green() - rhs.green()) +
+             std::abs(lhs.blue() - rhs.blue()) + std::abs(lhs.alpha() - rhs.alpha());
+    };
+
+    auto sampleSelectorPixel = [&select]() -> QColor {
+      const QImage image = select.grab().toImage();
+      if (image.isNull()) {
+        return QColor();
+      }
+
+      const qreal dpr = std::max<qreal>(1.0, image.devicePixelRatio());
+      const int logicalX = std::clamp(select.width() - 100, 0, std::max(0, select.width() - 1));
+      const int logicalY = std::clamp(select.height() / 2, 0, std::max(0, select.height() - 1));
+      const int px =
+          std::clamp(qRound(static_cast<qreal>(logicalX) * dpr), 0, image.width() - 1);
+      const int py =
+          std::clamp(qRound(static_cast<qreal>(logicalY) * dpr), 0, image.height() - 1);
+      return QColor::fromRgba(image.pixel(px, py));
+    };
+
+    const QColor closedBeforeOpen = sampleSelectorPixel();
+
+    select.setOpen(true);
+    QTRY_VERIFY_WITH_TIMEOUT(select.open(), 400);
+
+    QWidget* scopeWindow = select.window();
+    QVERIFY(scopeWindow != nullptr);
+    QListView* listView =
+        scopeWindow->findChild<QListView*>(QStringLiteral("adselect-list"), Qt::FindChildrenRecursively);
+    QTRY_VERIFY_WITH_TIMEOUT(listView != nullptr, 400);
+    QTRY_VERIFY_WITH_TIMEOUT(listView->isVisible(), 400);
+
+    const QColor openedColor = sampleSelectorPixel();
+
+    const QAbstractItemModel* model = listView->model();
+    QVERIFY(model != nullptr);
+
+    QModelIndex targetIndex;
+    for (int row = 0; row < model->rowCount(); ++row) {
+      const QModelIndex index = model->index(row, 0);
+      if ((model->flags(index) & Qt::ItemIsSelectable) != 0) {
+        targetIndex = index;
+        break;
+      }
+    }
+    QVERIFY(targetIndex.isValid());
+    QTRY_VERIFY_WITH_TIMEOUT(listView->visualRect(targetIndex).isValid(), 400);
+    QTest::mouseClick(listView->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      listView->visualRect(targetIndex).center());
+
+    select.setOpen(false);
+    QTRY_VERIFY_WITH_TIMEOUT(!select.open(), 400);
+    QCoreApplication::processEvents();
+
+    const QColor closedAfterClose = sampleSelectorPixel();
+    const int distToClosed = colorDistance(closedAfterClose, closedBeforeOpen);
+    const int distToOpen = colorDistance(closedAfterClose, openedColor);
+
+    QVERIFY(distToOpen > 10);
+    QVERIFY(distToClosed + 6 < distToOpen);
+  }
+
   void popupHost_relayoutBurstIsDeferredAndDeduplicated() {
     QWidget scope;
     scope.resize(400, 260);
@@ -473,6 +678,86 @@ class TimingRefactorTests final : public QObject {
     QVERIFY(overlay != nullptr);
     QTRY_VERIFY_WITH_TIMEOUT(overlay->isVisible(), 250);
     QTRY_VERIFY_WITH_TIMEOUT(!overlay->isVisible(), 800);
+  }
+
+  void select_adjacentSelectedOptionsMergeHighlight() {
+    AdSelect select;
+    select.setMode(AdSelect::Mode::Multiple);
+
+    QVector<AdSelect::Option> options;
+    for (int i = 0; i < 8; ++i) {
+      AdSelect::Option option;
+      option.value = QString::number(i);
+      option.label = QStringLiteral("Option %1").arg(i);
+      options.push_back(option);
+    }
+    select.setOptions(options);
+    select.setValues({QStringLiteral("2"), QStringLiteral("3"), QStringLiteral("4")});
+    select.resize(280, 40);
+    select.show();
+    select.setOpen(true);
+
+    QTRY_VERIFY_WITH_TIMEOUT(select.open(), 400);
+    QWidget* scopeWindow = select.window();
+    QVERIFY(scopeWindow != nullptr);
+    QListView* listView =
+        scopeWindow->findChild<QListView*>(QStringLiteral("adselect-list"), Qt::FindChildrenRecursively);
+    QVERIFY(listView != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(listView->isVisible(), 400);
+
+    QTest::qWait(80);
+    QCoreApplication::processEvents();
+
+    const QImage image = listView->viewport()->grab().toImage();
+    QVERIFY(!image.isNull());
+
+    const QAbstractItemModel* model = listView->model();
+    QVERIFY(model != nullptr);
+
+    auto rowOfValue = [model](const QString& value) -> int {
+      for (int row = 0; row < model->rowCount(); ++row) {
+        if (model->index(row, 0).data(Qt::UserRole).toString() == value) {
+          return row;
+        }
+      }
+      return -1;
+    };
+
+    const int row2 = rowOfValue(QStringLiteral("2"));
+    const int row3 = rowOfValue(QStringLiteral("3"));
+    const int row4 = rowOfValue(QStringLiteral("4"));
+    QVERIFY(row2 >= 0);
+    QVERIFY(row3 == row2 + 1);
+    QVERIFY(row4 == row3 + 1);
+
+    const int rowHeight = listView->sizeHintForRow(row2);
+    QVERIFY(rowHeight > 0);
+
+    const qreal imageDpr = std::max<qreal>(1.0, image.devicePixelRatio());
+    auto pixelAt = [&image, imageDpr](int logicalX, int logicalY) -> QColor {
+      const int px = std::clamp(qRound(static_cast<qreal>(logicalX) * imageDpr), 0, image.width() - 1);
+      const int py = std::clamp(qRound(static_cast<qreal>(logicalY) * imageDpr), 0, image.height() - 1);
+      return QColor::fromRgba(image.pixel(px, py));
+    };
+
+    auto colorDistance = [](const QColor& lhs, const QColor& rhs) -> int {
+      return std::abs(lhs.red() - rhs.red()) + std::abs(lhs.green() - rhs.green()) +
+             std::abs(lhs.blue() - rhs.blue()) + std::abs(lhs.alpha() - rhs.alpha());
+    };
+
+    const QColor selectedColor = pixelAt(4, row3 * rowHeight + rowHeight / 2);
+    const QColor popupColor = pixelAt(4, (row2 - 1) * rowHeight + rowHeight / 2);
+    const QColor seam23TopLeft = pixelAt(1, row3 * rowHeight);
+    const QColor seam23BottomLeft = pixelAt(1, row3 * rowHeight - 1);
+    const QColor seam34TopLeft = pixelAt(1, row4 * rowHeight);
+    const QColor seam34BottomLeft = pixelAt(1, row4 * rowHeight - 1);
+
+    QVERIFY(colorDistance(seam23TopLeft, selectedColor) < colorDistance(seam23TopLeft, popupColor));
+    QVERIFY(colorDistance(seam23BottomLeft, selectedColor) <
+            colorDistance(seam23BottomLeft, popupColor));
+    QVERIFY(colorDistance(seam34TopLeft, selectedColor) < colorDistance(seam34TopLeft, popupColor));
+    QVERIFY(colorDistance(seam34BottomLeft, selectedColor) <
+            colorDistance(seam34BottomLeft, popupColor));
   }
 
  private:

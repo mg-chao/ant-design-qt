@@ -176,7 +176,8 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   style.metrics.borderWidth = std::max(1, qRound(map.lineWidth));
   style.metrics.focusOutlineWidth = std::max<qreal>(1.0, map.lineWidth * 2.0);
   style.metrics.focusOutlineOffset = 0.0;
-  style.metrics.horizontalPadding = std::max(8, qRound(map.sizeSM - map.lineWidth));
+  style.metrics.inputPaddingHorizontalBase = std::max(8, qRound(map.sizeSM - map.lineWidth));
+  style.metrics.horizontalPadding = style.metrics.inputPaddingHorizontalBase;
   style.metrics.popupPadding = std::max(2, qRound(map.sizeXXS));
   style.metrics.popupOffset = std::max(2, qRound(map.sizeXXS));
   style.metrics.popupMaxHeight = 256;
@@ -192,19 +193,22 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   style.metrics.emptyDescriptionLineHeight = std::max(
       style.metrics.emptyDescriptionFontSize + 2,
       qRound(style.metrics.emptyDescriptionFontSize * map.lineHeight));
-  style.metrics.optionPaddingHorizontal = std::max(8, qRound(map.sizeSM));
+  // Align with Ant Design Select `controlPaddingHorizontal` alias token (12).
+  // Unlike `sizeSM`, this value is intentionally fixed across default algorithms.
+  style.metrics.optionPaddingHorizontal = 12;
   style.metrics.tagHeight = resolveMultipleItemHeight(map.controlHeight);
   style.metrics.tagBorderRadius = std::max(0, qRound(map.borderRadiusSM));
   style.metrics.tagPaddingInlineStart = std::max(4, qRound(map.sizeXS));
   style.metrics.tagPaddingInlineEnd = std::max(2, qRound(map.sizeXXS));
   style.metrics.tagContentGap = std::max(2, qRound(map.sizeXXS));
-  style.metrics.tagItemGap = std::max(2, (std::max(0, qRound(map.sizeXXS)) / 2) * 2);
   style.metrics.optionStateGap = std::max(2, qRound(map.sizeXXS));
   style.metrics.iconSize = std::max(10, qRound(map.fontSizeSM));
   style.metrics.spacing = std::max(2, qRound(map.sizeXXS));
 
   double optionLineHeight = map.lineHeight;
   const int fixedItemMargin = std::max(0, qRound(map.sizeXXS)) / 2;
+  style.metrics.tagItemMargin = fixedItemMargin;
+  style.metrics.tagItemGap = std::max(2, style.metrics.tagItemMargin * 2);
   auto recomputeEmptyHeight = [&style]() {
     style.metrics.emptyStateHeight = std::max(
         style.metrics.optionHeight,
@@ -222,7 +226,7 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
     style.metrics.multiplePaddingVertical =
         std::max(0, multiPaddingBase - fixedItemMargin - lineWidth);
     style.metrics.multipleItemPaddingHorizontal = std::max(
-        0, style.metrics.horizontalPadding - style.metrics.multiplePaddingVertical - lineWidth * 2);
+        0, style.metrics.inputPaddingHorizontalBase - style.metrics.multiplePaddingVertical - lineWidth * 2);
   };
   auto recomputeOptionPadding = [&style, &optionLineHeight]() {
     const int fontPixelSize = style.metrics.optionFont.pixelSize();
@@ -329,7 +333,9 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
     style.metrics.borderWidth = std::max(0, tokens.borderWidth.value());
   }
   if (tokens.horizontalPadding.has_value()) {
-    style.metrics.horizontalPadding = std::max(0, tokens.horizontalPadding.value());
+    const int padding = std::max(0, tokens.horizontalPadding.value());
+    style.metrics.horizontalPadding = padding;
+    style.metrics.inputPaddingHorizontalBase = padding;
   }
   if (tokens.popupMaxHeight.has_value()) {
     style.metrics.popupMaxHeight = std::max(80, tokens.popupMaxHeight.value());

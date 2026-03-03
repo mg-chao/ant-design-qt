@@ -20,8 +20,10 @@ enum class IconTheme {
 struct IconStyle {
   QColor primary;
   QColor secondary;
+  QColor tertiary;
   bool hasPrimary = false;
   bool hasSecondary = false;
+  bool hasTertiary = false;
 };
 
 struct IconToken {

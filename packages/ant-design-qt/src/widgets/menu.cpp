@@ -120,7 +120,7 @@ bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
     return false;
   }
 
-  if (icon.style.hasPrimary || icon.style.hasSecondary) {
+  if (icon.style.hasPrimary || icon.style.hasSecondary || icon.style.hasTertiary) {
     return false;
   }
 

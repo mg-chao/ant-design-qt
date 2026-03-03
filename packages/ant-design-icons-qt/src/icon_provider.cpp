@@ -68,6 +68,7 @@ void ensureIconResources() {
 struct ResolvedColors {
   QColor primary;
   QColor secondary;
+  QColor tertiary;
   quint64 revision = 1;
 };
 
@@ -124,7 +125,8 @@ class IconRuntime final {
       return QPixmap();
     }
 
-    const QByteArray coloredSvg = applyColorsToSvg(source, entry.theme, colors.primary, colors.secondary);
+    const QByteArray coloredSvg =
+        applyColorsToSvg(source, entry.theme, entry.name, colors.primary, colors.secondary, colors.tertiary);
     QSvgRenderer renderer(coloredSvg);
     if (!renderer.isValid()) {
       return QPixmap();
@@ -237,9 +239,11 @@ class IconRuntime final {
       resolved.primary = disabled ? snapshot.textDisabled : snapshot.primary;
       resolved.secondary = disabled ? deriveSecondaryColor(snapshot.textDisabled)
                                     : snapshot.twoToneSecondary;
+      resolved.tertiary = resolved.secondary;
     } else {
       resolved.primary = disabled ? snapshot.textDisabled : snapshot.text;
       resolved.secondary = resolved.primary;
+      resolved.tertiary = resolved.secondary;
     }
 
     if (style.hasPrimary && style.primary.isValid()) {
@@ -251,6 +255,9 @@ class IconRuntime final {
     if (style.hasSecondary && style.secondary.isValid()) {
       resolved.secondary = style.secondary;
     }
+    if (style.hasTertiary && style.tertiary.isValid()) {
+      resolved.tertiary = style.tertiary;
+    }
 
     return resolved;
   }
@@ -261,7 +268,7 @@ class IconRuntime final {
                           QIcon::Mode mode,
                           QIcon::State state,
                           const ResolvedColors& colors) {
-    return QStringLiteral("adqt:icon:%1:%2x%3:%4:%5:%6:%7:%8:%9")
+    return QStringLiteral("adqt:icon:%1:%2x%3:%4:%5:%6:%7:%8:%9:%10")
         .arg(index)
         .arg(logicalSize.width())
         .arg(logicalSize.height())
@@ -270,7 +277,8 @@ class IconRuntime final {
         .arg(static_cast<int>(state))
         .arg(static_cast<unsigned long long>(colors.revision))
         .arg(colors.primary.rgba(), 8, 16, QLatin1Char('0'))
-        .arg(colors.secondary.rgba(), 8, 16, QLatin1Char('0'));
+        .arg(colors.secondary.rgba(), 8, 16, QLatin1Char('0'))
+        .arg(colors.tertiary.rgba(), 8, 16, QLatin1Char('0'));
   }
 
   QByteArray loadSvgSource(const QString& qrcPath) {

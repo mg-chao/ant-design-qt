@@ -10,8 +10,10 @@ namespace adqt::icons::detail {
 
 QByteArray applyColorsToSvg(const QByteArray& source,
                             IconTheme theme,
+                            const char* iconName,
                             const QColor& primary,
-                            const QColor& secondary);
+                            const QColor& secondary,
+                            const QColor& tertiary);
 
 QColor deriveSecondaryColor(const QColor& primary);
 

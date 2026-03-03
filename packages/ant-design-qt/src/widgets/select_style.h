@@ -15,6 +15,7 @@ struct SelectMetrics {
   int borderWidth = 1;
   qreal focusOutlineWidth = 2.0;
   qreal focusOutlineOffset = 0.0;
+  int inputPaddingHorizontalBase = 11;
   int horizontalPadding = 11;
   int popupPadding = 4;
   int popupOffset = 4;
@@ -35,6 +36,7 @@ struct SelectMetrics {
   int tagPaddingInlineStart = 8;
   int tagPaddingInlineEnd = 4;
   int tagContentGap = 4;
+  int tagItemMargin = 2;
   int tagItemGap = 4;
   int optionStateGap = 4;
   int multiplePaddingInlineStart = 3;

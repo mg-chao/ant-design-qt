@@ -17,6 +17,7 @@ HEADERS += \
     src/widgets/menu.h \
     src/widgets/menu_style.h \
     src/widgets/popup_placement.h \
+    src/widgets/scroll_area.h \
     src/widgets/select.h \
     src/widgets/select_style.h \
     src/widgets/widgets.h \
@@ -38,6 +39,7 @@ SOURCES += \
     src/widgets/menu.cpp \
     src/widgets/menu_style.cpp \
     src/widgets/popup_placement.cpp \
+    src/widgets/scroll_area.cpp \
     src/widgets/select.cpp \
     src/widgets/select_style.cpp \
     src/theme/fast_color_lite.cpp \

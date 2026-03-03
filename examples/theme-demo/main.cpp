@@ -34,6 +34,7 @@ using adqt::theme::ThemeManager;
 using adqt::widgets::AdButton;
 using adqt::widgets::AdButtonGroup;
 using adqt::widgets::AdMenu;
+using adqt::widgets::AdScrollArea;
 namespace outlined_icons = adqt::icons::outlined;
 
 namespace {
@@ -870,10 +871,13 @@ class DemoWindow final : public QWidget {
 
     auto* body = new QHBoxLayout();
     navMenu_ = new AdMenu();
-    navMenu_->setFixedWidth(256);
     navMenu_->setInlineIndent(24);
     navMenu_->setMode(AdMenu::Mode::Inline);
-    body->addWidget(navMenu_);
+    navScroll_ = new AdScrollArea();
+    navScroll_->setFixedWidth(256);
+    navScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    navScroll_->setContentWidget(navMenu_);
+    body->addWidget(navScroll_);
 
     scroll_ = new QScrollArea();
     scroll_->setWidgetResizable(true);
@@ -1155,6 +1159,7 @@ class DemoWindow final : public QWidget {
   QComboBox* modeBox_ = nullptr;
   QCheckBox* loadAntdFontCheck_ = nullptr;
   AdMenu* navMenu_ = nullptr;
+  AdScrollArea* navScroll_ = nullptr;
   QScrollArea* scroll_ = nullptr;
   QStackedWidget* docsStack_ = nullptr;
   ButtonDocsPage* buttonPage_ = nullptr;

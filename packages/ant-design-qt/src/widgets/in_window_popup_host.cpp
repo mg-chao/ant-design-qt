@@ -6,8 +6,11 @@
 #include <QMouseEvent>
 #include <QPointer>
 #include <QSet>
+#include <QTouchEvent>
 #include <QTimer>
 #include <QWidget>
+
+#include <optional>
 
 namespace adqt::widgets::detail {
 
@@ -22,6 +25,40 @@ QPoint mouseEventGlobalPos(const QMouseEvent* event) {
 #else
   return event->globalPos();
 #endif
+}
+
+std::optional<QPoint> touchEventGlobalPos(const QTouchEvent* event) {
+  if (!event) {
+    return std::nullopt;
+  }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  const QList<QEventPoint> points = event->points();
+  if (points.isEmpty()) {
+    return std::nullopt;
+  }
+  return points.constFirst().globalPosition().toPoint();
+#else
+  const QList<QTouchEvent::TouchPoint> points = event->touchPoints();
+  if (points.isEmpty()) {
+    return std::nullopt;
+  }
+  return points.constFirst().screenPos().toPoint();
+#endif
+}
+
+std::optional<QPoint> popupInteractionGlobalPos(const QEvent* event) {
+  if (!event) {
+    return std::nullopt;
+  }
+  switch (event->type()) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonDblClick:
+      return mouseEventGlobalPos(static_cast<const QMouseEvent*>(event));
+    case QEvent::TouchBegin:
+      return touchEventGlobalPos(static_cast<const QTouchEvent*>(event));
+    default:
+      return std::nullopt;
+  }
 }
 
 QRect widgetGlobalRect(const QWidget* widget) {
@@ -118,16 +155,22 @@ class InWindowPopupHost final : public QObject {
       return QObject::eventFilter(watched, event);
     }
 
-    const bool watchedApp = (qApp && watched == qApp);
     const bool watchedScope = (scopeWindow_ && watched == scopeWindow_.data());
     const bool watchedAnchorChain = watchedInAnchorChain(watched);
 
-    if (watchedApp && event->type() == QEvent::MouseButtonPress && activeOwner_->popupIsVisible()) {
-      const auto* mouseEvent = static_cast<const QMouseEvent*>(event);
-      const QPoint clickGlobalPos = mouseEventGlobalPos(mouseEvent);
+    // Application-level event filters receive the concrete target QObject (not qApp itself),
+    // so outside-click close must not depend on watched == qApp.
+    const bool outsideCloseInteractionEvent = event->type() == QEvent::MouseButtonPress ||
+                                              event->type() == QEvent::MouseButtonDblClick ||
+                                              event->type() == QEvent::TouchBegin;
+    if (outsideCloseInteractionEvent && activeOwner_->popupIsVisible()) {
+      const std::optional<QPoint> interactionGlobalPos = popupInteractionGlobalPos(event);
+      if (!interactionGlobalPos.has_value()) {
+        return QObject::eventFilter(watched, event);
+      }
       const QRect scopeGlobalRect = widgetGlobalRect(scopeWindow_);
-      if (scopeGlobalRect.isValid() && scopeGlobalRect.contains(clickGlobalPos) &&
-          !activeOwner_->popupContainsGlobalPos(clickGlobalPos)) {
+      if (scopeGlobalRect.isValid() && scopeGlobalRect.contains(interactionGlobalPos.value()) &&
+          !activeOwner_->popupContainsGlobalPos(interactionGlobalPos.value())) {
         requestCloseActive(PopupCloseReason::OutsidePressInScope);
       }
       return QObject::eventFilter(watched, event);
@@ -375,4 +418,3 @@ void setInWindowPopupHostOpen(InWindowPopupOwner* owner, bool open) {
 }
 
 }  // namespace adqt::widgets::detail
-

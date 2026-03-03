@@ -1803,11 +1803,16 @@ void AdSelect::syncPopupGeometry() {
   popupW = std::max(120, popupW);
   popup_->resize(popupW, popup_->sizeHint().height());
 
+  QWidget* popupParent = popup_->parentWidget();
+  if (!popupParent) {
+    popupParent = detail::resolvePopupScopeWindow(this);
+  }
+
   detail::PopupPlacementInput placementInput;
   placementInput.anchorTopLeft = mapToGlobal(QPoint(0, 0));
   placementInput.anchorSize = QSize(width(), height());
   placementInput.popupSize = popup_->size();
-  placementInput.bounds = detail::popupBoundsInGlobal(detail::resolvePopupScopeWindow(this));
+  placementInput.bounds = detail::popupBoundsInGlobal(popupParent);
   placementInput.preferredPlacement = toPopupPlacement(placement_);
 
   const detail::PopupPlacementOutput placementOutput =
@@ -1834,6 +1839,10 @@ void AdSelect::syncPopupGeometry() {
     popupTopLeft = detail::clampPopupTopLeft(popupTopLeft, popup_->size(), placementInput.bounds);
   }
 
+  if (popupParent) {
+    // Placement resolves in global coordinates; child popup geometry is parent-local.
+    popupTopLeft = popupParent->mapFromGlobal(popupTopLeft);
+  }
   popup_->move(popupTopLeft);
 }
 

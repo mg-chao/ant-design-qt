@@ -1320,6 +1320,84 @@ class TimingRefactorTests final : public QObject {
     QCOMPARE(layout->spacing(), 0);
   }
 
+  void radio_buttonGroupOverlapsAdjacentBordersByLineWidth() {
+    AdRadioGroup group;
+    group.setOptionType(AdRadio::OptionType::Button);
+
+    AdRadioGroup::Option option1;
+    option1.value = QStringLiteral("1");
+    option1.label = QStringLiteral("One");
+    AdRadioGroup::Option option2;
+    option2.value = QStringLiteral("2");
+    option2.label = QStringLiteral("Two");
+    AdRadioGroup::Option option3;
+    option3.value = QStringLiteral("3");
+    option3.label = QStringLiteral("Three");
+
+    group.setOptions({option1, option2, option3});
+    group.resize(420, 44);
+    group.show();
+    QTRY_VERIFY_WITH_TIMEOUT(group.isVisible(), 400);
+
+    QList<AdRadio*> radios = group.findChildren<AdRadio*>(QString(), Qt::FindDirectChildrenOnly);
+    QCOMPARE(radios.size(), 3);
+    std::sort(radios.begin(), radios.end(), [](const AdRadio* lhs, const AdRadio* rhs) {
+      return lhs->geometry().x() < rhs->geometry().x();
+    });
+
+    const int lineWidth = std::max(1, qRound(ThemeManager::instance().currentMapToken().lineWidth));
+    for (int i = 1; i < radios.size(); ++i) {
+      const QRect previous = radios.at(i - 1)->geometry();
+      const QRect current = radios.at(i)->geometry();
+      const int overlapPixels = previous.right() - current.left() + 1;
+      QCOMPARE(overlapPixels, lineWidth);
+    }
+  }
+
+  void radio_buttonGroupHoverDoesNotOverrideCheckedSharedBorderLayer() {
+    AdRadioGroup group;
+    group.setOptionType(AdRadio::OptionType::Button);
+
+    AdRadioGroup::Option option1;
+    option1.value = QStringLiteral("1");
+    option1.label = QStringLiteral("One");
+    AdRadioGroup::Option option2;
+    option2.value = QStringLiteral("2");
+    option2.label = QStringLiteral("Two");
+
+    group.setOptions({option1, option2});
+    group.setValue(option2.value);
+    group.resize(320, 44);
+    group.show();
+    QTRY_VERIFY_WITH_TIMEOUT(group.isVisible(), 400);
+
+    QList<AdRadio*> radios = group.findChildren<AdRadio*>(QString(), Qt::FindDirectChildrenOnly);
+    QCOMPARE(radios.size(), 2);
+    std::sort(radios.begin(), radios.end(), [](const AdRadio* lhs, const AdRadio* rhs) {
+      return lhs->geometry().x() < rhs->geometry().x();
+    });
+
+    AdRadio* first = radios.at(0);
+    AdRadio* second = radios.at(1);
+    QVERIFY(first != nullptr);
+    QVERIFY(second != nullptr);
+    QVERIFY(second->isChecked());
+
+    const int lineWidth = std::max(1, qRound(ThemeManager::instance().currentMapToken().lineWidth));
+    const int seamX = second->geometry().left() + (lineWidth - 1) / 2;
+    const int seamY = second->geometry().center().y();
+    const QPoint seamPoint(seamX, seamY);
+
+    QWidget* topBeforeHover = group.childAt(seamPoint);
+    QVERIFY(topBeforeHover == second || second->isAncestorOf(topBeforeHover));
+
+    QTest::mouseMove(first, first->rect().center());
+    QCoreApplication::processEvents();
+
+    QWidget* topAfterHover = group.childAt(seamPoint);
+    QVERIFY(topAfterHover == second || second->isAncestorOf(topAfterHover));
+  }
+
   void radio_styleResolverRespectsButtonSolidAndDisabledChecked() {
     adqt::widgets::detail::RadioStyleInput input;
     input.baseFont = QFont();
@@ -1444,6 +1522,28 @@ class TimingRefactorTests final : public QObject {
     QEvent leaveEvent(QEvent::Leave);
     QCoreApplication::sendEvent(trigger, &leaveEvent);
     QTRY_VERIFY_WITH_TIMEOUT(!tooltip.open(), 400);
+  }
+
+  void tooltip_contentHostDoesNotBlockTriggerHitTest() {
+    QWidget host;
+    host.resize(420, 280);
+
+    AdTooltip tooltip(&host);
+    tooltip.setGeometry(24, 40, 180, 40);
+    tooltip.setTitleText(QStringLiteral("prompt text"));
+
+    auto* trigger = new QPushButton(QStringLiteral("trigger"), &tooltip);
+    tooltip.setTriggerWidget(trigger);
+    tooltip.show();
+
+    host.show();
+    QTRY_VERIFY_WITH_TIMEOUT(host.isVisible(), 400);
+    QTRY_VERIFY_WITH_TIMEOUT(trigger->isVisible(), 400);
+
+    const QPoint triggerCenterInTooltip = trigger->mapTo(&tooltip, trigger->rect().center());
+    QWidget* directHit = tooltip.childAt(triggerCenterInTooltip);
+    QVERIFY(directHit != nullptr);
+    QVERIFY(directHit == trigger || trigger->isAncestorOf(directHit));
   }
 
   void tooltip_emptyTitleStaysClosed() {
@@ -1741,15 +1841,18 @@ class TimingRefactorTests final : public QObject {
 
     QSignalSpy requestSpy(&popover, &AdPopover::onOpenChange);
 
-    QTest::mouseMove(&host, QPoint(host.width() - 8, host.height() - 8));
-    QTest::qWait(20);
-    QTest::mouseMove(trigger, trigger->rect().center());
+    QCursor::setPos(host.mapToGlobal(QPoint(host.width() - 8, host.height() - 8)));
+    QCursor::setPos(trigger->mapToGlobal(trigger->rect().center()));
+    QEvent enterEvent(QEvent::Enter);
+    QCoreApplication::sendEvent(trigger, &enterEvent);
     QTRY_COMPARE_WITH_TIMEOUT(requestSpy.count(), 1, 400);
     QCOMPARE(requestSpy.at(0).at(0).toBool(), true);
     QVERIFY(!popover.open());
 
     const int requestCountAfterEnter = requestSpy.count();
-    QTest::mouseMove(&host, QPoint(host.width() - 8, host.height() - 8));
+    QCursor::setPos(host.mapToGlobal(QPoint(host.width() - 8, host.height() - 8)));
+    QEvent leaveEvent(QEvent::Leave);
+    QCoreApplication::sendEvent(trigger, &leaveEvent);
     QTest::qWait(60);
     QCOMPARE(requestSpy.count(), requestCountAfterEnter);
     QVERIFY(!popover.open());

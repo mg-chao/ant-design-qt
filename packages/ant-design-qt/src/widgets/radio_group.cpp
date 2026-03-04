@@ -5,12 +5,88 @@
 
 #include <QBoxLayout>
 #include <QHBoxLayout>
+#include <QLayoutItem>
 #include <QScopedValueRollback>
 #include <QVBoxLayout>
 
 #include <algorithm>
 
 namespace adqt::widgets {
+
+namespace {
+
+class RadioButtonOverlapLayout final : public QHBoxLayout {
+ public:
+  explicit RadioButtonOverlapLayout(QWidget* parent = nullptr) : QHBoxLayout(parent) {}
+
+  void setOverlapPixels(int value) {
+    const int normalized = std::max(0, value);
+    if (overlapPixels_ == normalized) {
+      return;
+    }
+    overlapPixels_ = normalized;
+    invalidate();
+  }
+
+  QSize sizeHint() const override { return adjustedWidth(QHBoxLayout::sizeHint()); }
+
+  QSize minimumSize() const override { return adjustedWidth(QHBoxLayout::minimumSize()); }
+
+  void setGeometry(const QRect& rect) override {
+    QHBoxLayout::setGeometry(rect);
+    if (overlapPixels_ <= 0 || count() <= 1) {
+      return;
+    }
+
+    QVector<QLayoutItem*> orderedItems;
+    orderedItems.reserve(count());
+    for (int i = 0; i < count(); ++i) {
+      QLayoutItem* item = itemAt(i);
+      if (!item) {
+        continue;
+      }
+      orderedItems.append(item);
+    }
+
+    std::sort(orderedItems.begin(), orderedItems.end(), [](const QLayoutItem* lhs, const QLayoutItem* rhs) {
+      return lhs->geometry().x() < rhs->geometry().x();
+    });
+
+    const int originalRightmost = orderedItems.last()->geometry().right();
+    QRect previousGeometry;
+    for (int i = 0; i < orderedItems.size(); ++i) {
+      QLayoutItem* item = orderedItems.at(i);
+      if (!item) {
+        continue;
+      }
+      QRect geometry = item->geometry();
+      if (i > 0) {
+        const int collapsedLeft =
+            previousGeometry.x() + previousGeometry.width() - overlapPixels_;
+        geometry.moveLeft(collapsedLeft);
+      }
+      if (i == orderedItems.size() - 1) {
+        const int widthDelta = originalRightmost - geometry.right();
+        geometry.setWidth(std::max(0, geometry.width() + widthDelta));
+      }
+      item->setGeometry(geometry);
+      previousGeometry = geometry;
+    }
+  }
+
+ private:
+  int overlapCount() const { return std::max(0, count() - 1); }
+
+  QSize adjustedWidth(QSize size) const {
+    const int collapsed = overlapPixels_ * overlapCount();
+    size.setWidth(std::max(0, size.width() - collapsed));
+    return size;
+  }
+
+  int overlapPixels_ = 0;
+};
+
+}  // namespace
 
 AdRadioGroup::AdRadioGroup(QWidget* parent) : QWidget(parent) {
   ensureLayoutForOrientation();
@@ -233,7 +309,7 @@ void AdRadioGroup::ensureLayoutForOrientation() {
   if (needVertical) {
     layout_ = new QVBoxLayout(this);
   } else {
-    layout_ = new QHBoxLayout(this);
+    layout_ = new RadioButtonOverlapLayout(this);
   }
   layout_->setContentsMargins(0, 0, 0, 0);
 
@@ -253,10 +329,12 @@ void AdRadioGroup::updateLayoutSpacing() {
 
   const adqt::theme::ThemeMapToken& map = adqt::theme::ThemeManager::instance().currentMapToken();
   int spacing = 0;
+  int overlapPixels = 0;
   if (effectiveOrientation() == Orientation::Horizontal && optionType_ == AdRadio::OptionType::Button) {
-    // Qt treats negative spacing as "use style default spacing" instead of overlap.
-    // Keep button items directly adjacent and let paint clipping decide shared borders.
+    // Match antd Radio.Button collapsed borders via geometric overlap (equivalent to
+    // margin-inline-end: -lineWidth), while preserving layout spacing = 0.
     spacing = 0;
+    overlapPixels = std::max(1, qRound(map.lineWidth));
   } else if (effectiveOrientation() == Orientation::Vertical) {
     // Align with antd rowGap token: marginXS.
     spacing = std::max(0, qRound(map.sizeXS));
@@ -271,6 +349,10 @@ void AdRadioGroup::updateLayoutSpacing() {
     input.semanticStyles = resolvedSemanticStyles();
     const detail::RadioVisualStyle style = detail::resolveRadioVisualStyle(input);
     spacing = std::max(0, style.metrics.wrapperMarginInlineEnd);
+  }
+
+  if (auto* overlapLayout = dynamic_cast<RadioButtonOverlapLayout*>(layout_)) {
+    overlapLayout->setOverlapPixels(overlapPixels);
   }
   layout_->setSpacing(spacing);
 }
@@ -342,7 +424,7 @@ void AdRadioGroup::applyGroupStateToRadios() {
   syncCheckedFromValue();
   if (optionType_ == AdRadio::OptionType::Button) {
     for (AdRadio* radio : std::as_const(radios_)) {
-      if (radio && radio->isChecked()) {
+      if (radio && radio->isChecked() && radio->isEnabled()) {
         radio->raise();
       }
     }

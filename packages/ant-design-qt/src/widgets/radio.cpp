@@ -361,32 +361,7 @@ void AdRadio::paintEvent(QPaintEvent* event) {
                    Qt::MiterJoin);
     painter.setPen(borderPen);
     painter.setBrush(Qt::NoBrush);
-    if (groupPosition_ != GroupPosition::None && groupPosition_ != GroupPosition::Only) {
-      const bool borderPriority =
-          checkedNow || hovered_ || pressed_ || (hasFocus() && focusVisible_);
-      QRectF clipRect = buttonRect.adjusted(-style.metrics.borderWidth,
-                                            -style.metrics.borderWidth,
-                                            style.metrics.borderWidth,
-                                            style.metrics.borderWidth);
-      const qreal inset = std::max<qreal>(0.0, style.metrics.borderWidth);
-      if (groupVertical_) {
-        if (!borderPriority &&
-            (groupPosition_ == GroupPosition::Middle || groupPosition_ == GroupPosition::Last)) {
-          clipRect.setTop(buttonRect.top() + inset);
-        }
-      } else {
-        if (!borderPriority &&
-            (groupPosition_ == GroupPosition::Middle || groupPosition_ == GroupPosition::Last)) {
-          clipRect.setLeft(buttonRect.left() + inset);
-        }
-      }
-      painter.save();
-      painter.setClipRect(clipRect);
-      painter.drawPath(path);
-      painter.restore();
-    } else {
-      painter.drawPath(path);
-    }
+    painter.drawPath(path);
 
     painter.setPen(buttonState.textColor);
     painter.drawText(contentRect, Qt::AlignCenter, text());
@@ -753,6 +728,9 @@ void AdRadio::stopWaveEffect() { stopInteractionWaveForOwner(this); }
 
 void AdRadio::bumpButtonGroupZOrder() {
   if (optionType_ != OptionType::Button || groupPosition_ == GroupPosition::None || !isVisible()) {
+    return;
+  }
+  if (!isChecked() || effectiveDisabled()) {
     return;
   }
   raise();

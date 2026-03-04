@@ -240,8 +240,8 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
   bool watchedByTrigger(QObject* watched) const;
   bool watchedByPopup(QObject* watched) const;
 
-  void handleTriggerPress(QEvent* event);
-  void handleTriggerRelease(QEvent* event);
+  void handleTriggerPress(QObject* watched, QEvent* event);
+  void handleTriggerRelease(QObject* watched, QEvent* event);
   void handleTriggerKeyPress(QEvent* event);
   void handleTriggerKeyRelease(QEvent* event);
   void handleTriggerContextMenu(QEvent* event);

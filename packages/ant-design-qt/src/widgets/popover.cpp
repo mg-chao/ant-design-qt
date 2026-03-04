@@ -824,6 +824,8 @@ void AdPopover::setTriggerWidget(QWidget* widget) {
   triggerWidget_ = widget;
   if (triggerWidget_) {
     triggerWidget_->setParent(this);
+    triggerWidget_->setAttribute(Qt::WA_Hover, true);
+    triggerWidget_->setMouseTracking(true);
     if (rootLayout_) {
       rootLayout_->addWidget(triggerWidget_);
     }
@@ -848,6 +850,13 @@ void AdPopover::setTitleWidget(QWidget* widget) {
   }
 
   titleWidget_ = widget;
+  if (titleWidget_) {
+    // Keep detached content hidden until popup containers are ready.
+    titleWidget_->hide();
+    if (titleWidget_->parentWidget()) {
+      titleWidget_->setParent(nullptr);
+    }
+  }
   emit titleWidgetChanged(titleWidget_);
   refreshPopupContent();
   updateOpenState(true);
@@ -865,6 +874,13 @@ void AdPopover::setContentWidget(QWidget* widget) {
   }
 
   contentWidget_ = widget;
+  if (contentWidget_) {
+    // Keep detached content hidden until popup containers are ready.
+    contentWidget_->hide();
+    if (contentWidget_->parentWidget()) {
+      contentWidget_->setParent(nullptr);
+    }
+  }
   emit contentWidgetChanged(contentWidget_);
   refreshPopupContent();
   updateOpenState(true);
@@ -915,8 +931,9 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
   }
 
+  const QEvent::Type eventType = event->type();
   if (watchedByTrigger(watched)) {
-    switch (event->type()) {
+    switch (eventType) {
       case QEvent::Enter:
       case QEvent::HoverEnter:
         handleTriggerHoverEnter();
@@ -924,6 +941,10 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
       case QEvent::Leave:
       case QEvent::HoverLeave:
         handleTriggerHoverLeave();
+        break;
+      case QEvent::MouseMove:
+      case QEvent::HoverMove:
+        handleTriggerHoverEnter();
         break;
       case QEvent::FocusIn:
         focusTriggerActive_ = true;
@@ -936,10 +957,10 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
         handleTriggerFocusOutDeferred();
         break;
       case QEvent::MouseButtonPress:
-        handleTriggerPress(event);
+        handleTriggerPress(watched, event);
         break;
       case QEvent::MouseButtonRelease:
-        handleTriggerRelease(event);
+        handleTriggerRelease(watched, event);
         break;
       case QEvent::KeyPress: {
         handleTriggerKeyPress(event);
@@ -985,7 +1006,7 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
         break;
     }
   } else if (watchedByPopup(watched)) {
-    switch (event->type()) {
+    switch (eventType) {
       case QEvent::Enter:
       case QEvent::HoverEnter:
         handlePopupHoverEnter();
@@ -993,6 +1014,10 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
       case QEvent::Leave:
       case QEvent::HoverLeave:
         handlePopupHoverLeave();
+        break;
+      case QEvent::MouseMove:
+      case QEvent::HoverMove:
+        handlePopupHoverEnter();
         break;
       case QEvent::FocusIn:
         focusPopupActive_ = true;
@@ -1098,6 +1123,7 @@ void AdPopover::ensurePopup() {
   popup->setObjectName(QStringLiteral("adpopover-popup"));
   popup->setAttribute(Qt::WA_DeleteOnClose, false);
   popup->setAttribute(Qt::WA_Hover, true);
+  popup->setMouseTracking(true);
   popup->installEventFilter(this);
 
   popup_ = popup;
@@ -1549,7 +1575,8 @@ bool AdPopover::watchedByPopup(QObject* watched) const {
   return false;
 }
 
-void AdPopover::handleTriggerPress(QEvent* event) {
+void AdPopover::handleTriggerPress(QObject* watched, QEvent* event) {
+  Q_UNUSED(watched)
   if (!event || disabled_ || !hasTrigger(Trigger::Click)) {
     return;
   }
@@ -1568,7 +1595,7 @@ void AdPopover::handleTriggerPress(QEvent* event) {
   triggerPressActive_ = true;
 }
 
-void AdPopover::handleTriggerRelease(QEvent* event) {
+void AdPopover::handleTriggerRelease(QObject* watched, QEvent* event) {
   if (!event) {
     return;
   }
@@ -1584,8 +1611,16 @@ void AdPopover::handleTriggerRelease(QEvent* event) {
   }
 
   triggerPressActive_ = false;
-  QWidget* hovered = QApplication::widgetAt(mouseEvent->globalPosition().toPoint());
-  if (!widgetInTree(hovered, triggerWidget_)) {
+  QWidget* releaseTarget = qobject_cast<QWidget*>(watched);
+  const bool releaseOnTriggerTree = widgetInTree(releaseTarget, triggerWidget_);
+  if (!releaseOnTriggerTree) {
+    QWidget* hovered = QApplication::widgetAt(mouseEvent->globalPosition().toPoint());
+    if (!widgetInTree(hovered, triggerWidget_)) {
+      return;
+    }
+  }
+
+  if (disabled_ || !hasTrigger(Trigger::Click)) {
     return;
   }
 

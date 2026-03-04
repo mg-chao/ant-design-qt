@@ -67,7 +67,6 @@ RadioVisualStyle resolveRadioVisualStyle(const RadioStyleInput& input) {
   const adqt::theme::GlobalPaletteToken& global = adqt::theme::ThemeManager::instance().currentToken();
   const bool wireframe = adqt::theme::ThemeManager::instance().currentConfig().seed.wireframe;
 
-  const QColor transparent(0, 0, 0, 0);
   const QColor colorText = toColor(map.colorText, QColor("#141414"));
   const QColor colorTextDisabled = toColor(global.colorTextDisabled, QColor("#bfbfbf"));
   const QColor colorBorder = toColor(map.colorBorder, QColor("#d9d9d9"));
@@ -144,7 +143,7 @@ RadioVisualStyle resolveRadioVisualStyle(const RadioStyleInput& input) {
   // antd default Radio does not define a distinct active state for unchecked items.
   style.dotActive = style.dotHover;
   style.dotChecked = {colorPrimary, checkedBg, dotColor, colorText};
-  style.dotCheckedHover = {transparent, checkedHoverBg, dotColor, colorText};
+  style.dotCheckedHover = {colorPrimaryHover, checkedHoverBg, dotColor, colorText};
   style.dotDisabled = {colorBorder, colorBgContainerDisabled, colorTextDisabled, colorTextDisabled};
   style.dotCheckedDisabled =
       {colorBorder, colorBgContainerDisabled, colorTextDisabled, colorTextDisabled};

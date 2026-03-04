@@ -27,11 +27,41 @@ bool isKeyboardFocusReason(Qt::FocusReason reason) {
          reason == Qt::ShortcutFocusReason;
 }
 
-qreal snapToDevicePixel(qreal value, qreal dpr) {
+qreal snapToDevicePixelSize(qreal value, qreal dpr) {
+  if (dpr <= 0.0) {
+    return value;
+  }
+  const qreal snapped = qRound(value * dpr) / dpr;
+  return std::max(snapped, 1.0 / dpr);
+}
+
+qreal snapToDevicePixelCoord(qreal value, qreal dpr) {
   if (dpr <= 0.0) {
     return value;
   }
   return qRound(value * dpr) / dpr;
+}
+
+QRectF snapRectToDevicePixels(const QRectF& rect, qreal dpr) {
+  if (dpr <= 0.0) {
+    return rect;
+  }
+
+  const qreal left = snapToDevicePixelCoord(rect.left(), dpr);
+  const qreal top = snapToDevicePixelCoord(rect.top(), dpr);
+  const qreal right = snapToDevicePixelCoord(rect.left() + rect.width(), dpr);
+  const qreal bottom = snapToDevicePixelCoord(rect.top() + rect.height(), dpr);
+  const qreal minSize = 1.0 / dpr;
+
+  return QRectF(left,
+                top,
+                std::max(minSize, right - left),
+                std::max(minSize, bottom - top));
+}
+
+QRectF centeredSquare(const QPointF& center, qreal size) {
+  const qreal halfSize = size / 2.0;
+  return QRectF(center.x() - halfSize, center.y() - halfSize, size, size);
 }
 
 QPainterPath roundedRectPath(const QRectF& rect,
@@ -104,6 +134,8 @@ QRectF defaultRadioIconRect(const QRectF& contentRect,
                 static_cast<qreal>(style.metrics.radioSize),
                 static_cast<qreal>(style.metrics.radioSize));
 }
+
+constexpr qreal kDefaultRadioWaveStrokeScale = 0.6;
 
 }  // namespace
 
@@ -313,44 +345,17 @@ void AdRadio::paintEvent(QPaintEvent* event) {
       buttonState = style.buttonHover;
     }
 
-    qreal topLeft = style.metrics.buttonBorderRadius;
-    qreal topRight = style.metrics.buttonBorderRadius;
-    qreal bottomRight = style.metrics.buttonBorderRadius;
-    qreal bottomLeft = style.metrics.buttonBorderRadius;
-
-    if (groupPosition_ != GroupPosition::None && groupPosition_ != GroupPosition::Only) {
-      if (groupVertical_) {
-        if (groupPosition_ == GroupPosition::First) {
-          bottomLeft = 0.0;
-          bottomRight = 0.0;
-        } else if (groupPosition_ == GroupPosition::Middle) {
-          topLeft = 0.0;
-          topRight = 0.0;
-          bottomLeft = 0.0;
-          bottomRight = 0.0;
-        } else if (groupPosition_ == GroupPosition::Last) {
-          topLeft = 0.0;
-          topRight = 0.0;
-        }
-      } else {
-        if (groupPosition_ == GroupPosition::First) {
-          topRight = 0.0;
-          bottomRight = 0.0;
-        } else if (groupPosition_ == GroupPosition::Middle) {
-          topLeft = 0.0;
-          topRight = 0.0;
-          bottomLeft = 0.0;
-          bottomRight = 0.0;
-        } else if (groupPosition_ == GroupPosition::Last) {
-          topLeft = 0.0;
-          bottomLeft = 0.0;
-        }
-      }
-    }
+    qreal topLeft = 0.0;
+    qreal topRight = 0.0;
+    qreal bottomRight = 0.0;
+    qreal bottomLeft = 0.0;
+    resolveButtonCornerRadii(&topLeft, &topRight, &bottomRight, &bottomLeft);
 
     const qreal borderHalf = style.metrics.borderWidth / 2.0;
-    const QRectF buttonRect =
-        contentRect.adjusted(borderHalf, borderHalf, -borderHalf, -borderHalf);
+    const QRectF buttonRect = contentRect.adjusted(borderHalf + 0.5,
+                                                   borderHalf + 0.5,
+                                                   -borderHalf - 0.5,
+                                                   -borderHalf - 0.5);
     const QPainterPath path =
         roundedRectPath(buttonRect, topLeft, topRight, bottomRight, bottomLeft);
     painter.fillPath(path, buttonState.backgroundColor);
@@ -387,36 +392,40 @@ void AdRadio::paintEvent(QPaintEvent* event) {
   const QFontMetrics fm(style.metrics.font);
   const int textW = textWidth(fm);
   const QRectF iconRect = defaultRadioIconRect(contentRect, style, textW, hasText, block_);
-  const qreal borderHalf = style.metrics.borderWidth / 2.0;
+  const QRectF iconBackgroundRect =
+      snapRectToDevicePixels(iconRect.adjusted(0.5, 0.5, -0.5, -0.5), dpr);
+  const qreal iconStrokeInset = style.metrics.borderWidth / 2.0 + 0.5;
   const QRectF iconBorderRect =
-      iconRect.adjusted(borderHalf, borderHalf, -borderHalf, -borderHalf);
+      snapRectToDevicePixels(iconRect.adjusted(iconStrokeInset,
+                                               iconStrokeInset,
+                                               -iconStrokeInset,
+                                               -iconStrokeInset),
+                             dpr);
 
-  if (dotState.borderColor.alpha() <= 0 || style.metrics.borderWidth <= 0) {
-    painter.setPen(Qt::NoPen);
-  } else {
+  // CSS paints the background across the full border box, even when border is transparent.
+  painter.setPen(Qt::NoPen);
+  painter.setBrush(dotState.backgroundColor);
+  painter.drawEllipse(iconBackgroundRect);
+
+  if (dotState.borderColor.alpha() > 0 && style.metrics.borderWidth > 0) {
     QPen borderPen(dotState.borderColor,
                    style.metrics.borderWidth,
                    Qt::SolidLine,
-                   Qt::SquareCap,
-                   Qt::MiterJoin);
+                   Qt::RoundCap,
+                   Qt::RoundJoin);
     painter.setPen(borderPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(iconBorderRect);
   }
-  painter.setBrush(dotState.backgroundColor);
-  painter.drawEllipse(iconBorderRect);
 
   if (checkedNow) {
     const qreal dotSize = static_cast<qreal>(std::min(style.metrics.dotSize, style.metrics.radioSize - 4));
-    const QPointF center = iconRect.center();
-    const QRectF dotRect(center.x() - dotSize / 2.0,
-                         center.y() - dotSize / 2.0,
-                         dotSize,
-                         dotSize);
+    const qreal alignedDotSize = snapToDevicePixelSize(dotSize, dpr);
+    const QRectF dotRect =
+        snapRectToDevicePixels(centeredSquare(iconBackgroundRect.center(), alignedDotSize), dpr);
     painter.setPen(Qt::NoPen);
     painter.setBrush(dotState.dotColor);
-    QRectF snappedDotRect = dotRect;
-    snappedDotRect.moveTo(snapToDevicePixel(snappedDotRect.x(), dpr),
-                          snapToDevicePixel(snappedDotRect.y(), dpr));
-    painter.drawEllipse(snappedDotRect);
+    painter.drawEllipse(dotRect);
   }
 
   if (hasText) {
@@ -658,11 +667,10 @@ void AdRadio::updateInteractionFocusOverlay() {
     request.bottomLeft = radius;
   } else {
     request.baseRectInWindow = QRectF(QPointF(widgetOriginInWindow), QSizeF(QWidget::size()));
-    const qreal radius = cornerRadius();
-    request.topLeft = radius;
-    request.topRight = radius;
-    request.bottomRight = radius;
-    request.bottomLeft = radius;
+    resolveButtonCornerRadii(&request.topLeft,
+                             &request.topRight,
+                             &request.bottomRight,
+                             &request.bottomLeft);
   }
   request.color = style.metrics.focusOutlineColor;
   request.strokeWidth = style.metrics.focusOutlineWidth;
@@ -711,14 +719,14 @@ void AdRadio::startWaveEffect() {
     request.bottomRight = radius;
     request.bottomLeft = radius;
     request.color = style.dotChecked.borderColor;
+    request.strokeWidthScale = kDefaultRadioWaveStrokeScale;
   } else {
     request.baseRectInWindow = QRectF(QPointF(widgetOriginInWindow), QSizeF(QWidget::size()));
     request.color = style.buttonChecked.borderColor;
-    const qreal radius = cornerRadius();
-    request.topLeft = radius;
-    request.topRight = radius;
-    request.bottomRight = radius;
-    request.bottomLeft = radius;
+    resolveButtonCornerRadii(&request.topLeft,
+                             &request.topRight,
+                             &request.bottomRight,
+                             &request.bottomLeft);
   }
 
   triggerInteractionWave(request);
@@ -775,6 +783,61 @@ qreal AdRadio::cornerRadius() const {
   input.semanticStyles = resolvedSemanticStyles();
   const detail::RadioVisualStyle style = detail::resolveRadioVisualStyle(input);
   return style.metrics.buttonBorderRadius;
+}
+
+void AdRadio::resolveButtonCornerRadii(qreal* topLeft,
+                                       qreal* topRight,
+                                       qreal* bottomRight,
+                                       qreal* bottomLeft) const {
+  qreal tl = cornerRadius();
+  qreal tr = tl;
+  qreal br = tl;
+  qreal bl = tl;
+
+  if (optionType_ == OptionType::Button &&
+      groupPosition_ != GroupPosition::None &&
+      groupPosition_ != GroupPosition::Only) {
+    if (groupVertical_) {
+      if (groupPosition_ == GroupPosition::First) {
+        bl = 0.0;
+        br = 0.0;
+      } else if (groupPosition_ == GroupPosition::Middle) {
+        tl = 0.0;
+        tr = 0.0;
+        bl = 0.0;
+        br = 0.0;
+      } else if (groupPosition_ == GroupPosition::Last) {
+        tl = 0.0;
+        tr = 0.0;
+      }
+    } else {
+      if (groupPosition_ == GroupPosition::First) {
+        tr = 0.0;
+        br = 0.0;
+      } else if (groupPosition_ == GroupPosition::Middle) {
+        tl = 0.0;
+        tr = 0.0;
+        bl = 0.0;
+        br = 0.0;
+      } else if (groupPosition_ == GroupPosition::Last) {
+        tl = 0.0;
+        bl = 0.0;
+      }
+    }
+  }
+
+  if (topLeft) {
+    *topLeft = tl;
+  }
+  if (topRight) {
+    *topRight = tr;
+  }
+  if (bottomRight) {
+    *bottomRight = br;
+  }
+  if (bottomLeft) {
+    *bottomLeft = bl;
+  }
 }
 
 void AdRadio::setGroupPosition(GroupPosition position) {

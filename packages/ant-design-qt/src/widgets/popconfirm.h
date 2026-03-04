@@ -1,24 +1,27 @@
 #pragma once
 
 #include <QColor>
-#include <QFont>
 #include <QFlags>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QWidget>
 
 #include <functional>
 #include <optional>
 
+#include "button.h"
 #include "popover.h"
+#include "icons_types.h"
 
 class QEvent;
 class QLabel;
 class QVBoxLayout;
+class QHBoxLayout;
 
 namespace adqt::widgets {
 
-class AdTooltip final : public QWidget {
+class AdPopconfirm final : public QWidget {
   Q_OBJECT
 
   Q_PROPERTY(Placement placement READ placement WRITE setPlacement NOTIFY placementChanged)
@@ -38,7 +41,18 @@ class AdTooltip final : public QWidget {
   Q_PROPERTY(int mouseLeaveDelayMs READ mouseLeaveDelayMs WRITE setMouseLeaveDelayMs
                  NOTIFY mouseLeaveDelayMsChanged)
   Q_PROPERTY(QString titleText READ titleText WRITE setTitleText NOTIFY titleTextChanged)
-  Q_PROPERTY(QString color READ color WRITE setColor NOTIFY colorChanged)
+  Q_PROPERTY(QString descriptionText READ descriptionText WRITE setDescriptionText
+                 NOTIFY descriptionTextChanged)
+  Q_PROPERTY(QString okText READ okText WRITE setOkText NOTIFY okTextChanged)
+  Q_PROPERTY(QString cancelText READ cancelText WRITE setCancelText NOTIFY cancelTextChanged)
+  Q_PROPERTY(bool showCancel READ showCancel WRITE setShowCancel NOTIFY showCancelChanged)
+  Q_PROPERTY(bool confirmAutoClose READ confirmAutoClose WRITE setConfirmAutoClose
+                 NOTIFY confirmAutoCloseChanged)
+  Q_PROPERTY(bool iconVisible READ iconVisible WRITE setIconVisible NOTIFY iconVisibleChanged)
+  Q_PROPERTY(adqt::icons::IconToken iconToken READ iconToken WRITE setIconToken NOTIFY iconTokenChanged)
+  Q_PROPERTY(adqt::widgets::AdButton::Type okType READ okType WRITE setOkType NOTIFY okTypeChanged)
+  Q_PROPERTY(bool okButtonLoading READ okButtonLoading WRITE setOkButtonLoading
+                 NOTIFY okButtonLoadingChanged)
 
  public:
   enum class Placement {
@@ -68,14 +82,14 @@ class AdTooltip final : public QWidget {
   Q_FLAG(Triggers)
 
   struct ComponentTokens {
-    std::optional<int> maxWidth;
-    std::optional<int> borderRadius;
-    std::optional<int> arrowSize;
-    std::optional<int> popupOffset;
-    std::optional<int> paddingHorizontal;
-    std::optional<int> paddingVertical;
-    std::optional<QString> popupBg;
-    std::optional<QString> textColor;
+    std::optional<int> titleMinWidth;
+    std::optional<int> zIndexPopup;
+    std::optional<int> messageGap;
+    std::optional<int> messageBottom;
+    std::optional<int> descriptionGap;
+    std::optional<int> buttonGap;
+    std::optional<int> iconSize;
+    std::optional<QString> iconColor;
   };
 
   struct SemanticSlotStyle {
@@ -87,23 +101,24 @@ class AdTooltip final : public QWidget {
   struct SemanticStyles {
     SemanticSlotStyle root;
     SemanticSlotStyle container;
-    SemanticSlotStyle body;
+    SemanticSlotStyle title;
+    SemanticSlotStyle description;
+    SemanticSlotStyle icon;
     SemanticSlotStyle arrow;
   };
 
   struct StyleContext {
     Placement placement = Placement::Top;
-    Triggers triggerModes = Trigger::Hover;
+    Triggers triggerModes = Trigger::Click;
     bool open = false;
     bool disabled = false;
     bool arrowVisible = true;
-    QString color;
   };
 
   using SemanticStyleResolver = std::function<SemanticStyles(const StyleContext&)>;
 
-  explicit AdTooltip(QWidget* parent = nullptr);
-  ~AdTooltip() override;
+  explicit AdPopconfirm(QWidget* parent = nullptr);
+  ~AdPopconfirm() override;
 
   Placement placement() const;
   void setPlacement(Placement value);
@@ -143,14 +158,38 @@ class AdTooltip final : public QWidget {
   QString titleText() const;
   void setTitleText(const QString& value);
 
-  QString color() const;
-  void setColor(const QString& value);
+  QString descriptionText() const;
+  void setDescriptionText(const QString& value);
+
+  QString okText() const;
+  void setOkText(const QString& value);
+
+  QString cancelText() const;
+  void setCancelText(const QString& value);
+
+  bool showCancel() const;
+  void setShowCancel(bool value);
+
+  bool confirmAutoClose() const;
+  void setConfirmAutoClose(bool value);
+
+  bool iconVisible() const;
+  void setIconVisible(bool value);
+
+  adqt::icons::IconToken iconToken() const;
+  void setIconToken(const adqt::icons::IconToken& value);
+
+  AdButton::Type okType() const;
+  void setOkType(AdButton::Type value);
+
+  bool okButtonLoading() const;
+  void setOkButtonLoading(bool value);
 
   QWidget* triggerWidget() const;
   void setTriggerWidget(QWidget* widget);
 
-  QWidget* titleWidget() const;
-  void setTitleWidget(QWidget* widget);
+  AdButton* okButton() const;
+  AdButton* cancelButton() const;
 
   ComponentTokens componentTokens() const;
   void setComponentTokens(const ComponentTokens& tokens);
@@ -175,27 +214,42 @@ class AdTooltip final : public QWidget {
   void mouseEnterDelayMsChanged(int value);
   void mouseLeaveDelayMsChanged(int value);
   void titleTextChanged(const QString& value);
-  void colorChanged(const QString& value);
+  void descriptionTextChanged(const QString& value);
+  void okTextChanged(const QString& value);
+  void cancelTextChanged(const QString& value);
+  void showCancelChanged(bool value);
+  void confirmAutoCloseChanged(bool value);
+  void iconVisibleChanged(bool value);
+  void iconTokenChanged(const adqt::icons::IconToken& value);
+  void okTypeChanged(AdButton::Type value);
+  void okButtonLoadingChanged(bool value);
   void triggerWidgetChanged(QWidget* value);
-  void titleWidgetChanged(QWidget* value);
   void componentTokensChanged();
   void semanticStylesChanged();
+  void confirmed();
+  void canceled();
+  void popupClicked();
 
  protected:
+  bool eventFilter(QObject* watched, QEvent* event) override;
   void changeEvent(QEvent* event) override;
 
  private:
   struct DerivedVisualStyle {
-    int maxWidth = 250;
-    int minHeight = 32;
-    int borderRadius = 8;
-    int arrowSize = 8;
-    int popupOffset = 8;
-    int paddingHorizontal = 8;
-    int paddingVertical = 4;
-    QFont textFont;
-    QColor popupBg = QColor("#141414");
-    QColor textColor = QColor("#ffffff");
+    int titleMinWidth = 177;
+    int zIndexPopup = 1060;
+    int messageGap = 8;
+    int messageBottom = 8;
+    int descriptionGap = 4;
+    int buttonGap = 8;
+    int iconSize = 14;
+    QFont titleFont;
+    QFont titleOnlyFont;
+    QFont descriptionFont;
+    QColor titleColor = QColor("#141414");
+    QColor descriptionColor = QColor("#141414");
+    QColor iconColor = QColor("#faad14");
+    AdPopover::SemanticStyles popoverSemantic;
   };
 
   static AdPopover::Placement toPopoverPlacement(Placement value);
@@ -205,23 +259,45 @@ class AdTooltip final : public QWidget {
   static AdPopover::SemanticSlotStyle toPopoverSemanticSlot(const SemanticSlotStyle& slot);
 
   void ensureContentHost();
-  void clearContentHostLayout();
   void syncContentWidget();
   void refreshVisualStyle();
   DerivedVisualStyle deriveVisualStyle() const;
-  std::optional<QColor> resolveColorValue(const QString& value) const;
-  static QColor textColorForBackground(const QColor& background);
-  static QString colorToTokenString(const QColor& color);
+  void refreshOverlayWatchers();
+  void clearOverlayWatchers();
+  void requestCloseAfterAction();
 
   QPointer<AdPopover> popover_;
   QPointer<QWidget> triggerWidget_;
-  QPointer<QWidget> titleWidget_;
+
   QPointer<QWidget> contentHost_;
-  QPointer<QVBoxLayout> contentHostLayout_;
-  QPointer<QLabel> contentLabel_;
+  QPointer<QVBoxLayout> contentLayout_;
+  QPointer<QWidget> messageHost_;
+  QPointer<QHBoxLayout> messageLayout_;
+  QPointer<QLabel> iconLabel_;
+  QPointer<QWidget> textHost_;
+  QPointer<QVBoxLayout> textLayout_;
+  QPointer<QLabel> titleLabel_;
+  QPointer<QLabel> descriptionLabel_;
+  QPointer<QWidget> buttonsHost_;
+  QPointer<QHBoxLayout> buttonsLayout_;
+  QPointer<QWidget> buttonsLeadSpacer_;
+  QPointer<QWidget> buttonsInnerSpacer_;
+  QPointer<AdButton> cancelButton_;
+  QPointer<AdButton> okButton_;
+
+  QSet<QPointer<QObject>> watchedOverlayObjects_;
 
   QString titleText_;
-  QString color_;
+  QString descriptionText_;
+  QString okText_ = QStringLiteral("OK");
+  QString cancelText_ = QStringLiteral("Cancel");
+  bool showCancel_ = true;
+  bool confirmAutoClose_ = true;
+  bool iconVisible_ = true;
+  adqt::icons::IconToken iconToken_;
+  AdButton::Type okType_ = AdButton::Type::Primary;
+  bool okButtonLoading_ = false;
+
   ComponentTokens componentTokens_;
   SemanticStyles semanticStyles_;
   SemanticStyleResolver semanticStyleResolver_;
@@ -229,4 +305,4 @@ class AdTooltip final : public QWidget {
 
 }  // namespace adqt::widgets
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(adqt::widgets::AdTooltip::Triggers)
+Q_DECLARE_OPERATORS_FOR_FLAGS(adqt::widgets::AdPopconfirm::Triggers)

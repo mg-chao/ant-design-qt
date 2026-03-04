@@ -9,6 +9,7 @@
 #include <functional>
 
 class QBoxLayout;
+class QResizeEvent;
 
 namespace adqt::widgets {
 
@@ -113,14 +114,18 @@ class AdRadioGroup final : public QWidget {
   void semanticStylesChanged();
 
  private:
+  void resizeEvent(QResizeEvent* event) override;
   Orientation effectiveOrientation() const;
   StyleContext currentStyleContext() const;
   AdRadio::SemanticStyles resolvedSemanticStyles() const;
   void ensureLayoutForOrientation();
+  int buttonGroupOverlapPixels() const;
+  void syncLayoutGeometry();
   void updateLayoutSpacing();
   void rebuildRadios();
   void applyGroupStateToRadios();
   void syncCheckedFromValue();
+  void updateButtonStackingOrder();
   void updateGroupPositions();
   void onRadioChanged(AdRadio* radio, const QVariant& value, bool checked);
 
@@ -145,4 +150,3 @@ class AdRadioGroup final : public QWidget {
 };
 
 }  // namespace adqt::widgets
-

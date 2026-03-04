@@ -12,6 +12,8 @@
 
 namespace adqt::widgets {
 
+class AdTooltip;
+
 class AdSlider final : public QWidget {
   Q_OBJECT
 
@@ -245,6 +247,8 @@ class AdSlider final : public QWidget {
   void changeEvent(QEvent* event) override;
 
  private:
+  class TooltipHost;
+
   enum class DragMode {
     None,
     Handle,
@@ -272,8 +276,12 @@ class AdSlider final : public QWidget {
   void handleRailAction(const QPoint& pos, const LayoutInfo& layout);
   bool deleteHandleAt(int index);
   bool addHandleAt(double value, int* insertedIndex = nullptr);
+  bool isMarkActive(double markValue) const;
   QList<int> tooltipHandleIndexes() const;
   QString tooltipText(double value) const;
+  void ensureTooltipHosts(int count);
+  void clearTooltipHosts();
+  void syncTooltipHosts(const LayoutInfo* layout = nullptr);
 
   Mode mode_ = Mode::Single;
   double minimum_ = 0.0;
@@ -311,7 +319,7 @@ class AdSlider final : public QWidget {
   QPoint dragStartPos_;
   QList<double> dragStartValues_;
   QList<double> pressValuesSnapshot_;
+  QList<TooltipHost*> tooltipHosts_;
 };
 
 }  // namespace adqt::widgets
-

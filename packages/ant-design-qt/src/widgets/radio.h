@@ -168,6 +168,10 @@ class AdRadio : public QAbstractButton {
   void bumpButtonGroupZOrder();
   int textWidth(const QFontMetrics& metrics) const;
   qreal cornerRadius() const;
+  void resolveButtonCornerRadii(qreal* topLeft,
+                                qreal* topRight,
+                                qreal* bottomRight,
+                                qreal* bottomLeft) const;
 
   void setGroupPosition(GroupPosition position);
   void setGroupVertical(bool vertical);

@@ -422,7 +422,7 @@ void AdTooltip::ensureContentHost() {
 
   auto* label = new QLabel(host);
   label->setWordWrap(true);
-  label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+  label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 
   contentHost_ = host;
   contentHostLayout_ = layout;
@@ -483,15 +483,40 @@ void AdTooltip::refreshVisualStyle() {
   }
 
   const DerivedVisualStyle style = deriveVisualStyle();
+  const int horizontalPadding = std::max(0, style.paddingHorizontal);
+  const int verticalPadding = std::max(0, style.paddingVertical);
+  const int arrowWidth = std::max(0, style.arrowSize * 2);
+  const int centerAlignedMinWidth = std::max(1, style.borderRadius * 2 + arrowWidth);
+  const int edgeOffsetHorizontal = (style.borderRadius > 12) ? (style.borderRadius + 2) : 12;
+  const int edgeAlignedMinWidth =
+      std::max(centerAlignedMinWidth, style.borderRadius + arrowWidth + edgeOffsetHorizontal);
+  const Placement currentPlacement = placement();
+  const bool edgeAlignedPlacement = currentPlacement == Placement::TopLeft ||
+                                    currentPlacement == Placement::TopRight ||
+                                    currentPlacement == Placement::BottomLeft ||
+                                    currentPlacement == Placement::BottomRight;
 
   if (contentHost_) {
-    contentHost_->setMaximumWidth(style.maxWidth > 0 ? style.maxWidth : QWIDGETSIZE_MAX);
+    // antd applies min/max width and min-height to the tooltip body that already includes
+    // text padding. The content host in Qt sits inside a padded container, so subtract
+    // those paddings to keep the final rendered bubble size aligned with antd.
+    const int horizontalPaddingSpace = horizontalPadding * 2;
+    const int verticalPaddingSpace = verticalPadding * 2;
+    const int bodyMinWidth = edgeAlignedPlacement ? edgeAlignedMinWidth : centerAlignedMinWidth;
+    const int contentMinWidth = std::max(1, bodyMinWidth - horizontalPaddingSpace);
+    const int contentMinHeight = std::max(0, style.minHeight - verticalPaddingSpace);
+    const int contentMaxWidth =
+        (style.maxWidth > 0) ? std::max(1, style.maxWidth - horizontalPaddingSpace) : QWIDGETSIZE_MAX;
+
+    contentHost_->setMaximumWidth(contentMaxWidth);
+    contentHost_->setMinimumWidth(contentMinWidth);
+    contentHost_->setMinimumHeight(contentMinHeight);
   }
   if (contentLabel_) {
     QPalette palette = contentLabel_->palette();
     palette.setColor(QPalette::WindowText, style.textColor);
     contentLabel_->setPalette(palette);
-    contentLabel_->setFont(font());
+    contentLabel_->setFont(style.textFont);
   }
 
   AdPopover::ComponentTokens popoverTokens;
@@ -504,8 +529,8 @@ void AdTooltip::refreshVisualStyle() {
   popoverTokens.titlePaddingHorizontal = 0;
   popoverTokens.titlePaddingVertical = 0;
   popoverTokens.titleMarginBottom = 0;
-  popoverTokens.contentPaddingHorizontal = style.paddingHorizontal;
-  popoverTokens.contentPaddingVertical = style.paddingVertical;
+  popoverTokens.contentPaddingHorizontal = horizontalPadding;
+  popoverTokens.contentPaddingVertical = verticalPadding;
   popoverTokens.popupBg = colorToTokenString(style.popupBg);
   popoverTokens.titleColor = colorToTokenString(style.textColor);
   popoverTokens.contentColor = colorToTokenString(style.textColor);
@@ -536,11 +561,14 @@ AdTooltip::DerivedVisualStyle AdTooltip::deriveVisualStyle() const {
   const adqt::theme::ThemeMapToken& map = themeManager.currentMapToken();
   const adqt::theme::ThemeSeedToken& seed = themeManager.currentConfig().seed;
 
+  style.minHeight = std::max(0, qRound(map.controlHeight));
   style.borderRadius = std::max(0, qRound(map.borderRadius));
-  style.arrowSize = std::max(6, qRound(seed.sizePopupArrow / 2.0));
-  style.popupOffset = std::max(2, qRound(map.sizeXXS));
-  style.paddingHorizontal = std::max(6, qRound(map.sizeXS));
-  style.paddingVertical = std::max(3, qRound(map.sizeXXS));
+  style.arrowSize = std::max(0, qRound(seed.sizePopupArrow / 2.0));
+  style.popupOffset = std::max(0, qRound(map.sizeXXS));
+  style.paddingHorizontal = std::max(0, qRound(map.sizeXS));
+  style.paddingVertical = std::max(0, qRound(map.sizeSM / 2.0));
+  style.textFont = font();
+  style.textFont.setPixelSize(std::max(12, qRound(map.fontSize)));
   style.popupBg = toColor(map.colorBgSpotlight, QColor("#141414"));
   style.textColor = toColor(map.colorWhite, QColor("#ffffff"));
 
@@ -651,7 +679,14 @@ QString AdTooltip::colorToTokenString(const QColor& color) {
     return QString();
   }
   if (color.alpha() < 255) {
-    return color.name(QColor::HexArgb);
+    // FastColorLite parses 8-digit hex as #RRGGBBAA. Qt's HexArgb emits #AARRGGBB.
+    // Use explicit RGBA ordering to preserve tooltip background opacity.
+    return QStringLiteral("#%1%2%3%4")
+        .arg(color.red(), 2, 16, QChar('0'))
+        .arg(color.green(), 2, 16, QChar('0'))
+        .arg(color.blue(), 2, 16, QChar('0'))
+        .arg(color.alpha(), 2, 16, QChar('0'))
+        .toLower();
   }
   return color.name(QColor::HexRgb);
 }

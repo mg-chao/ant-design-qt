@@ -6,6 +6,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLinearGradient>
 #include <QPalette>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -372,40 +373,33 @@ QWidget* SliderDocsPage::buildVerticalDemo() {
   auto* row = new QHBoxLayout(box);
   row->setContentsMargins(0, 0, 0, 0);
   row->setSpacing(22);
+  row->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 
-  auto makeVerticalHolder = []() {
-    auto* holder = new QWidget();
-    holder->setFixedSize(90, 320);
-    auto* layout = new QVBoxLayout(holder);
-    layout->setContentsMargins(10, 10, 10, 10);
-    return qMakePair(holder, layout);
-  };
+  constexpr int kVerticalSliderWidth = 90;
+  constexpr int kVerticalSliderHeight = 300;
 
-  auto a = makeVerticalHolder();
   auto* sliderA = new AdSlider();
   sliderA->setOrientation(Qt::Vertical);
   sliderA->setValue(30);
-  a.second->addWidget(sliderA, 1);
+  sliderA->setFixedSize(kVerticalSliderWidth, kVerticalSliderHeight);
 
-  auto b = makeVerticalHolder();
   auto* sliderB = new AdSlider();
   sliderB->setMode(AdSlider::Mode::Range);
   sliderB->setOrientation(Qt::Vertical);
   sliderB->setStep(10);
   sliderB->setValues({20, 50});
-  b.second->addWidget(sliderB, 1);
+  sliderB->setFixedSize(kVerticalSliderWidth, kVerticalSliderHeight);
 
-  auto c = makeVerticalHolder();
   auto* sliderC = new AdSlider();
   sliderC->setMode(AdSlider::Mode::Range);
   sliderC->setOrientation(Qt::Vertical);
   sliderC->setMarks(temperatureMarks());
   sliderC->setValues({26, 37});
-  c.second->addWidget(sliderC, 1);
+  sliderC->setFixedSize(kVerticalSliderWidth, kVerticalSliderHeight);
 
-  row->addWidget(a.first);
-  row->addWidget(b.first);
-  row->addWidget(c.first);
+  row->addWidget(sliderA);
+  row->addWidget(sliderB);
+  row->addWidget(sliderC);
   row->addStretch();
   return box;
 }
@@ -525,28 +519,36 @@ QWidget* SliderDocsPage::buildStyleClassDemo() {
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(12);
 
+  const auto makeVerticalGradientBrush = [](const QColor& top, const QColor& bottom) {
+    QLinearGradient gradient(0.0, 0.0, 0.0, 1.0);
+    gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
+    gradient.setColorAt(0.0, top);
+    gradient.setColorAt(1.0, bottom);
+    return QBrush(gradient);
+  };
+
   auto* objectStyled = new AdSlider();
   objectStyled->setValue(30);
+  objectStyled->setFixedWidth(300);
   AdSlider::SemanticStyles fixedStyles;
-  fixedStyles.track.backgroundColor = QColor("#1677ff");
+  fixedStyles.tracks.brush = makeVerticalGradientBrush(QColor("#91caff"), QColor("#1677ff"));
   fixedStyles.handle.borderColor = QColor("#1677ff");
-  fixedStyles.handle.backgroundColor = QColor("#e6f4ff");
-  fixedStyles.mark.textColor = QColor("#8c8c8c");
-  fixedStyles.markActive.textColor = QColor("#1677ff");
   objectStyled->setSemanticStyles(fixedStyles);
 
   auto* resolverStyled = new AdSlider();
-  resolverStyled->setMode(AdSlider::Mode::Range);
   resolverStyled->setOrientation(Qt::Vertical);
   resolverStyled->setReverse(true);
-  resolverStyled->setValues({20, 55});
-  resolverStyled->setFixedSize(80, 280);
+  resolverStyled->setValue(30);
+  resolverStyled->setFixedSize(100, 300);
   resolverStyled->setSemanticStyleResolver([](const AdSlider::StyleContext& ctx) {
     AdSlider::SemanticStyles styles;
     if (ctx.orientation == Qt::Vertical) {
-      styles.track.backgroundColor = QColor("#722ed1");
+      QLinearGradient gradient(0.0, 0.0, 0.0, 1.0);
+      gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
+      gradient.setColorAt(0.0, QColor("#722cc0"));
+      gradient.setColorAt(1.0, QColor("#722ed1"));
+      styles.tracks.brush = QBrush(gradient);
       styles.handle.borderColor = QColor("#722ed1");
-      styles.handle.backgroundColor = QColor("#f9f0ff");
     }
     return styles;
   });

@@ -16,6 +16,7 @@ struct InteractionWaveRequest {
   qreal bottomRight = 0.0;
   qreal bottomLeft = 0.0;
   QColor color;
+  qreal strokeWidthScale = 1.0;
 };
 
 struct InteractionFocusRequest {

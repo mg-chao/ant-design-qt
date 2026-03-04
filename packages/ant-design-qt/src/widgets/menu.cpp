@@ -6,6 +6,7 @@
 #include "menu_style.h"
 #include "popup_placement.h"
 #include "theme/theme.h"
+#include "tooltip.h"
 
 #include <QCursor>
 #include <QEvent>
@@ -21,7 +22,6 @@
 #include <QPaintEvent>
 #include <QPointer>
 #include <QStyle>
-#include <QToolTip>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -102,6 +102,13 @@ bool shouldShowSubMenuArrow(AdMenu::Mode mode,
     return false;
   }
   return true;
+}
+
+AdTooltip::Placement collapsedMenuTooltipPlacement(const QWidget* widget) {
+  if (widget && widget->layoutDirection() == Qt::RightToLeft) {
+    return AdTooltip::Placement::Left;
+  }
+  return AdTooltip::Placement::Right;
 }
 
 QSize pixmapDeviceIndependentSize(const QPixmap& pixmap) {
@@ -1341,13 +1348,18 @@ void AdMenu::changeEvent(QEvent* event) {
 
   switch (event->type()) {
     case QEvent::EnabledChange:
+      syncTooltipForHoveredEntry();
       update();
       break;
     case QEvent::FontChange:
       rebuildEntries();
       syncPopupVisibility();
+      syncTooltipForHoveredEntry();
       updateGeometry();
       update();
+      break;
+    case QEvent::LayoutDirectionChange:
+      syncTooltipForHoveredEntry();
       break;
     default:
       break;
@@ -1358,6 +1370,7 @@ void AdMenu::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
   rebuildEntries();
   syncPopupVisibility();
+  syncTooltipForHoveredEntry();
 }
 
 bool AdMenu::eventFilter(QObject* watched, QEvent* event) {
@@ -1514,6 +1527,7 @@ void AdMenu::rebuildEntries() {
     contentHeight_ = cursorY + trailingBlockMargin + style.metrics.borderWidth;
   }
 
+  syncTooltipForHoveredEntry();
   updateGeometry();
   update();
 }
@@ -1738,8 +1752,38 @@ void AdMenu::syncTooltipForHoveredEntry() {
     hideTooltip();
     return;
   }
+
   const VisibleEntry& entry = entries_.at(hoveredEntry_);
-  setToolTip(tooltipTextForEntry(entry));
+  const QString text = tooltipTextForEntry(entry).trimmed();
+  if (text.isEmpty()) {
+    hideTooltip();
+    return;
+  }
+
+  ensureTooltipHost();
+  if (!tooltipHost_ || !tooltipTrigger_) {
+    return;
+  }
+
+  QRect anchorRect = entry.rect.intersected(rect());
+  if (anchorRect.isEmpty()) {
+    anchorRect = QRect(0, 0, 1, 1);
+  }
+
+  tooltipHost_->setPlacement(collapsedMenuTooltipPlacement(this));
+  tooltipHost_->setDisabled(!isEnabled());
+  tooltipHost_->setGeometry(anchorRect);
+
+  const QSize anchorSize = anchorRect.size();
+  tooltipTrigger_->setMinimumSize(anchorSize);
+  tooltipTrigger_->setMaximumSize(anchorSize);
+  tooltipTrigger_->updateGeometry();
+
+  tooltipHost_->setTitleText(text);
+  tooltipHost_->setOpen(true);
+  if (!tooltipHost_->isVisible()) {
+    tooltipHost_->show();
+  }
 }
 
 void AdMenu::appendInlineEntries(const QVector<Item>& items,
@@ -2121,16 +2165,7 @@ void AdMenu::setHoveredEntry(int index) {
     return;
   }
   hoveredEntry_ = index;
-  if (hoveredEntry_ >= 0 && hoveredEntry_ < entries_.size()) {
-    const VisibleEntry& entry = entries_.at(hoveredEntry_);
-    if (mode_ == Mode::Inline && inlineCollapsed_ && tooltipEnabled_) {
-      setToolTip(tooltipTextForEntry(entry));
-    } else {
-      hideTooltip();
-    }
-  } else {
-    hideTooltip();
-  }
+  syncTooltipForHoveredEntry();
   update();
 }
 
@@ -2535,13 +2570,37 @@ void AdMenu::requestHoverClose() {
   });
 }
 
+void AdMenu::ensureTooltipHost() {
+  if (tooltipHost_) {
+    return;
+  }
+
+  auto* tooltip = new AdTooltip(this);
+  tooltip->setObjectName(QStringLiteral("ad-menu-inline-collapsed-tooltip"));
+  tooltip->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+  tooltip->setFocusPolicy(Qt::NoFocus);
+  tooltip->setOpenControlled(true);
+  tooltip->setArrowPointAtCenter(true);
+  tooltip->setMouseEnterDelayMs(0);
+  tooltip->setMouseLeaveDelayMs(0);
+  tooltip->setPlacement(collapsedMenuTooltipPlacement(this));
+
+  auto* trigger = new QWidget(tooltip);
+  trigger->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+  trigger->setFocusPolicy(Qt::NoFocus);
+  tooltip->setTriggerWidget(trigger);
+  tooltip->show();
+
+  tooltipHost_ = tooltip;
+  tooltipTrigger_ = trigger;
+}
+
 void AdMenu::hideTooltip() {
-  if (QToolTip::isVisible()) {
-    QToolTip::hideText();
+  if (!tooltipHost_) {
+    return;
   }
-  if (!toolTip().isEmpty()) {
-    setToolTip(QString());
-  }
+  tooltipHost_->setOpen(false);
+  tooltipHost_->setTitleText(QString());
 }
 
 QString AdMenu::tooltipTextForEntry(const VisibleEntry& entry) const {
@@ -2551,6 +2610,9 @@ QString AdMenu::tooltipTextForEntry(const VisibleEntry& entry) const {
 
   if (entry.item->title.has_value()) {
     return entry.item->title.value().trimmed();
+  }
+  if (entry.depth > 0) {
+    return QString();
   }
   return trimmedOrFallback(entry.item->label, entry.item->key);
 }

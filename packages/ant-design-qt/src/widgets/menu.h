@@ -26,6 +26,8 @@ namespace detail {
 struct MenuVisualStyle;
 }
 
+class AdTooltip;
+
 class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
   Q_OBJECT
 
@@ -395,6 +397,7 @@ class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
 
   void requestHoverOpen(const QString& key);
   void requestHoverClose();
+  void ensureTooltipHost();
   void hideTooltip();
   QString tooltipTextForEntry(const VisibleEntry& entry) const;
 
@@ -448,6 +451,8 @@ class AdMenu final : public QWidget, private detail::InWindowPopupOwner {
   int subMenuOpenDelayMs_ = -1;
   int subMenuCloseDelayMs_ = -1;
   bool tooltipEnabled_ = true;
+  QPointer<AdTooltip> tooltipHost_;
+  QPointer<QWidget> tooltipTrigger_;
   QString overflowedIndicatorText_ = "...";
 
   ComponentTokens componentTokens_;

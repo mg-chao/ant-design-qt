@@ -4,6 +4,7 @@
 #include "popover_style.h"
 #include "popup_placement.h"
 
+#include <QAbstractScrollArea>
 #include <QApplication>
 #include <QChildEvent>
 #include <QContextMenuEvent>
@@ -22,11 +23,13 @@
 #include <QPalette>
 #include <QPointer>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QShowEvent>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <atomic>
 
 namespace adqt::widgets {
 
@@ -35,12 +38,170 @@ namespace {
 constexpr char kHoverOpenTaskKey[] = "AdPopover.HoverOpen";
 constexpr char kHoverCloseTaskKey[] = "AdPopover.HoverClose";
 constexpr char kFocusRecheckTaskKey[] = "AdPopover.FocusRecheck";
+constexpr char kPopupRelayoutTaskKey[] = "AdPopover.Relayout";
+constexpr char kScopePopupRelayoutTaskKey[] = "AdPopover.ScopeRelayout";
+constexpr char kGeometryFrameSyncTaskKey[] = "AdPopover.GeometryFrameSync";
+constexpr qint64 kGeometryFrameSyncTailMs = 140;
+constexpr qint64 kAnchorScrollWatchersRefreshIntervalMs = 280;
+
+std::atomic<qint64> gSyncPopupGeometryCallCount{0};
+std::atomic<qint64> gSyncPopupGeometryShortCircuitCount{0};
+std::atomic<bool> gSyncPopupGeometryCountersEnabled{false};
+
+inline void recordSyncPopupGeometryCallForTesting() {
+  if (!gSyncPopupGeometryCountersEnabled.load(std::memory_order_relaxed)) {
+    return;
+  }
+  gSyncPopupGeometryCallCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+inline void recordSyncPopupGeometryShortCircuitForTesting() {
+  if (!gSyncPopupGeometryCountersEnabled.load(std::memory_order_relaxed)) {
+    return;
+  }
+  gSyncPopupGeometryShortCircuitCount.fetch_add(1, std::memory_order_relaxed);
+}
+
+QHash<QWidget*, QSet<QPointer<AdPopover>>>& pendingScopeRelayouts() {
+  static QHash<QWidget*, QSet<QPointer<AdPopover>>> pending;
+  return pending;
+}
+
+QHash<QWidget*, QMetaObject::Connection>& scopeRelayoutDestroyedConnections() {
+  static QHash<QWidget*, QMetaObject::Connection> connections;
+  return connections;
+}
+
+void clearScopeRelayoutDestroyedWatcherIfUnused(QWidget* scope) {
+  if (!scope) {
+    return;
+  }
+  if (pendingScopeRelayouts().contains(scope)) {
+    return;
+  }
+  auto& connections = scopeRelayoutDestroyedConnections();
+  auto it = connections.find(scope);
+  if (it == connections.end()) {
+    return;
+  }
+  QObject::disconnect(it.value());
+  connections.erase(it);
+}
+
+void ensureScopeRelayoutDestroyedWatcher(QWidget* scope) {
+  if (!scope) {
+    return;
+  }
+  auto& connections = scopeRelayoutDestroyedConnections();
+  if (connections.contains(scope)) {
+    return;
+  }
+  connections.insert(scope, QObject::connect(scope, &QObject::destroyed, [](QObject* destroyed) {
+                      QWidget* scopeWidget = qobject_cast<QWidget*>(destroyed);
+                      if (!scopeWidget) {
+                        return;
+                      }
+                      pendingScopeRelayouts().remove(scopeWidget);
+                      auto& watchers = scopeRelayoutDestroyedConnections();
+                      auto it = watchers.find(scopeWidget);
+                      if (it == watchers.end()) {
+                        return;
+                      }
+                      QObject::disconnect(it.value());
+                      watchers.erase(it);
+                    }));
+}
+
+void removePopoverFromPendingScopeRelayouts(AdPopover* popover, QWidget* scopeHint = nullptr) {
+  if (!popover) {
+    return;
+  }
+  auto& pending = pendingScopeRelayouts();
+  auto removeFromScope = [&](QWidget* scope) -> bool {
+    auto it = pending.find(scope);
+    if (it == pending.end()) {
+      return false;
+    }
+    it.value().remove(popover);
+    if (it.value().isEmpty()) {
+      if (scope) {
+        detail::cancelTimingTask(scope, QString::fromLatin1(kScopePopupRelayoutTaskKey));
+      }
+      pending.erase(it);
+      clearScopeRelayoutDestroyedWatcherIfUnused(scope);
+    }
+    return true;
+  };
+
+  if (scopeHint && removeFromScope(scopeHint)) {
+    return;
+  }
+
+  for (auto it = pending.begin(); it != pending.end();) {
+    QWidget* scope = it.key();
+    it.value().remove(popover);
+    if (it.value().isEmpty()) {
+      if (scope) {
+        detail::cancelTimingTask(scope, QString::fromLatin1(kScopePopupRelayoutTaskKey));
+      }
+      it = pending.erase(it);
+      clearScopeRelayoutDestroyedWatcherIfUnused(scope);
+      continue;
+    }
+    ++it;
+  }
+}
 
 QRect widgetGlobalRect(const QWidget* widget) {
   if (!widget) {
     return QRect();
   }
   return QRect(widget->mapToGlobal(QPoint(0, 0)), widget->size());
+}
+
+QRect widgetGlobalRectIfEffectivelyVisible(const QWidget* widget, const QWidget* scopeWindow) {
+  if (!widget || !widget->isVisible()) {
+    return QRect();
+  }
+
+  QRect clippedRect = widgetGlobalRect(widget);
+  if (!clippedRect.isValid()) {
+    return QRect();
+  }
+
+  bool reachedScope = false;
+  const QWidget* cursor = widget;
+  while (cursor) {
+    if (!cursor->isVisible()) {
+      return QRect();
+    }
+    const QRect cursorRect = widgetGlobalRect(cursor);
+    if (!cursorRect.isValid()) {
+      return QRect();
+    }
+    clippedRect = clippedRect.intersected(cursorRect);
+    if (!clippedRect.isValid()) {
+      return QRect();
+    }
+    if (scopeWindow && cursor == scopeWindow) {
+      reachedScope = true;
+      break;
+    }
+    cursor = cursor->parentWidget();
+  }
+
+  if (scopeWindow && !reachedScope) {
+    const QRect scopeRect = widgetGlobalRect(scopeWindow);
+    if (!scopeRect.isValid()) {
+      return QRect();
+    }
+    clippedRect = clippedRect.intersected(scopeRect);
+    if (!clippedRect.isValid()) {
+      return QRect();
+    }
+  }
+
+  return clippedRect;
 }
 
 bool widgetContainsGlobalPos(const QWidget* widget, const QPoint& globalPos) {
@@ -53,6 +214,26 @@ bool widgetInTree(const QWidget* candidate, const QWidget* root) {
     return false;
   }
   return candidate == root || root->isAncestorOf(const_cast<QWidget*>(candidate));
+}
+
+void applyPopupVisibility(QWidget* popup, bool shouldShow, bool raiseWhenShowing) {
+  if (!popup) {
+    return;
+  }
+
+  if (!shouldShow) {
+    if (popup->isVisible()) {
+      popup->hide();
+    }
+    return;
+  }
+
+  if (!popup->isVisible()) {
+    popup->show();
+    if (raiseWhenShowing) {
+      popup->raise();
+    }
+  }
 }
 
 enum class ArrowSide {
@@ -231,31 +412,24 @@ QPoint applyCrossAxisShift(AdPopover::Placement placement, QPoint point, const Q
   return point;
 }
 
-QPoint clampMainAxis(AdPopover::Placement placement,
-                     QPoint point,
-                     const QSize& popupSize,
-                     const QRect& bounds) {
-  if (!bounds.isValid()) {
-    return point;
+int arrowOffsetHorizontalForRadius(int borderRadius) {
+  if (borderRadius > 12) {
+    return borderRadius + 2;
   }
-
-  const int popupWidth = std::max(1, popupSize.width());
-  const int popupHeight = std::max(1, popupSize.height());
-  const int minX = bounds.left();
-  const int maxX = std::max(minX, bounds.right() - popupWidth + 1);
-  const int minY = bounds.top();
-  const int maxY = std::max(minY, bounds.bottom() - popupHeight + 1);
-
-  if (isVerticalPlacement(placement)) {
-    point.setY(std::clamp(point.y(), minY, maxY));
-  } else {
-    point.setX(std::clamp(point.x(), minX, maxX));
-  }
-  return point;
+  return 12;
 }
 
-qreal anchorCoordForArrow(AdPopover::Placement placement, const QRect& anchorRect, bool pointAtCenter) {
-  const int maxInset = 24;
+int arrowOffsetVerticalForRadius(int borderRadius) {
+  return std::min(8, arrowOffsetHorizontalForRadius(borderRadius));
+}
+
+qreal anchorCoordForArrow(AdPopover::Placement placement,
+                          const QRect& anchorRect,
+                          bool pointAtCenter,
+                          int edgeInsetHorizontal,
+                          int edgeInsetVertical) {
+  const int horizontalInset = std::max(0, edgeInsetHorizontal);
+  const int verticalInset = std::max(0, edgeInsetVertical);
   switch (placement) {
     case AdPopover::Placement::Top:
     case AdPopover::Placement::Bottom:
@@ -263,22 +437,26 @@ qreal anchorCoordForArrow(AdPopover::Placement placement, const QRect& anchorRec
     case AdPopover::Placement::TopLeft:
     case AdPopover::Placement::BottomLeft:
       return pointAtCenter ? anchorRect.center().x()
-                           : (anchorRect.left() + std::min(maxInset, std::max(0, anchorRect.width() / 2)));
+                           : (anchorRect.left() +
+                              std::min(horizontalInset, std::max(0, anchorRect.width() / 2)));
     case AdPopover::Placement::TopRight:
     case AdPopover::Placement::BottomRight:
       return pointAtCenter ? anchorRect.center().x()
-                           : (anchorRect.right() - std::min(maxInset, std::max(0, anchorRect.width() / 2)));
+                           : (anchorRect.right() -
+                              std::min(horizontalInset, std::max(0, anchorRect.width() / 2)));
     case AdPopover::Placement::Left:
     case AdPopover::Placement::Right:
       return anchorRect.center().y();
     case AdPopover::Placement::LeftTop:
     case AdPopover::Placement::RightTop:
       return pointAtCenter ? anchorRect.center().y()
-                           : (anchorRect.top() + std::min(maxInset, std::max(0, anchorRect.height() / 2)));
+                           : (anchorRect.top() +
+                              std::min(verticalInset, std::max(0, anchorRect.height() / 2)));
     case AdPopover::Placement::LeftBottom:
     case AdPopover::Placement::RightBottom:
       return pointAtCenter ? anchorRect.center().y()
-                           : (anchorRect.bottom() - std::min(maxInset, std::max(0, anchorRect.height() / 2)));
+                           : (anchorRect.bottom() -
+                              std::min(verticalInset, std::max(0, anchorRect.height() / 2)));
   }
   return 0;
 }
@@ -299,7 +477,10 @@ class PopoverPopupWidget final : public QWidget {
 
   void setVisualStyle(const detail::PopoverVisualStyle& style) {
     style_ = style;
-    bodyPadding_ = std::max(0, style.metrics.popupPadding);
+    // `popupPadding` maps to Ant Design's inner container padding and should
+    // be applied by the body layout margins only. Applying it here would
+    // duplicate spacing around the popup content.
+    bodyPadding_ = 0;
     updateBodyGeometry();
     updateGeometry();
     update();
@@ -336,7 +517,7 @@ class PopoverPopupWidget final : public QWidget {
 
   QSize sizeHint() const override {
     const QSize bodyHint = bodyWidget_ ? bodyWidget_->sizeHint() : QSize(120, 32);
-    const int arrowSize = arrowVisible_ ? std::max(0, style_.metrics.arrowSize) : 0;
+    const int arrowSize = arrowProjection();
     const int widthPadding =
         bodyPadding_ * 2 + ((arrowSide_ == ArrowSide::Left || arrowSide_ == ArrowSide::Right) ? arrowSize : 0);
     const int heightPadding =
@@ -366,12 +547,16 @@ class PopoverPopupWidget final : public QWidget {
     bubblePath.addRoundedRect(bubbleRect, style_.metrics.borderRadius, style_.metrics.borderRadius);
     const QPolygonF arrow = arrowPolygon(bubbleRect);
     if (!arrow.isEmpty()) {
-      bubblePath.addPolygon(arrow);
+      // Merge arrow and container into one outline so the shared edge is not stroked twice.
+      QPainterPath arrowPath;
+      arrowPath.addPolygon(arrow);
+      bubblePath = bubblePath.united(arrowPath);
     }
 
     painter.fillPath(bubblePath, style_.containerBackground);
     if (style_.metrics.borderWidth > 0 && style_.borderColor.alpha() > 0) {
       QPen pen(style_.borderColor, style_.metrics.borderWidth);
+      pen.setJoinStyle(Qt::RoundJoin);
       painter.setPen(pen);
       painter.setBrush(Qt::NoBrush);
       painter.drawPath(bubblePath);
@@ -379,8 +564,22 @@ class PopoverPopupWidget final : public QWidget {
   }
 
  private:
+  int arrowProjection() const {
+    return arrowVisible_ ? std::max(0, style_.metrics.arrowSize) : 0;
+  }
+
+  qreal arrowBaseHalfWidth() const {
+    return static_cast<qreal>(arrowProjection());
+  }
+
+  qreal arrowBaseInsetForUnion() const {
+    // Always overlap arrow base into the bubble by at least 1px to avoid
+    // antialias seams in fill-only tooltip popups (no border stroke).
+    return std::max(1.0, static_cast<qreal>(style_.metrics.borderWidth));
+  }
+
   QRectF bubbleRectForPaint() const {
-    const int arrow = arrowVisible_ ? std::max(0, style_.metrics.arrowSize) : 0;
+    const int arrow = arrowProjection();
     QRectF rectf(rect());
     rectf.adjust(0.5, 0.5, -0.5, -0.5);
     switch (arrowSide_) {
@@ -403,15 +602,18 @@ class PopoverPopupWidget final : public QWidget {
   }
 
   qreal clampedArrowCenter(const QRectF& bubbleRect) const {
-    const int arrow = arrowVisible_ ? std::max(0, style_.metrics.arrowSize) : 0;
-    if (arrow <= 0) {
+    const int projection = arrowProjection();
+    if (projection <= 0) {
       return 0.0;
     }
-    const qreal half = static_cast<qreal>(arrow) / 2.0;
+    const qreal half = arrowBaseHalfWidth();
     const qreal radius = std::max(0.0, static_cast<qreal>(style_.metrics.borderRadius));
     if (arrowSide_ == ArrowSide::Top || arrowSide_ == ArrowSide::Bottom) {
       const qreal minX = bubbleRect.left() + radius + half + 1.0;
       const qreal maxX = bubbleRect.right() - radius - half - 1.0;
+      if (minX > maxX) {
+        return bubbleRect.center().x();
+      }
       const qreal fallback = bubbleRect.center().x();
       const qreal target = (arrowCenter_ > 0.0) ? arrowCenter_ : fallback;
       return std::clamp(target, minX, maxX);
@@ -419,6 +621,9 @@ class PopoverPopupWidget final : public QWidget {
     if (arrowSide_ == ArrowSide::Left || arrowSide_ == ArrowSide::Right) {
       const qreal minY = bubbleRect.top() + radius + half + 1.0;
       const qreal maxY = bubbleRect.bottom() - radius - half - 1.0;
+      if (minY > maxY) {
+        return bubbleRect.center().y();
+      }
       const qreal fallback = bubbleRect.center().y();
       const qreal target = (arrowCenter_ > 0.0) ? arrowCenter_ : fallback;
       return std::clamp(target, minY, maxY);
@@ -427,30 +632,35 @@ class PopoverPopupWidget final : public QWidget {
   }
 
   QPolygonF arrowPolygon(const QRectF& bubbleRect) const {
-    const int arrow = arrowVisible_ ? std::max(0, style_.metrics.arrowSize) : 0;
-    if (arrow <= 0) {
+    const int projection = arrowProjection();
+    if (projection <= 0) {
       return {};
     }
 
     const qreal center = clampedArrowCenter(bubbleRect);
-    const qreal half = static_cast<qreal>(arrow) / 2.0;
+    const qreal half = arrowBaseHalfWidth();
+    const qreal baseInset = arrowBaseInsetForUnion();
     QPolygonF polygon;
     switch (arrowSide_) {
       case ArrowSide::Top:
-        polygon << QPointF(center, bubbleRect.top() - arrow) << QPointF(center - half, bubbleRect.top())
-                << QPointF(center + half, bubbleRect.top());
+        polygon << QPointF(center, bubbleRect.top() - projection)
+                << QPointF(center - half, bubbleRect.top() + baseInset)
+                << QPointF(center + half, bubbleRect.top() + baseInset);
         break;
       case ArrowSide::Bottom:
-        polygon << QPointF(center, bubbleRect.bottom() + arrow) << QPointF(center - half, bubbleRect.bottom())
-                << QPointF(center + half, bubbleRect.bottom());
+        polygon << QPointF(center, bubbleRect.bottom() + projection)
+                << QPointF(center - half, bubbleRect.bottom() - baseInset)
+                << QPointF(center + half, bubbleRect.bottom() - baseInset);
         break;
       case ArrowSide::Left:
-        polygon << QPointF(bubbleRect.left() - arrow, center) << QPointF(bubbleRect.left(), center - half)
-                << QPointF(bubbleRect.left(), center + half);
+        polygon << QPointF(bubbleRect.left() - projection, center)
+                << QPointF(bubbleRect.left() + baseInset, center - half)
+                << QPointF(bubbleRect.left() + baseInset, center + half);
         break;
       case ArrowSide::Right:
-        polygon << QPointF(bubbleRect.right() + arrow, center) << QPointF(bubbleRect.right(), center - half)
-                << QPointF(bubbleRect.right(), center + half);
+        polygon << QPointF(bubbleRect.right() + projection, center)
+                << QPointF(bubbleRect.right() - baseInset, center - half)
+                << QPointF(bubbleRect.right() - baseInset, center + half);
         break;
       case ArrowSide::None:
         break;
@@ -462,7 +672,7 @@ class PopoverPopupWidget final : public QWidget {
     if (!bodyWidget_) {
       return;
     }
-    const int arrow = arrowVisible_ ? std::max(0, style_.metrics.arrowSize) : 0;
+    const int arrow = arrowProjection();
     int left = bodyPadding_;
     int top = bodyPadding_;
     int right = bodyPadding_;
@@ -493,7 +703,7 @@ class PopoverPopupWidget final : public QWidget {
   detail::PopoverVisualStyle style_;
   ArrowSide arrowSide_ = ArrowSide::Bottom;
   bool arrowVisible_ = true;
-  int bodyPadding_ = 12;
+  int bodyPadding_ = 0;
   qreal arrowCenter_ = 0.0;
 };
 
@@ -509,7 +719,9 @@ PlacementComputation resolvePlacement(AdPopover::Placement preferredPlacement,
                                       const QRect& bounds,
                                       bool autoAdjustOverflow,
                                       int popupOffset,
-                                      bool pointAtCenter) {
+                                      bool pointAtCenter,
+                                      int arrowOffsetHorizontal,
+                                      int arrowOffsetVertical) {
   auto computeForPlacement = [&](AdPopover::Placement placement) {
     QPoint pos = placementTopLeft(placement, anchorRect, popupSize);
     pos = applyPopupOffset(placement, pos, popupOffset);
@@ -534,20 +746,13 @@ PlacementComputation resolvePlacement(AdPopover::Placement preferredPlacement,
     }
   }
 
-  if (autoAdjustOverflow && bounds.isValid()) {
-    if (supportsCrossAxisAutoShift(chosenPlacement)) {
-      chosenPos = detail::clampPopupTopLeft(chosenPos, popupSize, bounds);
-    } else {
-      // Keep edge-aligned placements stable on cross-axis. Only clamp along main axis.
-      chosenPos = clampMainAxis(chosenPlacement, chosenPos, popupSize, bounds);
-    }
-  }
-
   PlacementComputation out;
   out.topLeft = chosenPos;
   out.placement = chosenPlacement;
   const QRect popupRect(chosenPos, popupSize);
-  out.arrowCenterCoord = anchorCoordForArrow(chosenPlacement, anchorRect, pointAtCenter) -
+  out.arrowCenterCoord =
+      anchorCoordForArrow(chosenPlacement, anchorRect, pointAtCenter, arrowOffsetHorizontal,
+                          arrowOffsetVertical) -
                          (isVerticalPlacement(chosenPlacement) ? popupRect.left() : popupRect.top());
   return out;
 }
@@ -590,10 +795,27 @@ AdPopover::AdPopover(QWidget* parent) : QWidget(parent) {
 
 AdPopover::~AdPopover() {
   clearHoverTasks();
+  cancelPopupRelayout();
+  detail::clearFrameSubscription(this, QString::fromLatin1(kGeometryFrameSyncTaskKey));
+  clearAnchorScrollBarWatchers();
   detail::setInWindowPopupHostOpen(this, false);
   clearTriggerWatchers();
   clearPopupWatchers();
   releasePopup();
+}
+
+void AdPopover::resetSyncPopupGeometryCountersForTesting() {
+  gSyncPopupGeometryCountersEnabled.store(true, std::memory_order_relaxed);
+  gSyncPopupGeometryCallCount.store(0);
+  gSyncPopupGeometryShortCircuitCount.store(0);
+}
+
+qint64 AdPopover::syncPopupGeometryCallCountForTesting() {
+  return gSyncPopupGeometryCallCount.load();
+}
+
+qint64 AdPopover::syncPopupGeometryShortCircuitCountForTesting() {
+  return gSyncPopupGeometryShortCircuitCount.load();
 }
 
 AdPopover::Placement AdPopover::placement() const { return placement_; }
@@ -822,6 +1044,7 @@ void AdPopover::setTriggerWidget(QWidget* widget) {
   }
 
   triggerWidget_ = widget;
+  markAnchorScrollWatchersDirty();
   if (triggerWidget_) {
     triggerWidget_->setParent(this);
     triggerWidget_->setAttribute(Qt::WA_Hover, true);
@@ -933,6 +1156,7 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
 
   const QEvent::Type eventType = event->type();
   if (watchedByTrigger(watched)) {
+    const bool watchedIsAnchor = watched == popupAnchorWidget();
     switch (eventType) {
       case QEvent::Enter:
       case QEvent::HoverEnter:
@@ -975,10 +1199,18 @@ bool AdPopover::eventFilter(QObject* watched, QEvent* event) {
         break;
       case QEvent::Move:
       case QEvent::Resize:
-      case QEvent::LayoutRequest:
       case QEvent::Show:
-        if (open_) {
-          syncPopupGeometry();
+        if (open_ && watchedIsAnchor) {
+          schedulePopupRelayout(true);
+        }
+        break;
+      case QEvent::ParentChange:
+      case QEvent::ParentAboutToChange:
+        if (watchedIsAnchor) {
+          markAnchorScrollWatchersDirty();
+        }
+        if (open_ && watchedIsAnchor) {
+          schedulePopupRelayout(true);
         }
         break;
       case QEvent::Hide:
@@ -1072,14 +1304,22 @@ void AdPopover::showEvent(QShowEvent* event) {
     }
   }
   if (open_) {
-    syncPopupGeometry();
+    markAnchorScrollWatchersDirty();
+    refreshAnchorScrollBarWatchers();
+    schedulePopupRelayout(true);
   }
 }
 
 void AdPopover::hideEvent(QHideEvent* event) {
   QWidget::hideEvent(event);
   clearHoverTasks();
+  cancelPopupRelayout();
   detail::setInWindowPopupHostOpen(this, false);
+  geometryFrameSyncDeadlineMs_ = -1;
+  refreshGeometryFrameSync();
+  clearAnchorScrollBarWatchers();
+  markAnchorScrollWatchersDirty();
+  resetGeometrySyncSnapshot();
   if (popup_) {
     popup_->hide();
   }
@@ -1088,14 +1328,14 @@ void AdPopover::hideEvent(QHideEvent* event) {
 void AdPopover::moveEvent(QMoveEvent* event) {
   QWidget::moveEvent(event);
   if (open_) {
-    syncPopupGeometry();
+    schedulePopupRelayout(true);
   }
 }
 
 void AdPopover::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
   if (open_) {
-    syncPopupGeometry();
+    schedulePopupRelayout(true);
   }
 }
 
@@ -1106,9 +1346,17 @@ void AdPopover::changeEvent(QEvent* event) {
   }
   if (event->type() == QEvent::EnabledChange) {
     setDisabled(!isEnabled());
-  } else if (event->type() == QEvent::ParentChange || event->type() == QEvent::ParentAboutToChange) {
+  } else if (event->type() == QEvent::StyleChange || event->type() == QEvent::PaletteChange ||
+             event->type() == QEvent::FontChange || event->type() == QEvent::ApplicationFontChange ||
+             event->type() == QEvent::ApplicationPaletteChange) {
+    updateStyle();
     if (open_) {
-      syncPopupGeometry();
+      schedulePopupRelayout(true);
+    }
+  } else if (event->type() == QEvent::ParentChange || event->type() == QEvent::ParentAboutToChange) {
+    markAnchorScrollWatchersDirty();
+    if (open_) {
+      schedulePopupRelayout(true);
     }
   }
 }
@@ -1161,10 +1409,21 @@ void AdPopover::ensurePopup() {
 void AdPopover::releasePopup() {
   clearPopupWatchers();
   if (popup_) {
+    if (titleWidget_ && popup_->isAncestorOf(titleWidget_)) {
+      titleWidget_->hide();
+      titleWidget_->setParent(this);
+    }
+    if (contentWidget_ && popup_->isAncestorOf(contentWidget_)) {
+      contentWidget_->hide();
+      contentWidget_->setParent(this);
+    }
     popup_->removeEventFilter(this);
     popup_->hide();
     popup_->deleteLater();
   }
+
+  hoverPopupActive_ = false;
+  focusPopupActive_ = false;
 
   popup_.clear();
   popupBody_.clear();
@@ -1175,6 +1434,7 @@ void AdPopover::releasePopup() {
   contentContainerLayout_.clear();
   titleLabel_.clear();
   contentLabel_.clear();
+  resetGeometrySyncSnapshot();
 }
 
 void AdPopover::refreshPopupContent() {
@@ -1230,70 +1490,96 @@ void AdPopover::refreshPopupContent() {
   }
 }
 
-void AdPopover::syncPopupGeometry() {
+bool AdPopover::syncPopupGeometry() {
+  recordSyncPopupGeometryCallForTesting();
   if (!open_ || !popup_) {
-    return;
+    return false;
   }
+
+  refreshAnchorScrollBarWatchers();
 
   QWidget* popupParent = popup_->parentWidget();
-  if (!popupParent) {
-    popupParent = detail::resolvePopupScopeWindow(this);
-    if (popupParent) {
-      popup_->setParent(popupParent);
-    }
+  QWidget* expectedPopupParent = detail::resolvePopupScopeWindow(this);
+  if (expectedPopupParent && popupParent != expectedPopupParent) {
+    const bool wasVisible = popup_->isVisible();
+    popup_->setParent(expectedPopupParent);
+    popupParent = expectedPopupParent;
+    refreshPopupWatchers();
+    detail::setInWindowPopupHostOpen(this, true);
+    applyPopupVisibility(popup_, wasVisible, true);
   }
   if (!popupParent) {
-    return;
+    applyPopupVisibility(popup_, false, false);
+    resetGeometrySyncSnapshot();
+    return false;
   }
 
-  QRect anchorRect = widgetGlobalRect(popupAnchorWidget());
+  QRect anchorRect;
   if (contextMenuGlobalPos_.has_value() && reasonOpen(InternalOpenReason::ContextMenu)) {
     anchorRect = QRect(contextMenuGlobalPos_.value(), QSize(1, 1));
+  } else {
+    anchorRect = widgetGlobalRectIfEffectivelyVisible(popupAnchorWidget(), popupParent);
   }
 
   if (!anchorRect.isValid()) {
-    return;
+    applyPopupVisibility(popup_, false, false);
+    resetGeometrySyncSnapshot();
+    return false;
   }
 
-  popup_->adjustSize();
   QSize popupSize = popup_->sizeHint();
   popupSize.setWidth(std::max(1, popupSize.width()));
   popupSize.setHeight(std::max(1, popupSize.height()));
-  popup_->resize(popupSize);
-
-  StyleContext ctx;
-  ctx.placement = placement_;
-  ctx.triggerModes = triggerModes_;
-  ctx.open = open_;
-  ctx.disabled = disabled_;
-  ctx.arrowVisible = arrowVisible_;
-  const SemanticStyles effectiveSemantic =
-      semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
-
-  detail::PopoverStyleInput styleInput;
-  styleInput.placement = placement_;
-  styleInput.open = open_;
-  styleInput.disabled = disabled_;
-  styleInput.arrowVisible = arrowVisible_;
-  styleInput.baseFont = font();
-  styleInput.componentTokens = componentTokens_;
-  styleInput.semanticStyles = effectiveSemantic;
-  const detail::PopoverVisualStyle style = detail::resolvePopoverVisualStyle(styleInput);
 
   const QRect bounds = detail::popupBoundsInGlobal(popupParent);
+  const int popupOffset = std::max(0, cachedPopupOffset_);
+  const int arrowOffsetHorizontal = arrowOffsetHorizontalForRadius(std::max(0, cachedBorderRadius_));
+  const int arrowOffsetVertical = arrowOffsetVerticalForRadius(std::max(0, cachedBorderRadius_));
+
+  const bool inputsUnchanged = geometrySyncSnapshotValid_ && geometrySyncParent_ == popupParent &&
+                               geometrySyncAnchorRect_ == anchorRect && geometrySyncBounds_ == bounds &&
+                               geometrySyncPopupSize_ == popupSize &&
+                               geometrySyncPlacement_ == placement_ &&
+                               geometrySyncAutoAdjustOverflow_ == autoAdjustOverflow_ &&
+                               geometrySyncPopupOffset_ == popupOffset &&
+                               geometrySyncArrowPointAtCenter_ == arrowPointAtCenter_ &&
+                               geometrySyncArrowOffsetHorizontal_ == arrowOffsetHorizontal &&
+                               geometrySyncArrowOffsetVertical_ == arrowOffsetVertical;
+  if (inputsUnchanged) {
+    recordSyncPopupGeometryShortCircuitForTesting();
+    return true;
+  }
+
+  if (popup_->size() != popupSize) {
+    popup_->resize(popupSize);
+  }
   const PlacementComputation placementResult =
       resolvePlacement(placement_, anchorRect, popupSize, bounds, autoAdjustOverflow_,
-                       style.metrics.popupOffset, arrowPointAtCenter_);
+                       popupOffset, arrowPointAtCenter_, arrowOffsetHorizontal, arrowOffsetVertical);
 
   QPoint popupTopLeft = placementResult.topLeft;
   popupTopLeft = popupParent->mapFromGlobal(popupTopLeft);
-  popup_->move(popupTopLeft);
+  if (popup_->pos() != popupTopLeft) {
+    popup_->move(popupTopLeft);
+  }
 
   auto* popupWidget = static_cast<PopoverPopupWidget*>(popup_.data());
   popupWidget->setPlacement(placementResult.placement);
   popupWidget->setArrowVisible(arrowVisible_);
   popupWidget->setArrowCenter(placementResult.arrowCenterCoord);
-  popupWidget->update();
+
+  geometrySyncParent_ = popupParent;
+  geometrySyncAnchorRect_ = anchorRect;
+  geometrySyncBounds_ = bounds;
+  geometrySyncPopupSize_ = popupSize;
+  geometrySyncPlacement_ = placement_;
+  geometrySyncAutoAdjustOverflow_ = autoAdjustOverflow_;
+  geometrySyncPopupOffset_ = popupOffset;
+  geometrySyncArrowPointAtCenter_ = arrowPointAtCenter_;
+  geometrySyncArrowOffsetHorizontal_ = arrowOffsetHorizontal;
+  geometrySyncArrowOffsetVertical_ = arrowOffsetVertical;
+  geometrySyncSnapshotValid_ = true;
+  return true;
 }
 
 bool AdPopover::hasOverlayContent() const {
@@ -1331,8 +1617,11 @@ bool AdPopover::isHoveringPopupTree() const {
 void AdPopover::scheduleHoverOpen() {
   detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
   const int delay = std::max(0, mouseEnterDelayMs_);
+  auto isHoveringNow = [this]() {
+    return hoverTriggerActive_ || hoverPopupActive_ || isHoveringTriggerTree() || isHoveringPopupTree();
+  };
   if (delay == 0) {
-    if ((hoverTriggerActive_ || hoverPopupActive_) && hasTrigger(Trigger::Hover)) {
+    if (isHoveringNow() && hasTrigger(Trigger::Hover)) {
       setReasonOpen(InternalOpenReason::Hover, true);
       updateOpenState(true);
     }
@@ -1340,7 +1629,8 @@ void AdPopover::scheduleHoverOpen() {
   }
 
   detail::scheduleTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey), delay, [this]() {
-    if ((isHoveringTriggerTree() || isHoveringPopupTree()) && hasTrigger(Trigger::Hover)) {
+    const bool hovering = hoverTriggerActive_ || hoverPopupActive_ || isHoveringTriggerTree() || isHoveringPopupTree();
+    if (hovering && hasTrigger(Trigger::Hover)) {
       setReasonOpen(InternalOpenReason::Hover, true);
       updateOpenState(true);
     }
@@ -1350,8 +1640,19 @@ void AdPopover::scheduleHoverOpen() {
 void AdPopover::scheduleHoverClose() {
   detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
   const int delay = std::max(0, mouseLeaveDelayMs_);
+  auto reconcileHoverStateFromCursor = [this]() {
+    const bool triggerHoveredByCursor = isHoveringTriggerTree();
+    const bool popupHoveredByCursor = isHoveringPopupTree();
+    if (!triggerHoveredByCursor) {
+      hoverTriggerActive_ = false;
+    }
+    if (!popupHoveredByCursor) {
+      hoverPopupActive_ = false;
+    }
+  };
   if (delay == 0) {
-    if (!isHoveringTriggerTree() && !isHoveringPopupTree()) {
+    reconcileHoverStateFromCursor();
+    if (!hoverTriggerActive_ && !hoverPopupActive_) {
       setReasonOpen(InternalOpenReason::Hover, false);
       updateOpenState(true);
     }
@@ -1359,7 +1660,15 @@ void AdPopover::scheduleHoverClose() {
   }
 
   detail::scheduleTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey), delay, [this]() {
-    if (!isHoveringTriggerTree() && !isHoveringPopupTree()) {
+    const bool triggerHoveredByCursor = isHoveringTriggerTree();
+    const bool popupHoveredByCursor = isHoveringPopupTree();
+    if (!triggerHoveredByCursor) {
+      hoverTriggerActive_ = false;
+    }
+    if (!popupHoveredByCursor) {
+      hoverPopupActive_ = false;
+    }
+    if (!hoverTriggerActive_ && !hoverPopupActive_) {
       setReasonOpen(InternalOpenReason::Hover, false);
       updateOpenState(true);
     }
@@ -1369,6 +1678,214 @@ void AdPopover::scheduleHoverClose() {
 void AdPopover::clearHoverTasks() {
   detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
   detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
+}
+
+void AdPopover::noteGeometryActivity() {
+  if (!open_) {
+    return;
+  }
+  const qint64 now = detail::timingNowMs();
+  const qint64 nextDeadline = now + kGeometryFrameSyncTailMs;
+  if (nextDeadline <= geometryFrameSyncDeadlineMs_) {
+    return;
+  }
+  geometryFrameSyncDeadlineMs_ = nextDeadline;
+  if (!geometryFrameSyncSubscribed_) {
+    refreshGeometryFrameSync();
+  }
+}
+
+void AdPopover::schedulePopupRelayout(bool extendFrameTail) {
+  if (!open_) {
+    return;
+  }
+  if (popupRelayoutQueued_) {
+    return;
+  }
+  if (extendFrameTail) {
+    noteGeometryActivity();
+  }
+  popupRelayoutQueued_ = true;
+  QWidget* scope = popupScopeWindow();
+  if (!scope) {
+    popupRelayoutQueuedScope_.clear();
+    detail::deferTimingTask(this, QString::fromLatin1(kPopupRelayoutTaskKey), [this]() {
+      popupRelayoutQueued_ = false;
+      popupRelayoutFromHost();
+    });
+    return;
+  }
+
+  auto& pending = pendingScopeRelayouts();
+  ensureScopeRelayoutDestroyedWatcher(scope);
+  popupRelayoutQueuedScope_ = scope;
+  QSet<QPointer<AdPopover>>& queuedSet = pending[scope];
+  const bool shouldScheduleScopeTask = queuedSet.isEmpty();
+  queuedSet.insert(this);
+  if (!shouldScheduleScopeTask) {
+    return;
+  }
+  detail::deferTimingTask(scope, QString::fromLatin1(kScopePopupRelayoutTaskKey), [scope]() {
+    auto& pendingMap = pendingScopeRelayouts();
+    QSet<QPointer<AdPopover>> queued = pendingMap.take(scope);
+    clearScopeRelayoutDestroyedWatcherIfUnused(scope);
+    if (queued.isEmpty()) {
+      return;
+    }
+    for (const QPointer<AdPopover>& popover : queued) {
+      if (!popover) {
+        continue;
+      }
+      popover->popupRelayoutQueued_ = false;
+      popover->popupRelayoutQueuedScope_.clear();
+      if (!popover->open_) {
+        continue;
+      }
+      popover->popupRelayoutFromHost();
+    }
+  });
+}
+
+void AdPopover::cancelPopupRelayout() {
+  popupRelayoutQueued_ = false;
+  QWidget* queuedScope = popupRelayoutQueuedScope_.data();
+  popupRelayoutQueuedScope_.clear();
+  if (queuedScope) {
+    removePopoverFromPendingScopeRelayouts(this, queuedScope);
+  }
+  detail::cancelTimingTask(this, QString::fromLatin1(kPopupRelayoutTaskKey));
+}
+
+void AdPopover::refreshGeometryFrameSync() {
+  if (!open_ || detail::timingNowMs() >= geometryFrameSyncDeadlineMs_) {
+    geometryFrameSyncDeadlineMs_ = -1;
+    geometryFrameSyncSubscribed_ = false;
+    detail::clearFrameSubscription(this, QString::fromLatin1(kGeometryFrameSyncTaskKey));
+    return;
+  }
+
+  if (geometryFrameSyncSubscribed_) {
+    return;
+  }
+
+  geometryFrameSyncSubscribed_ = true;
+  detail::setFrameSubscription(this, QString::fromLatin1(kGeometryFrameSyncTaskKey), true,
+                               [this](qint64 nowMs, qint64) {
+                                 if (!open_) {
+                                   geometryFrameSyncDeadlineMs_ = -1;
+                                   refreshGeometryFrameSync();
+                                   return;
+                                 }
+                                 schedulePopupRelayout(false);
+                                 if (nowMs >= geometryFrameSyncDeadlineMs_) {
+                                   geometryFrameSyncDeadlineMs_ = -1;
+                                   refreshGeometryFrameSync();
+                                 }
+                               });
+}
+
+void AdPopover::resetGeometrySyncSnapshot() {
+  geometrySyncParent_.clear();
+  geometrySyncAnchorRect_ = QRect();
+  geometrySyncBounds_ = QRect();
+  geometrySyncPopupSize_ = QSize();
+  geometrySyncPlacement_ = Placement::Top;
+  geometrySyncAutoAdjustOverflow_ = true;
+  geometrySyncPopupOffset_ = 0;
+  geometrySyncArrowPointAtCenter_ = false;
+  geometrySyncArrowOffsetHorizontal_ = 0;
+  geometrySyncArrowOffsetVertical_ = 0;
+  geometrySyncSnapshotValid_ = false;
+}
+
+void AdPopover::markAnchorScrollWatchersDirty() {
+  anchorScrollWatchersDirty_ = true;
+  nextAnchorScrollWatchersRefreshMs_ = 0;
+}
+
+void AdPopover::refreshAnchorScrollBarWatchers() {
+  if (!open_) {
+    clearAnchorScrollBarWatchers();
+    return;
+  }
+
+  QWidget* anchor = popupAnchorWidget();
+  if (!anchor) {
+    clearAnchorScrollBarWatchers();
+    return;
+  }
+  QWidget* scope = popupScopeWindow();
+
+  const qint64 now = detail::timingNowMs();
+  if (!anchorScrollWatchersDirty_ && watchedScrollAnchor_ == anchor && watchedScrollScope_ == scope &&
+      now < nextAnchorScrollWatchersRefreshMs_) {
+    return;
+  }
+  watchedScrollAnchor_ = anchor;
+  watchedScrollScope_ = scope;
+
+  QSet<QScrollBar*> nextScrollBars;
+  QWidget* cursor = anchor;
+  while (cursor) {
+    if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(cursor)) {
+      if (QScrollBar* verticalBar = scrollArea->verticalScrollBar()) {
+        nextScrollBars.insert(verticalBar);
+      }
+      if (QScrollBar* horizontalBar = scrollArea->horizontalScrollBar()) {
+        nextScrollBars.insert(horizontalBar);
+      }
+    }
+    if (scope && cursor == scope) {
+      break;
+    }
+    cursor = cursor->parentWidget();
+  }
+
+  for (auto it = watchedAnchorScrollBars_.begin(); it != watchedAnchorScrollBars_.end();) {
+    QScrollBar* bar = it.key();
+    if (!bar || !nextScrollBars.contains(bar)) {
+      QObject::disconnect(it.value().valueChanged);
+      QObject::disconnect(it.value().destroyed);
+      it = watchedAnchorScrollBars_.erase(it);
+      continue;
+    }
+    ++it;
+  }
+
+  for (QScrollBar* bar : nextScrollBars) {
+    if (!bar || watchedAnchorScrollBars_.contains(bar)) {
+      continue;
+    }
+
+    ScrollBarWatch watch;
+    watch.valueChanged = QObject::connect(bar, &QScrollBar::valueChanged, this, [this](int) {
+      schedulePopupRelayout(true);
+    });
+    watch.destroyed = QObject::connect(bar, &QObject::destroyed, this, [this, bar]() {
+      auto it = watchedAnchorScrollBars_.find(bar);
+      if (it == watchedAnchorScrollBars_.end()) {
+        return;
+      }
+      QObject::disconnect(it.value().valueChanged);
+      QObject::disconnect(it.value().destroyed);
+      watchedAnchorScrollBars_.erase(it);
+    });
+    watchedAnchorScrollBars_.insert(bar, watch);
+  }
+
+  anchorScrollWatchersDirty_ = false;
+  nextAnchorScrollWatchersRefreshMs_ = now + kAnchorScrollWatchersRefreshIntervalMs;
+}
+
+void AdPopover::clearAnchorScrollBarWatchers() {
+  for (auto it = watchedAnchorScrollBars_.begin(); it != watchedAnchorScrollBars_.end(); ++it) {
+    QObject::disconnect(it.value().valueChanged);
+    QObject::disconnect(it.value().destroyed);
+  }
+  watchedAnchorScrollBars_.clear();
+  watchedScrollAnchor_.clear();
+  watchedScrollScope_.clear();
+  markAnchorScrollWatchersDirty();
 }
 
 void AdPopover::setReasonOpen(InternalOpenReason reason, bool enabled) {
@@ -1460,13 +1977,13 @@ void AdPopover::setOpenInternal(bool open, bool emitSignal, bool emitOnOpenChang
 
   if (open_ == open) {
     if (open_) {
+      detail::setInWindowPopupHostOpen(this, true);
+      refreshAnchorScrollBarWatchers();
+      noteGeometryActivity();
       ensurePopup();
       updateStyle();
-      syncPopupGeometry();
-      if (popup_) {
-        popup_->show();
-        popup_->raise();
-      }
+      const bool canShowPopup = syncPopupGeometry();
+      applyPopupVisibility(popup_, canShowPopup, true);
     }
     updatingOpen_ = false;
     return;
@@ -1474,20 +1991,22 @@ void AdPopover::setOpenInternal(bool open, bool emitSignal, bool emitOnOpenChang
 
   open_ = open;
   detail::setInWindowPopupHostOpen(this, open_);
+  refreshAnchorScrollBarWatchers();
+  noteGeometryActivity();
   if (open_) {
     ensurePopup();
     refreshPopupContent();
     updateStyle();
-    syncPopupGeometry();
-    if (popup_) {
-      popup_->show();
-      popup_->raise();
-    }
+    const bool canShowPopup = syncPopupGeometry();
+    applyPopupVisibility(popup_, canShowPopup, true);
   } else {
+    cancelPopupRelayout();
+    geometryFrameSyncDeadlineMs_ = -1;
+    refreshGeometryFrameSync();
+    resetGeometrySyncSnapshot();
+    clearAnchorScrollBarWatchers();
     clearHoverTasks();
-    if (popup_) {
-      popup_->hide();
-    }
+    applyPopupVisibility(popup_, false, false);
     if (destroyOnHidden_) {
       releasePopup();
     }
@@ -1738,45 +2257,49 @@ void AdPopover::handleTriggerFocusOutDeferred() {
 void AdPopover::handleTriggerHoverEnter() {
   const bool wasActive = hoverTriggerActive_;
   hoverTriggerActive_ = true;
-  if (wasActive == hoverTriggerActive_) {
+  if (!hasTrigger(Trigger::Hover)) {
     return;
   }
-  if (hasTrigger(Trigger::Hover)) {
-    scheduleHoverOpen();
+  if (wasActive == hoverTriggerActive_ && reasonOpen(InternalOpenReason::Hover)) {
+    return;
   }
+  scheduleHoverOpen();
 }
 
 void AdPopover::handleTriggerHoverLeave() {
   const bool wasActive = hoverTriggerActive_;
   hoverTriggerActive_ = isHoveringTriggerTree();
-  if (wasActive == hoverTriggerActive_) {
+  if (!hasTrigger(Trigger::Hover)) {
     return;
   }
-  if (hasTrigger(Trigger::Hover)) {
-    scheduleHoverClose();
+  if (wasActive == hoverTriggerActive_ && !reasonOpen(InternalOpenReason::Hover)) {
+    return;
   }
+  scheduleHoverClose();
 }
 
 void AdPopover::handlePopupHoverEnter() {
   const bool wasActive = hoverPopupActive_;
   hoverPopupActive_ = true;
-  if (wasActive == hoverPopupActive_) {
+  if (!hasTrigger(Trigger::Hover)) {
     return;
   }
-  if (hasTrigger(Trigger::Hover)) {
-    scheduleHoverOpen();
+  if (wasActive == hoverPopupActive_ && reasonOpen(InternalOpenReason::Hover)) {
+    return;
   }
+  scheduleHoverOpen();
 }
 
 void AdPopover::handlePopupHoverLeave() {
   const bool wasActive = hoverPopupActive_;
   hoverPopupActive_ = isHoveringPopupTree();
-  if (wasActive == hoverPopupActive_) {
+  if (!hasTrigger(Trigger::Hover)) {
     return;
   }
-  if (hasTrigger(Trigger::Hover)) {
-    scheduleHoverClose();
+  if (wasActive == hoverPopupActive_ && !reasonOpen(InternalOpenReason::Hover)) {
+    return;
   }
+  scheduleHoverClose();
 }
 
 void AdPopover::updateStyle() {
@@ -1802,6 +2325,9 @@ void AdPopover::updateStyle() {
   styleInput.componentTokens = componentTokens_;
   styleInput.semanticStyles = effectiveSemantic;
   const detail::PopoverVisualStyle style = detail::resolvePopoverVisualStyle(styleInput);
+  cachedPopupOffset_ = std::max(0, style.metrics.popupOffset);
+  cachedBorderRadius_ = std::max(0, style.metrics.borderRadius);
+  resetGeometrySyncSnapshot();
 
   auto* popupWidget = static_cast<PopoverPopupWidget*>(popup_.data());
   popupWidget->setVisualStyle(style);
@@ -1811,8 +2337,8 @@ void AdPopover::updateStyle() {
   if (popupBodyLayout_) {
     const int padding = std::max(0, style.metrics.popupPadding);
     popupBodyLayout_->setContentsMargins(padding, padding, padding, padding);
-    const bool hasTitle = titleContainer_ && titleContainer_->isVisible();
-    const bool hasContent = contentContainer_ && contentContainer_->isVisible();
+    const bool hasTitle = titleWidget_ || !titleText_.trimmed().isEmpty();
+    const bool hasContent = contentWidget_ || !contentText_.trimmed().isEmpty();
     popupBodyLayout_->setSpacing((hasTitle && hasContent) ? std::max(0, style.metrics.titleMarginBottom) : 0);
   }
 
@@ -1860,6 +2386,8 @@ QWidget* AdPopover::popupScopeWindow() const { return detail::resolvePopupScopeW
 
 bool AdPopover::popupIsVisible() const { return open_ && popup_ && popup_->isVisible(); }
 
+bool AdPopover::popupWantsHostFrameRelayout() const { return false; }
+
 bool AdPopover::popupContainsGlobalPos(const QPoint& globalPos) const {
   if (widgetContainsGlobalPos(triggerWidget_, globalPos)) {
     return true;
@@ -1880,7 +2408,8 @@ void AdPopover::popupCloseFromHost(detail::PopupCloseReason reason) {
 
 void AdPopover::popupRelayoutFromHost() {
   if (open_) {
-    syncPopupGeometry();
+    const bool canShowPopup = syncPopupGeometry();
+    applyPopupVisibility(popup_, canShowPopup, true);
   }
 }
 

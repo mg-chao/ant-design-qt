@@ -188,6 +188,19 @@ qreal snapToDevicePixel(qreal value, qreal dpr) {
   return qRound(value * dpr) / dpr;
 }
 
+QRectF joinedBorderRect(const QRect& bounds, qreal borderWidth, bool joinedLeft, bool joinedRight) {
+  const qreal half = std::max<qreal>(0.0, borderWidth / 2.0);
+  qreal leftInset = half + 0.5;
+  qreal rightInset = half + 0.5;
+  if (joinedLeft) {
+    leftInset = half;
+  }
+  if (joinedRight) {
+    rightInset = half;
+  }
+  return QRectF(bounds).adjusted(leftInset, half + 0.5, -rightInset, -half - 0.5);
+}
+
 int sharedSpinnerAngle() {
   const int cycleMs = detail::spinnerCycleDurationMs();
   if (cycleMs <= 0) {
@@ -301,6 +314,57 @@ void AdButton::setShape(Shape value) {
   shape_ = value;
   refreshAfterPropertyChange();
   emit shapeChanged(shape_);
+}
+
+bool AdButton::joinedLeft() const { return joinedLeft_; }
+
+void AdButton::setJoinedLeft(bool value) {
+  if (joinedLeft_ == value) {
+    return;
+  }
+  joinedLeft_ = value;
+  update();
+}
+
+bool AdButton::joinedRight() const { return joinedRight_; }
+
+void AdButton::setJoinedRight(bool value) {
+  if (joinedRight_ == value) {
+    return;
+  }
+  joinedRight_ = value;
+  update();
+}
+
+bool AdButton::leadingSeparatorVisible() const { return leadingSeparatorVisible_; }
+
+void AdButton::setLeadingSeparatorVisible(bool value) {
+  if (leadingSeparatorVisible_ == value) {
+    return;
+  }
+  leadingSeparatorVisible_ = value;
+  update();
+}
+
+QColor AdButton::leadingSeparatorColor() const { return leadingSeparatorColor_; }
+
+void AdButton::setLeadingSeparatorColor(const QColor& value) {
+  if (leadingSeparatorColor_ == value) {
+    return;
+  }
+  leadingSeparatorColor_ = value;
+  update();
+}
+
+int AdButton::leadingSeparatorWidth() const { return leadingSeparatorWidth_; }
+
+void AdButton::setLeadingSeparatorWidth(int value) {
+  const int normalized = std::max(1, value);
+  if (leadingSeparatorWidth_ == normalized) {
+    return;
+  }
+  leadingSeparatorWidth_ = normalized;
+  update();
 }
 
 AdButton::Size AdButton::size() const { return size_; }
@@ -483,48 +547,81 @@ void AdButton::paintEvent(QPaintEvent* event) {
     default:
       break;
   }
+  if (joinedLeft_) {
+    topLeft = 0.0;
+    bottomLeft = 0.0;
+  }
+  if (joinedRight_) {
+    topRight = 0.0;
+    bottomRight = 0.0;
+  }
 
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
 
-  const qreal borderHalf = style.metrics.borderWidth / 2.0;
-  const QRectF buttonRect = rect().adjusted(borderHalf + 0.5, borderHalf + 0.5, -borderHalf - 0.5,
-                                            -borderHalf - 0.5);
-  const QPainterPath path = roundedRectPath(buttonRect, topLeft, topRight, bottomRight, bottomLeft);
+  const bool hasVisibleBorder = style.metrics.borderWidth > 0 && state.border.alpha() > 0;
+  const QRectF borderRect =
+      joinedBorderRect(rect(), style.metrics.borderWidth, joinedLeft_, joinedRight_);
+  const QRectF shapeRect = hasVisibleBorder ? borderRect : QRectF(rect());
+  QRectF fillRect = shapeRect;
+  if (hasVisibleBorder && (joinedLeft_ || joinedRight_ || groupPosition_ != GroupPosition::None)) {
+    // Joined controls share an edge; fill the whole rect to avoid anti-aliased seams.
+    fillRect = QRectF(rect());
+  }
+  const QPainterPath fillPath = roundedRectPath(fillRect, topLeft, topRight, bottomRight, bottomLeft);
 
   if (enabled && state.shadow.alpha() > 0 && !interactionBlocked()) {
     const qreal shadowOffsetY = std::max<qreal>(0.0, style.metrics.shadowOffsetY);
-    QPainterPath shadowPath = roundedRectPath(buttonRect.translated(0.0, shadowOffsetY), topLeft,
+    QPainterPath shadowPath = roundedRectPath(shapeRect.translated(0.0, shadowOffsetY), topLeft,
                                               topRight, bottomRight, bottomLeft);
     painter.fillPath(shadowPath, state.shadow);
   }
 
-  painter.fillPath(path, state.background);
+  painter.fillPath(fillPath, state.background);
 
-  QPen borderPen(state.border, style.metrics.borderWidth, state.borderStyle, Qt::SquareCap,
-                 Qt::MiterJoin);
-  if (state.borderStyle == Qt::DashLine) {
-    borderPen.setStyle(Qt::CustomDashLine);
+  if (hasVisibleBorder) {
+    const QPainterPath borderPath =
+        roundedRectPath(borderRect, topLeft, topRight, bottomRight, bottomLeft);
+    QPen borderPen(state.border, style.metrics.borderWidth, state.borderStyle, Qt::SquareCap,
+                   Qt::MiterJoin);
+    if (state.borderStyle == Qt::DashLine) {
+      borderPen.setStyle(Qt::CustomDashLine);
 
-    // Match CSS dashed border rhythm more closely than Qt's default DashLine.
-    const qreal penWidth = std::max<qreal>(1.0, borderPen.widthF());
-    borderPen.setDashPattern({3.0 / penWidth, 2.0 / penWidth});
-    borderPen.setCapStyle(Qt::FlatCap);
-    borderPen.setJoinStyle(Qt::RoundJoin);
+      // Match CSS dashed border rhythm more closely than Qt's default DashLine.
+      const qreal penWidth = std::max<qreal>(1.0, borderPen.widthF());
+      borderPen.setDashPattern({3.0 / penWidth, 2.0 / penWidth});
+      borderPen.setCapStyle(Qt::FlatCap);
+      borderPen.setJoinStyle(Qt::RoundJoin);
+    }
+    painter.setPen(borderPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(borderPath);
   }
-  painter.setPen(borderPen);
-  painter.setBrush(Qt::NoBrush);
-  painter.drawPath(path);
+
+  if (leadingSeparatorVisible_) {
+    QColor separatorColor = leadingSeparatorColor_;
+    if (!separatorColor.isValid() || separatorColor.alpha() <= 0) {
+      separatorColor = state.border;
+    }
+    if (separatorColor.isValid() && separatorColor.alpha() > 0) {
+      painter.save();
+      painter.setRenderHint(QPainter::Antialiasing, false);
+      painter.setPen(Qt::NoPen);
+      painter.setBrush(separatorColor);
+      painter.drawRect(QRect(0, 0, std::max(1, leadingSeparatorWidth_), height()));
+      painter.restore();
+    }
+  }
 
   if (hasFocus() && enabled && focusVisible_) {
     const qreal focusWidth = std::max<qreal>(1.0, style.metrics.focusOutlineWidth);
     const qreal focusOffset = std::max<qreal>(0.0, style.metrics.focusOutlineOffset);
 
-    QRectF focusBaseRectInWindow = buttonRect;
+    QRectF focusBaseRectInWindow = shapeRect;
     QWidget* hostWindow = window();
     if (hostWindow) {
       const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
-      focusBaseRectInWindow = buttonRect.translated(origin.x(), origin.y());
+      focusBaseRectInWindow = shapeRect.translated(origin.x(), origin.y());
     }
 
     InteractionFocusRequest request;
@@ -997,10 +1094,17 @@ void AdButton::startWaveEffect() {
     default:
       break;
   }
+  if (joinedLeft_) {
+    waveTopLeft = 0.0;
+    waveBottomLeft = 0.0;
+  }
+  if (joinedRight_) {
+    waveTopRight = 0.0;
+    waveBottomRight = 0.0;
+  }
 
-  const qreal borderHalf = style.metrics.borderWidth / 2.0;
   const QRectF buttonRect =
-      rect().adjusted(borderHalf + 0.5, borderHalf + 0.5, -borderHalf - 0.5, -borderHalf - 0.5);
+      joinedBorderRect(rect(), style.metrics.borderWidth, joinedLeft_, joinedRight_);
   QRectF waveBaseRectInWindow = buttonRect;
   QWidget* hostWindow = window();
   if (hostWindow) {

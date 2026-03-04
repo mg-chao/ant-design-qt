@@ -26,6 +26,7 @@ class InWindowPopupOwner {
   virtual QWidget* popupAnchorWidget() const = 0;
   virtual QWidget* popupScopeWindow() const = 0;
   virtual bool popupIsVisible() const = 0;
+  virtual bool popupWantsHostFrameRelayout() const { return true; }
   virtual bool popupContainsGlobalPos(const QPoint& globalPos) const = 0;
   virtual void popupCloseFromHost(PopupCloseReason reason) = 0;
   virtual void popupRelayoutFromHost() = 0;

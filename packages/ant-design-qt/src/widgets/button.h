@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QFont>
 #include <QFontMetrics>
 #include <QEnterEvent>
@@ -109,6 +110,21 @@ class AdButton final : public QPushButton {
 
   Shape shape() const;
   void setShape(Shape value);
+
+  bool joinedLeft() const;
+  void setJoinedLeft(bool value);
+
+  bool joinedRight() const;
+  void setJoinedRight(bool value);
+
+  bool leadingSeparatorVisible() const;
+  void setLeadingSeparatorVisible(bool value);
+
+  QColor leadingSeparatorColor() const;
+  void setLeadingSeparatorColor(const QColor& value);
+
+  int leadingSeparatorWidth() const;
+  void setLeadingSeparatorWidth(int value);
 
   Size size() const;
   void setSize(Size value);
@@ -244,6 +260,11 @@ class AdButton final : public QPushButton {
   bool autoInsertSpace_ = true;
   bool hovered_ = false;
   bool focusVisible_ = false;
+  bool joinedLeft_ = false;
+  bool joinedRight_ = false;
+  bool leadingSeparatorVisible_ = false;
+  QColor leadingSeparatorColor_;
+  int leadingSeparatorWidth_ = 1;
 
   adqt::icons::IconToken iconToken_;
   adqt::icons::IconToken loadingIconToken_;

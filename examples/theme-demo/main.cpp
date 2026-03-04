@@ -22,11 +22,16 @@
 
 #include "icon_theme_adapter.h"
 #include "icons.h"
+#include "color_picker_docs_page.h"
+#include "input_docs_page.h"
 #include "menu_docs_page.h"
+#include "modal_docs_page.h"
+#include "popconfirm_docs_page.h"
 #include "popover_docs_page.h"
 #include "radio_docs_page.h"
 #include "select_docs_page.h"
 #include "slider_docs_page.h"
+#include "switch_docs_page.h"
 #include "tooltip_docs_page.h"
 #include "theme/theme.h"
 #include "widgets/detail/timing_hub.h"
@@ -897,17 +902,27 @@ class DemoWindow final : public QWidget {
     scroll_->setWidgetResizable(true);
     docsStack_ = new QStackedWidget();
     buttonPage_ = new ButtonDocsPage();
+    inputPage_ = new InputDocsPage();
+    switchPage_ = new SwitchDocsPage();
     menuPage_ = new MenuDocsPage();
+    modalPage_ = new ModalDocsPage();
     selectPage_ = new SelectDocsPage();
     sliderPage_ = new SliderDocsPage();
+    colorPickerPage_ = new ColorPickerDocsPage();
     popoverPage_ = new PopoverDocsPage();
+    popconfirmPage_ = new PopconfirmDocsPage();
     tooltipPage_ = new TooltipDocsPage();
     radioPage_ = new RadioDocsPage();
     docsStack_->addWidget(buttonPage_);
+    docsStack_->addWidget(inputPage_);
+    docsStack_->addWidget(switchPage_);
     docsStack_->addWidget(menuPage_);
+    docsStack_->addWidget(modalPage_);
     docsStack_->addWidget(selectPage_);
     docsStack_->addWidget(sliderPage_);
+    docsStack_->addWidget(colorPickerPage_);
     docsStack_->addWidget(popoverPage_);
+    docsStack_->addWidget(popconfirmPage_);
     docsStack_->addWidget(tooltipPage_);
     docsStack_->addWidget(radioPage_);
     scroll_->setWidget(docsStack_);
@@ -922,14 +937,24 @@ class DemoWindow final : public QWidget {
     connect(navMenu_, &AdMenu::titleClicked, this, [this](const QString& key) {
       if (key == QStringLiteral("button-docs")) {
         switchDocs(DocsKind::Button, false);
+      } else if (key == QStringLiteral("input-docs")) {
+        switchDocs(DocsKind::Input, false);
+      } else if (key == QStringLiteral("switch-docs")) {
+        switchDocs(DocsKind::Switch, false);
       } else if (key == QStringLiteral("menu-docs")) {
         switchDocs(DocsKind::Menu, false);
+      } else if (key == QStringLiteral("modal-docs")) {
+        switchDocs(DocsKind::Modal, false);
       } else if (key == QStringLiteral("select-docs")) {
         switchDocs(DocsKind::Select, false);
       } else if (key == QStringLiteral("slider-docs")) {
         switchDocs(DocsKind::Slider, false);
+      } else if (key == QStringLiteral("colorpicker-docs")) {
+        switchDocs(DocsKind::ColorPicker, false);
       } else if (key == QStringLiteral("popover-docs")) {
         switchDocs(DocsKind::Popover, false);
+      } else if (key == QStringLiteral("popconfirm-docs")) {
+        switchDocs(DocsKind::Popconfirm, false);
       } else if (key == QStringLiteral("tooltip-docs")) {
         switchDocs(DocsKind::Tooltip, false);
       } else if (key == QStringLiteral("radio-docs")) {
@@ -951,10 +976,15 @@ class DemoWindow final : public QWidget {
  private:
   enum class DocsKind {
     Button,
+    Input,
+    Switch,
     Menu,
+    Modal,
     Select,
     Slider,
+    ColorPicker,
     Popover,
+    Popconfirm,
     Tooltip,
     Radio,
   };
@@ -963,8 +993,17 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Button) {
       return QStringLiteral("button-docs");
     }
+    if (kind == DocsKind::Input) {
+      return QStringLiteral("input-docs");
+    }
+    if (kind == DocsKind::Switch) {
+      return QStringLiteral("switch-docs");
+    }
     if (kind == DocsKind::Menu) {
       return QStringLiteral("menu-docs");
+    }
+    if (kind == DocsKind::Modal) {
+      return QStringLiteral("modal-docs");
     }
     if (kind == DocsKind::Select) {
       return QStringLiteral("select-docs");
@@ -972,8 +1011,14 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Slider) {
       return QStringLiteral("slider-docs");
     }
+    if (kind == DocsKind::ColorPicker) {
+      return QStringLiteral("colorpicker-docs");
+    }
     if (kind == DocsKind::Popover) {
       return QStringLiteral("popover-docs");
+    }
+    if (kind == DocsKind::Popconfirm) {
+      return QStringLiteral("popconfirm-docs");
     }
     if (kind == DocsKind::Tooltip) {
       return QStringLiteral("tooltip-docs");
@@ -985,14 +1030,24 @@ class DemoWindow final : public QWidget {
     QString prefix;
     if (kind == DocsKind::Button) {
       prefix = QStringLiteral("button");
+    } else if (kind == DocsKind::Input) {
+      prefix = QStringLiteral("input");
+    } else if (kind == DocsKind::Switch) {
+      prefix = QStringLiteral("switch");
     } else if (kind == DocsKind::Menu) {
       prefix = QStringLiteral("menu");
+    } else if (kind == DocsKind::Modal) {
+      prefix = QStringLiteral("modal");
     } else if (kind == DocsKind::Select) {
       prefix = QStringLiteral("select");
     } else if (kind == DocsKind::Slider) {
       prefix = QStringLiteral("slider");
+    } else if (kind == DocsKind::ColorPicker) {
+      prefix = QStringLiteral("colorpicker");
     } else if (kind == DocsKind::Popover) {
       prefix = QStringLiteral("popover");
+    } else if (kind == DocsKind::Popconfirm) {
+      prefix = QStringLiteral("popconfirm");
     } else if (kind == DocsKind::Tooltip) {
       prefix = QStringLiteral("tooltip");
     } else {
@@ -1018,12 +1073,54 @@ class DemoWindow final : public QWidget {
       }
       return false;
     }
+    if (key.startsWith(QStringLiteral("input-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("input-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Input;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("switch-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("switch-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Switch;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
     if (key.startsWith(QStringLiteral("menu-section-"))) {
       bool ok = false;
       const int value = key.mid(QStringLiteral("menu-section-").size()).toInt(&ok);
       if (ok) {
         if (kind) {
           *kind = DocsKind::Menu;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("modal-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("modal-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Modal;
         }
         if (row) {
           *row = value;
@@ -1060,12 +1157,40 @@ class DemoWindow final : public QWidget {
       }
       return false;
     }
+    if (key.startsWith(QStringLiteral("colorpicker-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("colorpicker-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::ColorPicker;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
     if (key.startsWith(QStringLiteral("popover-section-"))) {
       bool ok = false;
       const int value = key.mid(QStringLiteral("popover-section-").size()).toInt(&ok);
       if (ok) {
         if (kind) {
           *kind = DocsKind::Popover;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("popconfirm-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("popconfirm-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Popconfirm;
         }
         if (row) {
           *row = value;
@@ -1110,8 +1235,17 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Button && buttonPage_) {
       return buttonPage_->sectionAnchors();
     }
+    if (kind == DocsKind::Input && inputPage_) {
+      return inputPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Switch && switchPage_) {
+      return switchPage_->sectionAnchors();
+    }
     if (kind == DocsKind::Menu && menuPage_) {
       return menuPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Modal && modalPage_) {
+      return modalPage_->sectionAnchors();
     }
     if (kind == DocsKind::Select && selectPage_) {
       return selectPage_->sectionAnchors();
@@ -1119,8 +1253,14 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Slider && sliderPage_) {
       return sliderPage_->sectionAnchors();
     }
+    if (kind == DocsKind::ColorPicker && colorPickerPage_) {
+      return colorPickerPage_->sectionAnchors();
+    }
     if (kind == DocsKind::Popover && popoverPage_) {
       return popoverPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Popconfirm && popconfirmPage_) {
+      return popconfirmPage_->sectionAnchors();
     }
     if (kind == DocsKind::Tooltip && tooltipPage_) {
       return tooltipPage_->sectionAnchors();
@@ -1136,8 +1276,17 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Button && buttonPage_) {
       return buttonPage_->sectionTitles();
     }
+    if (kind == DocsKind::Input && inputPage_) {
+      return inputPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Switch && switchPage_) {
+      return switchPage_->sectionTitles();
+    }
     if (kind == DocsKind::Menu && menuPage_) {
       return menuPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Modal && modalPage_) {
+      return modalPage_->sectionTitles();
     }
     if (kind == DocsKind::Select && selectPage_) {
       return selectPage_->sectionTitles();
@@ -1145,8 +1294,14 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Slider && sliderPage_) {
       return sliderPage_->sectionTitles();
     }
+    if (kind == DocsKind::ColorPicker && colorPickerPage_) {
+      return colorPickerPage_->sectionTitles();
+    }
     if (kind == DocsKind::Popover && popoverPage_) {
       return popoverPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Popconfirm && popconfirmPage_) {
+      return popconfirmPage_->sectionTitles();
     }
     if (kind == DocsKind::Tooltip && tooltipPage_) {
       return tooltipPage_->sectionTitles();
@@ -1184,12 +1339,33 @@ class DemoWindow final : public QWidget {
     buttonRoot.icon = outlined_icons::Appstore();
     buttonRoot.children = buildSectionItems(DocsKind::Button);
 
+    AdMenu::Item inputRoot;
+    inputRoot.key = docsRootKey(DocsKind::Input);
+    inputRoot.label = "Input";
+    inputRoot.type = AdMenu::ItemType::SubMenu;
+    inputRoot.icon = outlined_icons::Edit();
+    inputRoot.children = buildSectionItems(DocsKind::Input);
+
+    AdMenu::Item switchRoot;
+    switchRoot.key = docsRootKey(DocsKind::Switch);
+    switchRoot.label = "Switch";
+    switchRoot.type = AdMenu::ItemType::SubMenu;
+    switchRoot.icon = outlined_icons::Switcher();
+    switchRoot.children = buildSectionItems(DocsKind::Switch);
+
     AdMenu::Item menuRoot;
     menuRoot.key = docsRootKey(DocsKind::Menu);
     menuRoot.label = "Menu";
     menuRoot.type = AdMenu::ItemType::SubMenu;
     menuRoot.icon = outlined_icons::Menu();
     menuRoot.children = buildSectionItems(DocsKind::Menu);
+
+    AdMenu::Item modalRoot;
+    modalRoot.key = docsRootKey(DocsKind::Modal);
+    modalRoot.label = "Modal";
+    modalRoot.type = AdMenu::ItemType::SubMenu;
+    modalRoot.icon = outlined_icons::Appstore();
+    modalRoot.children = buildSectionItems(DocsKind::Modal);
 
     AdMenu::Item selectRoot;
     selectRoot.key = docsRootKey(DocsKind::Select);
@@ -1205,12 +1381,26 @@ class DemoWindow final : public QWidget {
     sliderRoot.icon = outlined_icons::Sliders();
     sliderRoot.children = buildSectionItems(DocsKind::Slider);
 
+    AdMenu::Item colorPickerRoot;
+    colorPickerRoot.key = docsRootKey(DocsKind::ColorPicker);
+    colorPickerRoot.label = "ColorPicker";
+    colorPickerRoot.type = AdMenu::ItemType::SubMenu;
+    colorPickerRoot.icon = outlined_icons::BgColors();
+    colorPickerRoot.children = buildSectionItems(DocsKind::ColorPicker);
+
     AdMenu::Item popoverRoot;
     popoverRoot.key = docsRootKey(DocsKind::Popover);
     popoverRoot.label = "Popover";
     popoverRoot.type = AdMenu::ItemType::SubMenu;
     popoverRoot.icon = outlined_icons::Message();
     popoverRoot.children = buildSectionItems(DocsKind::Popover);
+
+    AdMenu::Item popconfirmRoot;
+    popconfirmRoot.key = docsRootKey(DocsKind::Popconfirm);
+    popconfirmRoot.label = "Popconfirm";
+    popconfirmRoot.type = AdMenu::ItemType::SubMenu;
+    popconfirmRoot.icon = outlined_icons::ExclamationCircle();
+    popconfirmRoot.children = buildSectionItems(DocsKind::Popconfirm);
 
     AdMenu::Item tooltipRoot;
     tooltipRoot.key = docsRootKey(DocsKind::Tooltip);
@@ -1226,7 +1416,8 @@ class DemoWindow final : public QWidget {
     radioRoot.icon = outlined_icons::Appstore();
     radioRoot.children = buildSectionItems(DocsKind::Radio);
 
-    navMenu_->setItems({buttonRoot, menuRoot, selectRoot, sliderRoot, popoverRoot, tooltipRoot, radioRoot});
+    navMenu_->setItems({buttonRoot, inputRoot, switchRoot, menuRoot, modalRoot, selectRoot, sliderRoot,
+                        colorPickerRoot, popoverRoot, popconfirmRoot, tooltipRoot, radioRoot});
     navMenu_->setOpenKeys({});
   }
 
@@ -1249,14 +1440,24 @@ class DemoWindow final : public QWidget {
       QWidget* target = nullptr;
       if (kind == DocsKind::Button) {
         target = buttonPage_;
+      } else if (kind == DocsKind::Input) {
+        target = inputPage_;
+      } else if (kind == DocsKind::Switch) {
+        target = switchPage_;
       } else if (kind == DocsKind::Menu) {
         target = menuPage_;
+      } else if (kind == DocsKind::Modal) {
+        target = modalPage_;
       } else if (kind == DocsKind::Select) {
         target = selectPage_;
       } else if (kind == DocsKind::Slider) {
         target = sliderPage_;
+      } else if (kind == DocsKind::ColorPicker) {
+        target = colorPickerPage_;
       } else if (kind == DocsKind::Popover) {
         target = popoverPage_;
+      } else if (kind == DocsKind::Popconfirm) {
+        target = popconfirmPage_;
       } else if (kind == DocsKind::Tooltip) {
         target = tooltipPage_;
       } else {
@@ -1332,10 +1533,15 @@ class DemoWindow final : public QWidget {
   QScrollArea* scroll_ = nullptr;
   QStackedWidget* docsStack_ = nullptr;
   ButtonDocsPage* buttonPage_ = nullptr;
+  InputDocsPage* inputPage_ = nullptr;
+  SwitchDocsPage* switchPage_ = nullptr;
   MenuDocsPage* menuPage_ = nullptr;
+  ModalDocsPage* modalPage_ = nullptr;
   SelectDocsPage* selectPage_ = nullptr;
   SliderDocsPage* sliderPage_ = nullptr;
+  ColorPickerDocsPage* colorPickerPage_ = nullptr;
   PopoverDocsPage* popoverPage_ = nullptr;
+  PopconfirmDocsPage* popconfirmPage_ = nullptr;
   TooltipDocsPage* tooltipPage_ = nullptr;
   RadioDocsPage* radioPage_ = nullptr;
   DocsKind currentKind_ = DocsKind::Button;

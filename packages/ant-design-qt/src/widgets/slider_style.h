@@ -13,13 +13,13 @@ struct SliderMetrics {
   int railSize = 4;
   int handleSize = 10;
   int handleSizeHover = 12;
-  int handleLineWidth = 2;
-  int handleLineWidthHover = 2;
+  qreal handleLineWidth = 2.0;
+  qreal handleLineWidthHover = 2.5;
   int dotSize = 8;
   int marginMain = 8;
   int marginCross = 10;
   int markGap = 10;
-  int focusOutlineSize = 6;
+  qreal focusOutlineSize = 6.0;
   int tooltipPaddingH = 8;
   int tooltipPaddingV = 4;
   int tooltipRadius = 6;
@@ -32,13 +32,20 @@ struct SliderVisualStyle {
   QColor rootBg;
   QColor railBg;
   QColor railHoverBg;
+  QBrush railBrush;
+  bool useRailBrush = false;
   QColor trackBg;
   QColor trackHoverBg;
   QColor handleColor;
+  QColor handleHoverColor;
   QColor handleActiveColor;
   QColor handleActiveOutlineColor;
   QColor handleColorDisabled;
+  QColor surfaceBg;
+  QBrush handleBrush;
+  bool useHandleBrush = false;
   QColor dotBorderColor;
+  QColor dotHoverBorderColor;
   QColor dotActiveBorderColor;
   QColor trackBgDisabled;
   QColor markColor;
@@ -66,4 +73,3 @@ struct SliderStyleInput {
 SliderVisualStyle resolveSliderVisualStyle(const SliderStyleInput& input);
 
 }  // namespace adqt::widgets::detail
-

@@ -2,6 +2,7 @@
 
 #include "slider_style.h"
 #include "theme/theme.h"
+#include "tooltip.h"
 
 #include <QEnterEvent>
 #include <QEvent>
@@ -10,6 +11,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QSet>
 
 #include <algorithm>
 #include <cmath>
@@ -81,6 +83,38 @@ QString formatNumber(double value) {
   return text;
 }
 
+int maxMarkLabelHeight(const AdSlider::MarkMap& marks, const QFont& fallbackFont) {
+  int maxHeight = 0;
+  for (auto it = marks.cbegin(); it != marks.cend(); ++it) {
+    const QFont markFont = it->font.has_value() ? it->font.value() : fallbackFont;
+    maxHeight = std::max(maxHeight, QFontMetrics(markFont).height());
+  }
+  return maxHeight;
+}
+
+int maxMarkLabelWidth(const AdSlider::MarkMap& marks, const QFont& fallbackFont) {
+  int maxWidth = 0;
+  for (auto it = marks.cbegin(); it != marks.cend(); ++it) {
+    const QFont markFont = it->font.has_value() ? it->font.value() : fallbackFont;
+    maxWidth = std::max(maxWidth, QFontMetrics(markFont).horizontalAdvance(it->label));
+  }
+  return maxWidth;
+}
+
+AdTooltip::Placement toTooltipComponentPlacement(AdSlider::TooltipPlacement value) {
+  switch (value) {
+    case AdSlider::TooltipPlacement::Top:
+      return AdTooltip::Placement::Top;
+    case AdSlider::TooltipPlacement::Bottom:
+      return AdTooltip::Placement::Bottom;
+    case AdSlider::TooltipPlacement::Left:
+      return AdTooltip::Placement::Left;
+    case AdSlider::TooltipPlacement::Right:
+      return AdTooltip::Placement::Right;
+  }
+  return AdTooltip::Placement::Top;
+}
+
 }  // namespace
 
 struct AdSlider::LayoutInfo {
@@ -88,6 +122,7 @@ struct AdSlider::LayoutInfo {
   QRectF contentRect;
   QRectF railRect;
   QList<QRectF> handleRects;
+  QList<QRectF> handleAnchorRects;
   QList<QPointF> markCenters;
   QList<double> markValues;
   bool vertical = false;
@@ -97,6 +132,88 @@ struct AdSlider::LayoutInfo {
   int activeHandleSize = 0;
   int normalHandleSize = 0;
   int markLabelOffset = 0;
+};
+
+class AdSlider::TooltipHost final {
+ public:
+  explicit TooltipHost(QWidget* parent) {
+    tooltip_ = new AdTooltip(parent);
+    tooltip_->setObjectName(QStringLiteral("ad-slider-tooltip-host"));
+    tooltip_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    tooltip_->setFocusPolicy(Qt::NoFocus);
+    tooltip_->setOpenControlled(true);
+    tooltip_->setArrowPointAtCenter(true);
+    tooltip_->setMouseEnterDelayMs(0);
+    tooltip_->setMouseLeaveDelayMs(0);
+
+    trigger_ = new QWidget(tooltip_);
+    trigger_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    trigger_->setFocusPolicy(Qt::NoFocus);
+    tooltip_->setTriggerWidget(trigger_);
+    tooltip_->show();
+  }
+
+  TooltipHost(const TooltipHost&) = delete;
+  TooltipHost& operator=(const TooltipHost&) = delete;
+
+  ~TooltipHost() {
+    if (tooltip_) {
+      tooltip_->setOpen(false);
+      delete tooltip_;
+      tooltip_ = nullptr;
+    }
+    trigger_ = nullptr;
+  }
+
+  AdTooltip* component() const { return tooltip_; }
+
+  void applyBaseState(bool disabled,
+                      AdTooltip::Placement placement,
+                      const AdTooltip::ComponentTokens& tokens,
+                      const QFont& textFont) {
+    if (!tooltip_) {
+      return;
+    }
+    tooltip_->setDisabled(disabled);
+    tooltip_->setPlacement(placement);
+    tooltip_->setComponentTokens(tokens);
+    tooltip_->setFont(textFont);
+  }
+
+  void setAnchorRect(const QRect& rawAnchorRect, const QRect& boundsRect) {
+    if (!tooltip_) {
+      return;
+    }
+
+    QRect anchorRect = rawAnchorRect.intersected(boundsRect);
+    if (anchorRect.isEmpty()) {
+      anchorRect = QRect(0, 0, 1, 1);
+    }
+    tooltip_->setGeometry(anchorRect);
+
+    if (!trigger_) {
+      return;
+    }
+    const QSize size = anchorRect.size();
+    trigger_->setMinimumSize(size);
+    trigger_->setMaximumSize(size);
+    trigger_->updateGeometry();
+  }
+
+  void setContentAndOpen(const QString& text, bool open) {
+    if (!tooltip_) {
+      return;
+    }
+    tooltip_->setTitleText(text);
+    tooltip_->setOpen(open);
+    if (!tooltip_->isVisible()) {
+      tooltip_->show();
+    }
+  }
+
+ private:
+  QPointer<AdTooltip> tooltip_;
+  QPointer<QWidget> trigger_;
 };
 
 AdSlider::AdSlider(QWidget* parent) : QWidget(parent) {
@@ -109,7 +226,7 @@ AdSlider::AdSlider(QWidget* parent) : QWidget(parent) {
           [this]() { refreshAfterPropertyChange(); });
 }
 
-AdSlider::~AdSlider() = default;
+AdSlider::~AdSlider() { clearTooltipHosts(); }
 
 AdSlider::Mode AdSlider::mode() const { return mode_; }
 
@@ -237,6 +354,7 @@ void AdSlider::setDisabled(bool value) {
   dragging_ = false;
   dragHandleIndex_ = -1;
   emit disabledChanged(value);
+  syncTooltipHosts();
   update();
 }
 
@@ -341,6 +459,7 @@ void AdSlider::setTooltipEnabled(bool value) {
   }
   tooltipEnabled_ = value;
   emit tooltipEnabledChanged(tooltipEnabled_);
+  syncTooltipHosts();
   update();
 }
 
@@ -352,6 +471,7 @@ void AdSlider::setTooltipVisibleMode(TooltipVisibleMode value) {
   }
   tooltipVisibleMode_ = value;
   emit tooltipVisibleModeChanged(tooltipVisibleMode_);
+  syncTooltipHosts();
   update();
 }
 
@@ -363,6 +483,7 @@ void AdSlider::setTooltipPlacement(TooltipPlacement value) {
   }
   tooltipPlacement_ = value;
   emit tooltipPlacementChanged(tooltipPlacement_);
+  syncTooltipHosts();
   update();
 }
 
@@ -392,6 +513,7 @@ AdSlider::TooltipFormatter AdSlider::tooltipFormatter() const { return tooltipFo
 
 void AdSlider::setTooltipFormatter(TooltipFormatter formatter) {
   tooltipFormatter_ = std::move(formatter);
+  syncTooltipHosts();
   update();
 }
 
@@ -425,16 +547,19 @@ void AdSlider::setSemanticStyleResolver(SemanticStyleResolver resolver) {
 
 QSize AdSlider::sizeHint() const {
   const LayoutInfo layout = buildLayout();
-  const bool hasMarks = !marks_.isEmpty();
+  const MarkMap marks = effectiveMarks();
+  const bool hasMarks = !marks.isEmpty();
+  const int markLabelHeight = hasMarks ? maxMarkLabelHeight(marks, layout.style.metrics.font) : 0;
+  const int markLabelWidth = hasMarks ? maxMarkLabelWidth(marks, layout.style.metrics.font) : 0;
   if (orientation_ == Qt::Horizontal) {
-    const int height = std::max(34, layout.style.metrics.controlSize + layout.style.metrics.marginCross * 2 +
-                                        (hasMarks ? layout.style.metrics.markGap + QFontMetrics(layout.style.metrics.font).height()
-                                                  : 0));
+    const int height = std::max(
+        34, layout.style.metrics.controlSize + layout.style.metrics.marginCross * 2 +
+                (hasMarks ? layout.style.metrics.markGap + markLabelHeight : 0));
     return QSize(260, height);
   }
-  const int width = std::max(52, layout.style.metrics.controlSize + layout.style.metrics.marginCross * 2 +
-                                     (hasMarks ? layout.style.metrics.markGap + QFontMetrics(layout.style.metrics.font).horizontalAdvance(QStringLiteral("100"))
-                                               : 0));
+  const int width = std::max(
+      52, layout.style.metrics.controlSize + layout.style.metrics.marginCross * 2 +
+              (hasMarks ? layout.style.metrics.markGap + markLabelWidth : 0));
   return QSize(width, 260);
 }
 
@@ -624,6 +749,7 @@ void AdSlider::setHandlesInternal(const QList<double>& handles,
     }
   }
 
+  syncTooltipHosts();
   update();
 }
 
@@ -647,6 +773,7 @@ void AdSlider::refreshAfterPropertyChange(bool updateGeometryHint) {
   if (updateGeometryHint) {
     updateGeometry();
   }
+  syncTooltipHosts();
   update();
 }
 
@@ -666,11 +793,14 @@ AdSlider::LayoutInfo AdSlider::buildLayout() const {
   input.semanticStyles = resolvedSemanticStyles();
   layout.style = detail::resolveSliderVisualStyle(input);
 
-  const QFontMetrics markMetrics(layout.style.metrics.font);
-  const bool hasMarks = !marks_.isEmpty();
-  const int markSpan = hasMarks ? layout.style.metrics.markGap + markMetrics.height() : 0;
+  const MarkMap marks = effectiveMarks();
+  const bool hasMarks = !marks.isEmpty();
+  const int maxMarkHeight = hasMarks ? maxMarkLabelHeight(marks, layout.style.metrics.font) : 0;
+  const int maxMarkWidth = hasMarks ? maxMarkLabelWidth(marks, layout.style.metrics.font) : 0;
 
   layout.vertical = orientation_ == Qt::Vertical;
+  const int markSpan =
+      hasMarks ? layout.style.metrics.markGap + (layout.vertical ? maxMarkWidth : maxMarkHeight) : 0;
   if (!layout.vertical) {
     const qreal left = layout.style.metrics.marginMain;
     const qreal right = width() - layout.style.metrics.marginMain;
@@ -710,22 +840,32 @@ AdSlider::LayoutInfo AdSlider::buildLayout() const {
   layout.markLabelOffset = layout.style.metrics.markGap;
 
   layout.handleRects.reserve(handles_.size());
+  layout.handleAnchorRects.reserve(handles_.size());
   for (int i = 0; i < handles_.size(); ++i) {
-    const bool active = (i == dragHandleIndex_) || (i == hoverHandleIndex_) ||
-                        ((hasFocus() && focusVisible_) && i == focusHandleIndex_);
+    const bool active = (i == dragHandleIndex_) ||
+                        ((hasFocus() && focusVisible_) && i == focusHandleIndex_) ||
+                        (!dragging_ && i == hoverHandleIndex_);
+    const int normalHandleHalf = layout.style.metrics.handleSize / 2;
     const int handleSize = active ? activeHandleSize : layout.style.metrics.handleSize;
     const int half = handleSize / 2;
     const int axisPos = positionFromValue(handles_.at(i), layout);
     if (!layout.vertical) {
+      layout.handleAnchorRects.append(QRectF(axisPos - normalHandleHalf,
+                                             layout.crossCenter - normalHandleHalf,
+                                             layout.style.metrics.handleSize,
+                                             layout.style.metrics.handleSize));
       layout.handleRects.append(
           QRectF(axisPos - half, layout.crossCenter - half, handleSize, handleSize));
     } else {
+      layout.handleAnchorRects.append(QRectF(layout.crossCenter - normalHandleHalf,
+                                             axisPos - normalHandleHalf,
+                                             layout.style.metrics.handleSize,
+                                             layout.style.metrics.handleSize));
       layout.handleRects.append(
           QRectF(layout.crossCenter - half, axisPos - half, handleSize, handleSize));
     }
   }
 
-  const MarkMap marks = effectiveMarks();
   layout.markCenters.reserve(marks.size());
   layout.markValues.reserve(marks.size());
   for (auto it = marks.cbegin(); it != marks.cend(); ++it) {
@@ -744,7 +884,14 @@ AdSlider::LayoutInfo AdSlider::buildLayout() const {
 
 int AdSlider::hitTestHandle(const QPoint& pos, const LayoutInfo& layout) const {
   for (int i = layout.handleRects.size() - 1; i >= 0; --i) {
-    const QRectF hitRect = layout.handleRects.at(i).adjusted(-2, -2, 2, 2);
+    const bool active = (i == dragHandleIndex_) ||
+                        ((hasFocus() && focusVisible_) && i == focusHandleIndex_) ||
+                        (!dragging_ && i == hoverHandleIndex_);
+    const qreal borderWidth =
+        std::max<qreal>(1.0, active ? layout.style.metrics.handleLineWidthHover
+                                    : layout.style.metrics.handleLineWidth);
+    const QRectF hitRect =
+        layout.handleRects.at(i).adjusted(-borderWidth, -borderWidth, borderWidth, borderWidth);
     if (hitRect.contains(QPointF(pos))) {
       return i;
     }
@@ -823,6 +970,20 @@ double AdSlider::clampTrackDelta(double delta) const {
   const double minDelta = minimum_ - minValue;
   const double maxDelta = maximum_ - maxValue;
   return std::clamp(delta, minDelta, maxDelta);
+}
+
+bool AdSlider::isMarkActive(double markValue) const {
+  if (!included_ || handles_.isEmpty()) {
+    return false;
+  }
+
+  if (mode_ == Mode::Single) {
+    return markValue <= handles_.constFirst() + kEpsilon;
+  }
+
+  const double low = handles_.constFirst();
+  const double high = handles_.constLast();
+  return markValue >= low - kEpsilon && markValue <= high + kEpsilon;
 }
 
 void AdSlider::handleRailAction(const QPoint& pos, const LayoutInfo& layout) {
@@ -944,6 +1105,64 @@ QString AdSlider::tooltipText(double value) const {
   return formatNumber(value);
 }
 
+void AdSlider::ensureTooltipHosts(int count) {
+  const int targetCount = std::max(0, count);
+  while (tooltipHosts_.size() > targetCount) {
+    delete tooltipHosts_.takeLast();
+  }
+
+  while (tooltipHosts_.size() < targetCount) {
+    tooltipHosts_.append(new TooltipHost(this));
+  }
+}
+
+void AdSlider::clearTooltipHosts() {
+  while (!tooltipHosts_.isEmpty()) {
+    delete tooltipHosts_.takeLast();
+  }
+}
+
+void AdSlider::syncTooltipHosts(const LayoutInfo* layout) {
+  ensureTooltipHosts(handles_.size());
+  if (tooltipHosts_.isEmpty()) {
+    return;
+  }
+
+  const LayoutInfo resolvedLayout = layout ? *layout : buildLayout();
+  const QList<int> visibleIndexes = tooltipHandleIndexes();
+  const QSet<int> visibleIndexSet(visibleIndexes.cbegin(), visibleIndexes.cend());
+  const bool allowTooltipOpen = isVisible() && tooltipEnabled_ &&
+                                tooltipVisibleMode_ != TooltipVisibleMode::Never && !handles_.isEmpty();
+  const bool disabledState = disabled();
+  const QFont tooltipFont = resolvedLayout.style.metrics.font;
+
+  // Align with antd Slider: Tooltip visual sizing comes from Tooltip defaults.
+  AdTooltip::ComponentTokens tokens;
+
+  const AdTooltip::Placement placement = toTooltipComponentPlacement(tooltipPlacement_);
+  for (int i = 0; i < tooltipHosts_.size(); ++i) {
+    TooltipHost* host = tooltipHosts_.at(i);
+    if (!host || !host->component()) {
+      continue;
+    }
+
+    host->applyBaseState(disabledState, placement, tokens, tooltipFont);
+
+    QRect anchorRect;
+    if (i >= 0 && i < resolvedLayout.handleAnchorRects.size()) {
+      anchorRect = resolvedLayout.handleAnchorRects.at(i).toAlignedRect();
+    } else if (i >= 0 && i < resolvedLayout.handleRects.size()) {
+      // Fallback keeps behavior intact if a layout path does not provide fixed anchors.
+      anchorRect = resolvedLayout.handleRects.at(i).toAlignedRect();
+    }
+    host->setAnchorRect(anchorRect, rect());
+
+    const QString text = i < handles_.size() ? tooltipText(handles_.at(i)) : QString();
+    const bool shouldOpen = allowTooltipOpen && visibleIndexSet.contains(i) && !text.isEmpty();
+    host->setContentAndOpen(text, shouldOpen);
+  }
+}
+
 void AdSlider::paintEvent(QPaintEvent* event) {
   Q_UNUSED(event)
 
@@ -964,7 +1183,7 @@ void AdSlider::paintEvent(QPaintEvent* event) {
                  : ((hovered_ || dragging_) ? layout.style.trackHoverBg : layout.style.trackBg);
 
   painter.setPen(Qt::NoPen);
-  painter.setBrush(railColor);
+  painter.setBrush(layout.style.useRailBrush ? layout.style.railBrush : QBrush(railColor));
   painter.drawRoundedRect(layout.railRect, layout.style.metrics.railSize / 2.0,
                           layout.style.metrics.railSize / 2.0);
 
@@ -995,6 +1214,8 @@ void AdSlider::paintEvent(QPaintEvent* event) {
   if (mode_ == Mode::Single) {
     if (included_ && !handles_.isEmpty()) {
       drawTrackSegment(minimum_, handles_.constFirst());
+    } else if (!included_ && layout.style.useTracksBrush) {
+      drawTrackSegment(minimum_, maximum_);
     }
   } else if (handles_.size() >= 2) {
     for (int i = 0; i + 1 < handles_.size(); ++i) {
@@ -1004,7 +1225,6 @@ void AdSlider::paintEvent(QPaintEvent* event) {
 
   const MarkMap marks = effectiveMarks();
   if (!marks.isEmpty()) {
-    const QFontMetrics fm(layout.style.metrics.font);
     int markIndex = 0;
     for (auto it = marks.cbegin(); it != marks.cend(); ++it, ++markIndex) {
       if (markIndex < 0 || markIndex >= layout.markCenters.size() ||
@@ -1014,36 +1234,24 @@ void AdSlider::paintEvent(QPaintEvent* event) {
 
       const QPointF center = layout.markCenters.at(markIndex);
       const double markValue = layout.markValues.at(markIndex);
-      const bool active = [this, markValue]() {
-        if (handles_.isEmpty()) {
-          return false;
-        }
-        if (mode_ == Mode::Single) {
-          if (!included_) {
-            return fuzzyEq(markValue, handles_.constFirst());
-          }
-          return markValue <= handles_.constFirst() + kEpsilon;
-        }
-        const double low = handles_.constFirst();
-        const double high = handles_.constLast();
-        return markValue >= low - kEpsilon && markValue <= high + kEpsilon;
-      }();
+      const bool active = isMarkActive(markValue);
 
       QColor dotBorder = active ? layout.style.dotActiveBorderColor : layout.style.dotBorderColor;
-      if (it->color.has_value()) {
-        dotBorder = it->color.value();
+      if (!active && hovered_ && !isDisabled) {
+        dotBorder = layout.style.dotHoverBorderColor;
       }
 
       const int dotSize = layout.style.metrics.dotSize;
       const QRectF dotRect(center.x() - dotSize / 2.0, center.y() - dotSize / 2.0, dotSize, dotSize);
-      painter.setBrush(palette().base());
-      painter.setPen(QPen(dotBorder, std::max(1, layout.style.metrics.handleLineWidth)));
+      painter.setBrush(layout.style.surfaceBg);
+      painter.setPen(QPen(dotBorder, std::max<qreal>(1.0, layout.style.metrics.handleLineWidth)));
       painter.drawEllipse(dotRect);
 
       QFont markFont = layout.style.metrics.font;
       if (it->font.has_value()) {
         markFont = it->font.value();
       }
+      const QFontMetrics markMetrics(markFont);
       painter.setFont(markFont);
       QColor textColor = active ? layout.style.markActiveColor : layout.style.markColor;
       if (it->color.has_value()) {
@@ -1053,13 +1261,23 @@ void AdSlider::paintEvent(QPaintEvent* event) {
 
       const QString label = it->label.isEmpty() ? formatNumber(it.key()) : it->label;
       if (!layout.vertical) {
-        const int textWidth = QFontMetrics(markFont).horizontalAdvance(label);
-        const QPointF textPos(center.x() - textWidth / 2.0,
-                              center.y() + layout.markLabelOffset + fm.ascent());
-        painter.drawText(textPos, label);
+        QString drawLabel = label;
+        const int maxLabelWidth = std::max(1, width());
+        if (markMetrics.horizontalAdvance(drawLabel) > maxLabelWidth) {
+          drawLabel = markMetrics.elidedText(drawLabel, Qt::ElideRight, maxLabelWidth);
+        }
+        const int textWidth = markMetrics.horizontalAdvance(drawLabel);
+        const qreal minX = 0.0;
+        const qreal maxX = std::max<qreal>(0.0, width() - textWidth);
+        const qreal textX = std::clamp(center.x() - textWidth / 2.0, minX, maxX);
+        const QPointF textPos(textX, center.y() + layout.markLabelOffset + markMetrics.ascent());
+        painter.drawText(textPos, drawLabel);
       } else {
-        const QPointF textPos(center.x() + layout.markLabelOffset, center.y() + fm.ascent() / 2.0);
-        painter.drawText(textPos, label);
+        const qreal textX = center.x() + layout.markLabelOffset;
+        const int maxLabelWidth = std::max(1, width() - static_cast<int>(std::ceil(textX)));
+        const QString drawLabel = markMetrics.elidedText(label, Qt::ElideRight, maxLabelWidth);
+        const QPointF textPos(textX, center.y() + markMetrics.ascent() / 2.0);
+        painter.drawText(textPos, drawLabel);
       }
     }
     painter.setFont(layout.style.metrics.font);
@@ -1067,89 +1285,46 @@ void AdSlider::paintEvent(QPaintEvent* event) {
 
   for (int i = 0; i < layout.handleRects.size(); ++i) {
     const QRectF handleRect = layout.handleRects.at(i);
-    const bool active = i == hoverHandleIndex_ || i == dragHandleIndex_ ||
-                        ((hasFocus() && focusVisible_) && i == focusHandleIndex_);
-    QColor borderColor = isDisabled ? layout.style.handleColorDisabled
-                                    : (active ? layout.style.handleActiveColor : layout.style.handleColor);
+    const bool active = (i == dragHandleIndex_) ||
+                        ((hasFocus() && focusVisible_) && i == focusHandleIndex_) ||
+                        (!dragging_ && i == hoverHandleIndex_);
+    const qreal borderWidth = active ? layout.style.metrics.handleLineWidthHover
+                                     : layout.style.metrics.handleLineWidth;
+    QColor borderColor = layout.style.handleColor;
+    if (isDisabled) {
+      borderColor = layout.style.handleColorDisabled;
+    } else if (active) {
+      borderColor = layout.style.handleActiveColor;
+    } else if (hovered_) {
+      borderColor = layout.style.handleHoverColor;
+    }
     QColor outlineColor = isDisabled ? QColor(0, 0, 0, 0) : layout.style.handleActiveOutlineColor;
+    const QPointF center = handleRect.center();
+    const qreal coreRadius = std::max(handleRect.width(), handleRect.height()) / 2.0;
+    const qreal ringOuterRadius = coreRadius + std::max<qreal>(0.0, borderWidth);
 
     if (active && outlineColor.isValid() && outlineColor.alpha() > 0) {
       painter.setPen(Qt::NoPen);
       painter.setBrush(outlineColor);
-      const qreal expand = layout.style.metrics.focusOutlineSize / 2.0;
-      painter.drawEllipse(handleRect.adjusted(-expand, -expand, expand, expand));
+      const qreal outlineRadius = coreRadius + layout.style.metrics.focusOutlineSize;
+      const QRectF outlineRect(center.x() - outlineRadius, center.y() - outlineRadius, outlineRadius * 2.0,
+                               outlineRadius * 2.0);
+      painter.drawEllipse(outlineRect);
     }
 
-    painter.setBrush(palette().base());
-    painter.setPen(QPen(borderColor, std::max(1, layout.style.metrics.handleLineWidth)));
-    painter.drawEllipse(handleRect);
-  }
-
-  const QList<int> tooltipIndexes = tooltipHandleIndexes();
-  if (tooltipIndexes.isEmpty()) {
-    return;
-  }
-
-  const QFontMetrics fm(layout.style.metrics.font);
-  auto drawTooltipAt = [&](int handleIndex) {
-    if (handleIndex < 0 || handleIndex >= layout.handleRects.size() || handleIndex >= handles_.size()) {
-      return;
-    }
-
-    const QString text = tooltipText(handles_.at(handleIndex));
-    if (text.isEmpty()) {
-      return;
-    }
-
-    const QRectF handleRect = layout.handleRects.at(handleIndex);
-    const int textWidth = fm.horizontalAdvance(text);
-    const int bubbleW = textWidth + layout.style.metrics.tooltipPaddingH * 2;
-    const int bubbleH = fm.height() + layout.style.metrics.tooltipPaddingV * 2;
-    const int arrowSize = layout.style.metrics.tooltipArrowSize;
-    const int offset = layout.style.metrics.tooltipOffset;
-
-    QRectF bubbleRect;
-    QPolygonF arrow;
-
-    if (tooltipPlacement_ == TooltipPlacement::Top) {
-      bubbleRect = QRectF(handleRect.center().x() - bubbleW / 2.0,
-                          handleRect.top() - offset - bubbleH - arrowSize, bubbleW, bubbleH);
-      arrow << QPointF(handleRect.center().x(), bubbleRect.bottom() + arrowSize)
-            << QPointF(handleRect.center().x() - arrowSize, bubbleRect.bottom())
-            << QPointF(handleRect.center().x() + arrowSize, bubbleRect.bottom());
-    } else if (tooltipPlacement_ == TooltipPlacement::Bottom) {
-      bubbleRect =
-          QRectF(handleRect.center().x() - bubbleW / 2.0, handleRect.bottom() + offset + arrowSize, bubbleW,
-                 bubbleH);
-      arrow << QPointF(handleRect.center().x(), bubbleRect.top() - arrowSize)
-            << QPointF(handleRect.center().x() - arrowSize, bubbleRect.top())
-            << QPointF(handleRect.center().x() + arrowSize, bubbleRect.top());
-    } else if (tooltipPlacement_ == TooltipPlacement::Left) {
-      bubbleRect =
-          QRectF(handleRect.left() - offset - bubbleW - arrowSize, handleRect.center().y() - bubbleH / 2.0,
-                 bubbleW, bubbleH);
-      arrow << QPointF(bubbleRect.right() + arrowSize, handleRect.center().y())
-            << QPointF(bubbleRect.right(), handleRect.center().y() - arrowSize)
-            << QPointF(bubbleRect.right(), handleRect.center().y() + arrowSize);
-    } else {
-      bubbleRect = QRectF(handleRect.right() + offset + arrowSize, handleRect.center().y() - bubbleH / 2.0,
-                          bubbleW, bubbleH);
-      arrow << QPointF(bubbleRect.left() - arrowSize, handleRect.center().y())
-            << QPointF(bubbleRect.left(), handleRect.center().y() - arrowSize)
-            << QPointF(bubbleRect.left(), handleRect.center().y() + arrowSize);
-    }
-
+    // Ant Design Slider uses box-shadow to draw the handle border, which expands outward.
+    // Draw an explicit outer ring so the visual diameter matches handleSize + 2 * handleLineWidth.
     painter.setPen(Qt::NoPen);
-    painter.setBrush(layout.style.tooltipBg);
-    painter.drawRoundedRect(bubbleRect, layout.style.metrics.tooltipRadius, layout.style.metrics.tooltipRadius);
-    painter.drawPolygon(arrow);
-    painter.setPen(layout.style.tooltipText);
-    painter.drawText(bubbleRect, Qt::AlignCenter, text);
-  };
+    painter.setBrush(borderColor);
+    painter.drawEllipse(QRectF(center.x() - ringOuterRadius, center.y() - ringOuterRadius,
+                               ringOuterRadius * 2.0, ringOuterRadius * 2.0));
 
-  for (int index : tooltipIndexes) {
-    drawTooltipAt(index);
+    painter.setBrush(layout.style.useHandleBrush ? layout.style.handleBrush : QBrush(layout.style.surfaceBg));
+    painter.drawEllipse(QRectF(center.x() - coreRadius, center.y() - coreRadius, coreRadius * 2.0,
+                               coreRadius * 2.0));
   }
+
+  syncTooltipHosts(&layout);
 }
 
 void AdSlider::enterEvent(QEnterEvent* event) {
@@ -1182,6 +1357,7 @@ void AdSlider::mousePressEvent(QMouseEvent* event) {
   if (hitIndex >= 0) {
     dragMode_ = DragMode::Handle;
     dragHandleIndex_ = hitIndex;
+    hoverHandleIndex_ = hitIndex;
     focusHandleIndex_ = hitIndex;
     dragStartPos_ = event->position().toPoint();
     dragStartValues_ = handles_;
@@ -1232,14 +1408,23 @@ void AdSlider::mouseMoveEvent(QMouseEvent* event) {
   }
 
   if (dragMode_ == DragMode::Handle && dragHandleIndex_ >= 0 && dragHandleIndex_ < handles_.size()) {
-    QList<double> next = dragStartValues_;
+    QList<double> next = handles_;
     if (dragHandleIndex_ >= next.size()) {
       return;
     }
     const double nextValue = valueFromPosition(event->position().toPoint(), layout);
     next[dragHandleIndex_] = nextValue;
     setHandlesInternal(next, true, true);
-    focusHandleIndex_ = nearestHandleIndex(nextValue);
+    const int activeIndex = nearestHandleIndex(nextValue);
+    if (activeIndex >= 0) {
+      if (dragHandleIndex_ != activeIndex) {
+        dragHandleIndex_ = activeIndex;
+        hoverHandleIndex_ = activeIndex;
+        syncTooltipHosts();
+        update();
+      }
+      focusHandleIndex_ = activeIndex;
+    }
     return;
   }
 

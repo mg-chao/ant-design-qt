@@ -7,22 +7,32 @@ INCLUDEPATH += ../../packages/ant-design-qt/src
 INCLUDEPATH += ../../packages/ant-design-icons-qt/src
 
 HEADERS += \
+    color_picker_docs_page.h \
     icon_theme_adapter.h \
+    input_docs_page.h \
     menu_docs_page.h \
+    modal_docs_page.h \
+    popconfirm_docs_page.h \
     popover_docs_page.h \
     radio_docs_page.h \
     select_docs_page.h \
     slider_docs_page.h \
+    switch_docs_page.h \
     tooltip_docs_page.h
 
 SOURCES += \
+    color_picker_docs_page.cpp \
     icon_theme_adapter.cpp \
+    input_docs_page.cpp \
     main.cpp \
     menu_docs_page.cpp \
+    modal_docs_page.cpp \
+    popconfirm_docs_page.cpp \
     popover_docs_page.cpp \
     radio_docs_page.cpp \
     select_docs_page.cpp \
     slider_docs_page.cpp \
+    switch_docs_page.cpp \
     tooltip_docs_page.cpp
 
 isEmpty(ADQT_LIB_BUILD_DIR) {

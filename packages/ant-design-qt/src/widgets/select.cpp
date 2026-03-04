@@ -224,6 +224,19 @@ bool setWidgetCursorIfChanged(QWidget* widget, Qt::CursorShape cursorShape) {
   return true;
 }
 
+QRectF joinedSelectorRect(const QRect& bounds, qreal borderWidth, bool joinedLeft, bool joinedRight) {
+  const qreal half = std::max<qreal>(0.0, borderWidth / 2.0);
+  qreal leftInset = half + 0.5;
+  qreal rightInset = half + 0.5;
+  if (joinedLeft) {
+    leftInset = half;
+  }
+  if (joinedRight) {
+    rightInset = half;
+  }
+  return QRectF(bounds).adjusted(leftInset, half + 0.5, -rightInset, -half - 0.5);
+}
+
 bool setLayoutContentsMarginsIfChanged(QLayout* layout, const QMargins& margins) {
   if (!layout || layout->contentsMargins() == margins) {
     return false;
@@ -1421,6 +1434,28 @@ void AdSelect::setPlaceholder(const QString& value) {
   emit placeholderChanged(placeholder_);
 }
 
+bool AdSelect::joinedLeft() const { return joinedLeft_; }
+
+void AdSelect::setJoinedLeft(bool value) {
+  if (joinedLeft_ == value) {
+    return;
+  }
+  joinedLeft_ = value;
+  updateInteractionFocusOverlay();
+  update();
+}
+
+bool AdSelect::joinedRight() const { return joinedRight_; }
+
+void AdSelect::setJoinedRight(bool value) {
+  if (joinedRight_ == value) {
+    return;
+  }
+  joinedRight_ = value;
+  updateInteractionFocusOverlay();
+  update();
+}
+
 QString AdSelect::prefixText() const { return prefixText_; }
 
 void AdSelect::setPrefixText(const QString& value) {
@@ -1816,9 +1851,7 @@ QRectF AdSelect::selectorPaintRect() const {
   if (!visualStyle_) {
     return rect();
   }
-
-  const qreal borderHalf = std::max<qreal>(0.0, visualStyle_->metrics.borderWidth / 2.0);
-  return rect().adjusted(borderHalf + 0.5, borderHalf + 0.5, -borderHalf - 0.5, -borderHalf - 0.5);
+  return joinedSelectorRect(rect(), visualStyle_->metrics.borderWidth, joinedLeft_, joinedRight_);
 }
 
 QColor AdSelect::resolveSelectorBgColor() const {
@@ -1879,11 +1912,16 @@ void AdSelect::paintSelectorShell(QPainter& painter) const {
   const QColor border = resolveSelectorBorderColor();
   const qreal borderWidth = std::max<qreal>(0.0, visualStyle_->metrics.borderWidth);
   const qreal radius = resolveSelectorRadius();
+  const qreal topLeftRadius = joinedLeft_ ? 0.0 : radius;
+  const qreal topRightRadius = joinedRight_ ? 0.0 : radius;
+  const qreal bottomRightRadius = joinedRight_ ? 0.0 : radius;
+  const qreal bottomLeftRadius = joinedLeft_ ? 0.0 : radius;
 
   painter.save();
   painter.setRenderHint(QPainter::Antialiasing, true);
 
-  const QPainterPath shellPath = roundedRectPath(shellRect, radius);
+  const QPainterPath shellPath =
+      roundedRectPath(shellRect, topLeftRadius, topRightRadius, bottomRightRadius, bottomLeftRadius);
   if (background.alpha() > 0) {
     painter.fillPath(shellPath, background);
   }
@@ -3852,9 +3890,8 @@ void AdSelect::updateInteractionFocusOverlay() {
     return;
   }
 
-  const qreal borderHalf = std::max<qreal>(0.0, visualStyle_->metrics.borderWidth / 2.0);
   QRectF focusBaseRectInWindow =
-      rect().adjusted(borderHalf + 0.5, borderHalf + 0.5, -borderHalf - 0.5, -borderHalf - 0.5);
+      joinedSelectorRect(rect(), visualStyle_->metrics.borderWidth, joinedLeft_, joinedRight_);
 
   QWidget* hostWindow = window();
   if (hostWindow) {
@@ -3862,14 +3899,14 @@ void AdSelect::updateInteractionFocusOverlay() {
     focusBaseRectInWindow.translate(origin.x(), origin.y());
   }
 
-  const qreal radius = std::max<qreal>(0.0, visualStyle_->metrics.borderRadius);
+  const qreal radius = resolveSelectorRadius();
   InteractionFocusRequest request;
   request.owner = this;
   request.baseRectInWindow = focusBaseRectInWindow;
-  request.topLeft = radius;
-  request.topRight = radius;
-  request.bottomRight = radius;
-  request.bottomLeft = radius;
+  request.topLeft = joinedLeft_ ? 0.0 : radius;
+  request.topRight = joinedRight_ ? 0.0 : radius;
+  request.bottomRight = joinedRight_ ? 0.0 : radius;
+  request.bottomLeft = joinedLeft_ ? 0.0 : radius;
   request.color = focusColor;
   request.strokeWidth = std::max<qreal>(1.0, visualStyle_->metrics.focusOutlineWidth);
   request.offset = std::max<qreal>(0.0, visualStyle_->metrics.focusOutlineOffset);

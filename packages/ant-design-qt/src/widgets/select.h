@@ -235,6 +235,12 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   QString placeholder() const;
   void setPlaceholder(const QString& value);
 
+  bool joinedLeft() const;
+  void setJoinedLeft(bool value);
+
+  bool joinedRight() const;
+  void setJoinedRight(bool value);
+
   QString prefixText() const;
   void setPrefixText(const QString& value);
 
@@ -428,6 +434,8 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   bool popupMatchSelectWidth_ = true;
   int popupWidth_ = 0;
   QString placeholder_;
+  bool joinedLeft_ = false;
+  bool joinedRight_ = false;
   QString prefixText_;
   adqt::icons::IconToken prefixIconToken_;
   adqt::icons::IconToken suffixIconToken_;

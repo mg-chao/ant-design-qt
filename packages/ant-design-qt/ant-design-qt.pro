@@ -12,12 +12,18 @@ HEADERS += \
     src/widgets/button.h \
     src/widgets/button_group.h \
     src/widgets/button_style.h \
+    src/widgets/color_picker.h \
+    src/widgets/color_picker_style.h \
     src/widgets/detail/timing_hub.h \
+    src/widgets/input.h \
+    src/widgets/input_style.h \
     src/widgets/in_window_popup_host.h \
     src/widgets/interaction_overlay_manager.h \
+    src/widgets/modal.h \
     src/widgets/menu.h \
     src/widgets/menu_style.h \
     src/widgets/popover.h \
+    src/widgets/popconfirm.h \
     src/widgets/popover_style.h \
     src/widgets/popup_placement.h \
     src/widgets/radio.h \
@@ -28,6 +34,8 @@ HEADERS += \
     src/widgets/select_style.h \
     src/widgets/slider.h \
     src/widgets/slider_style.h \
+    src/widgets/switch.h \
+    src/widgets/switch_style.h \
     src/widgets/tooltip.h \
     src/widgets/widgets.h \
     src/theme/fast_color_lite.h \
@@ -43,12 +51,18 @@ SOURCES += \
     src/widgets/button.cpp \
     src/widgets/button_group.cpp \
     src/widgets/button_style.cpp \
+    src/widgets/color_picker.cpp \
+    src/widgets/color_picker_style.cpp \
     src/widgets/detail/timing_hub.cpp \
+    src/widgets/input.cpp \
+    src/widgets/input_style.cpp \
     src/widgets/in_window_popup_host.cpp \
     src/widgets/interaction_overlay_manager.cpp \
+    src/widgets/modal.cpp \
     src/widgets/menu.cpp \
     src/widgets/menu_style.cpp \
     src/widgets/popover.cpp \
+    src/widgets/popconfirm.cpp \
     src/widgets/popover_style.cpp \
     src/widgets/popup_placement.cpp \
     src/widgets/radio.cpp \
@@ -59,6 +73,8 @@ SOURCES += \
     src/widgets/select_style.cpp \
     src/widgets/slider.cpp \
     src/widgets/slider_style.cpp \
+    src/widgets/switch.cpp \
+    src/widgets/switch_style.cpp \
     src/widgets/tooltip.cpp \
     src/theme/fast_color_lite.cpp \
     src/theme/palette_generate.cpp \

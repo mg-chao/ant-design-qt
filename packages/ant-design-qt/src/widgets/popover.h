@@ -2,8 +2,11 @@
 
 #include <QColor>
 #include <QFlags>
+#include <QHash>
 #include <QPointer>
+#include <QRect>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QWidget>
 
@@ -14,6 +17,7 @@
 
 class QEvent;
 class QLabel;
+class QScrollBar;
 class QVBoxLayout;
 
 template <typename T>
@@ -113,6 +117,10 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
 
   explicit AdPopover(QWidget* parent = nullptr);
   ~AdPopover() override;
+
+  static void resetSyncPopupGeometryCountersForTesting();
+  static qint64 syncPopupGeometryCallCountForTesting();
+  static qint64 syncPopupGeometryShortCircuitCountForTesting();
 
   Placement placement() const;
   void setPlacement(Placement value);
@@ -214,7 +222,7 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
   void ensurePopup();
   void releasePopup();
   void refreshPopupContent();
-  void syncPopupGeometry();
+  bool syncPopupGeometry();
 
   bool hasOverlayContent() const;
   bool hasTrigger(Trigger trigger) const;
@@ -228,6 +236,14 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
   void setReasonOpen(InternalOpenReason reason, bool enabled);
   bool reasonOpen(InternalOpenReason reason) const;
   void clearAllOpenReasons();
+  void noteGeometryActivity();
+  void schedulePopupRelayout(bool extendFrameTail);
+  void cancelPopupRelayout();
+  void refreshGeometryFrameSync();
+  void resetGeometrySyncSnapshot();
+  void markAnchorScrollWatchersDirty();
+  void refreshAnchorScrollBarWatchers();
+  void clearAnchorScrollBarWatchers();
   void emitControlledOpenRequest(bool requestedOpen);
   void updateOpenState(bool emitSignal);
   void setOpenInternal(bool open, bool emitSignal, bool emitOnOpenChangeSignal = true);
@@ -257,6 +273,7 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
   QWidget* popupAnchorWidget() const override;
   QWidget* popupScopeWindow() const override;
   bool popupIsVisible() const override;
+  bool popupWantsHostFrameRelayout() const override;
   bool popupContainsGlobalPos(const QPoint& globalPos) const override;
   void popupCloseFromHost(detail::PopupCloseReason reason) override;
   void popupRelayoutFromHost() override;
@@ -314,6 +331,32 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
   bool suppressOnOpenChangeEmission_ = false;
   bool closingFromHost_ = false;
   bool updatingOpen_ = false;
+  bool popupRelayoutQueued_ = false;
+  QPointer<QWidget> popupRelayoutQueuedScope_;
+  struct ScrollBarWatch {
+    QMetaObject::Connection valueChanged;
+    QMetaObject::Connection destroyed;
+  };
+  QHash<QScrollBar*, ScrollBarWatch> watchedAnchorScrollBars_;
+  QPointer<QWidget> watchedScrollAnchor_;
+  QPointer<QWidget> watchedScrollScope_;
+  bool anchorScrollWatchersDirty_ = true;
+  qint64 nextAnchorScrollWatchersRefreshMs_ = 0;
+  bool geometryFrameSyncSubscribed_ = false;
+  qint64 geometryFrameSyncDeadlineMs_ = -1;
+  int cachedPopupOffset_ = 0;
+  int cachedBorderRadius_ = 0;
+  QPointer<QWidget> geometrySyncParent_;
+  QRect geometrySyncAnchorRect_;
+  QRect geometrySyncBounds_;
+  QSize geometrySyncPopupSize_;
+  Placement geometrySyncPlacement_ = Placement::Top;
+  bool geometrySyncAutoAdjustOverflow_ = true;
+  int geometrySyncPopupOffset_ = 0;
+  bool geometrySyncArrowPointAtCenter_ = false;
+  int geometrySyncArrowOffsetHorizontal_ = 0;
+  int geometrySyncArrowOffsetVertical_ = 0;
+  bool geometrySyncSnapshotValid_ = false;
   std::optional<QPoint> contextMenuGlobalPos_;
 };
 

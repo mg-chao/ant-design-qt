@@ -29,6 +29,13 @@ qreal easeOutCirc(qreal t) {
 
 qreal lerp(qreal a, qreal b, qreal t) { return a + (b - a) * clampUnit(t); }
 
+qreal expandedCornerRadius(qreal baseRadius, qreal outwardOffset) {
+  if (baseRadius <= 0.0) {
+    return 0.0;
+  }
+  return baseRadius + std::max<qreal>(0.0, outwardOffset);
+}
+
 QPainterPath roundedRectPath(const QRectF& rect, qreal topLeft, qreal topRight, qreal bottomRight,
                              qreal bottomLeft) {
   const qreal w = std::max(rect.width(), 0.0);
@@ -79,6 +86,9 @@ bool isValidInteractionWaveRequest(const InteractionWaveRequest& request) {
     return false;
   }
   if (!request.color.isValid() || request.color.alpha() <= 0) {
+    return false;
+  }
+  if (request.strokeWidthScale <= 0.0) {
     return false;
   }
   return true;
@@ -181,8 +191,10 @@ class SharedInteractionOverlay final : public QWidget {
       if (opacity > 0.0) {
         // antd wave is perceived as a thin ring that quickly thickens (box-shadow 0 -> 6px).
         // Keep this approximation low-cost by animating pen width with a fast ease-out ramp.
-        const qreal startStroke = std::max<qreal>(0.6, kInteractionWaveStrokeWidth * 0.32);
-        const qreal endStroke = 6.0;
+        const qreal strokeScale = std::max<qreal>(0.1, interactionWaveRequest_.strokeWidthScale);
+        const qreal startStroke =
+            std::max<qreal>(0.6, (kInteractionWaveStrokeWidth * 0.32) * strokeScale);
+        const qreal endStroke = std::max<qreal>(startStroke, 6.0 * strokeScale);
         const qreal strokeProgress = std::max(spreadProgress, thickenProgress);
         const qreal strokeWidth = lerp(startStroke, endStroke, strokeProgress);
         const qreal outwardOffset = strokeWidth * 0.5;
@@ -190,18 +202,19 @@ class SharedInteractionOverlay final : public QWidget {
         // Keep the inner edge of the wave attached to button bounds, while it expands outward.
         const QRectF waveRect = interactionWaveRequest_.baseRectInWindow.adjusted(
             -outwardOffset, -outwardOffset, outwardOffset, outwardOffset);
-        const QPainterPath wavePath = roundedRectPath(
-            waveRect, interactionWaveRequest_.topLeft + outwardOffset,
-            interactionWaveRequest_.topRight + outwardOffset,
-            interactionWaveRequest_.bottomRight + outwardOffset,
-            interactionWaveRequest_.bottomLeft + outwardOffset);
+        const QPainterPath wavePath =
+            roundedRectPath(waveRect,
+                            expandedCornerRadius(interactionWaveRequest_.topLeft, outwardOffset),
+                            expandedCornerRadius(interactionWaveRequest_.topRight, outwardOffset),
+                            expandedCornerRadius(interactionWaveRequest_.bottomRight, outwardOffset),
+                            expandedCornerRadius(interactionWaveRequest_.bottomLeft, outwardOffset));
 
         QColor waveColor = interactionWaveRequest_.color;
         // Keep source alpha and apply animation opacity on top to match antd behavior.
         const qreal baseAlpha = clampUnit(waveColor.alphaF());
         waveColor.setAlphaF(baseAlpha * clampUnit(opacity));
         if (waveColor.alpha() > 0) {
-          QPen wavePen(waveColor, strokeWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+          QPen wavePen(waveColor, strokeWidth, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin);
           painter.setPen(wavePen);
           painter.setBrush(Qt::NoBrush);
           painter.drawPath(wavePath);
@@ -215,14 +228,15 @@ class SharedInteractionOverlay final : public QWidget {
           std::max<qreal>(0.0, interactionFocusRequest_.offset) + strokeWidth / 2.0;
       const QRectF focusRect = interactionFocusRequest_.baseRectInWindow.adjusted(
           -outwardOffset, -outwardOffset, outwardOffset, outwardOffset);
-      const QPainterPath focusPath = roundedRectPath(
-          focusRect, interactionFocusRequest_.topLeft + outwardOffset,
-          interactionFocusRequest_.topRight + outwardOffset,
-          interactionFocusRequest_.bottomRight + outwardOffset,
-          interactionFocusRequest_.bottomLeft + outwardOffset);
+      const QPainterPath focusPath =
+          roundedRectPath(focusRect,
+                          expandedCornerRadius(interactionFocusRequest_.topLeft, outwardOffset),
+                          expandedCornerRadius(interactionFocusRequest_.topRight, outwardOffset),
+                          expandedCornerRadius(interactionFocusRequest_.bottomRight, outwardOffset),
+                          expandedCornerRadius(interactionFocusRequest_.bottomLeft, outwardOffset));
 
-      QPen focusPen(interactionFocusRequest_.color, strokeWidth, Qt::SolidLine, Qt::RoundCap,
-                    Qt::RoundJoin);
+      QPen focusPen(interactionFocusRequest_.color, strokeWidth, Qt::SolidLine, Qt::SquareCap,
+                    Qt::MiterJoin);
       painter.setPen(focusPen);
       painter.setBrush(Qt::NoBrush);
       painter.drawPath(focusPath);

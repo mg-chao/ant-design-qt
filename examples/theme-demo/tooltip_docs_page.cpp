@@ -78,7 +78,7 @@ TooltipDocsPage::TooltipDocsPage(QWidget* parent) : QWidget(parent) {
   addSection(root, "Auto Shift", "Demo: shift.tsx", buildShiftDemo());
   addSection(root, "Adjust placement automatically", "Demo: auto-adjust-overflow.tsx",
              buildAutoAdjustOverflowDemo());
-  addSection(root, "Destroy tooltip when hidden", "Demo: destroy-on-close.tsx", buildDestroyOnCloseDemo());
+  addSection(root, "Destroy tooltip when hidden", "Demo: destroy-on-close.tsx", buildDestroyOnHiddenDemo());
   addSection(root, "Colorful Tooltip", "Demo: colorful.tsx", buildColorfulDemo());
   addSection(root, "Disabled", "Demo: disabled.tsx", buildDisabledDemo());
   addSection(root, "Disabled children", "Demo: disabled-children.tsx", buildDisabledChildrenDemo());
@@ -303,40 +303,17 @@ QWidget* TooltipDocsPage::buildAutoAdjustOverflowDemo() {
   return box;
 }
 
-QWidget* TooltipDocsPage::buildDestroyOnCloseDemo() {
+QWidget* TooltipDocsPage::buildDestroyOnHiddenDemo() {
   auto* box = new QWidget();
-  auto* layout = new QVBoxLayout(box);
-  layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(8);
+  auto* row = new QHBoxLayout(box);
+  row->setContentsMargins(0, 0, 0, 0);
+  row->setSpacing(8);
 
-  auto* openCheck = new QCheckBox("Open");
-  auto* refreshButton = new QPushButton("Refresh popup count");
-  auto* status = new QLabel();
-
-  auto* tooltip = makeTooltip("Click trigger", "Dom will destroyed when Tooltip close", Trigger::Click);
+  auto* tooltip = makeTooltip("Dom will destroyed when Tooltip close", "prompt text", Trigger::Hover);
   tooltip->setDestroyOnHidden(true);
 
-  auto updateStatus = [tooltip, status]() {
-    if (!tooltip || !status) {
-      return;
-    }
-    QWidget* scope = tooltip->window();
-    const int popupCount =
-        scope ? scope->findChildren<QWidget*>(QStringLiteral("adpopover-popup"), Qt::FindChildrenRecursively).size()
-              : 0;
-    status->setText(QStringLiteral("Popup widgets in scope: %1").arg(popupCount));
-  };
-
-  connect(openCheck, &QCheckBox::toggled, tooltip, &AdTooltip::setOpen);
-  connect(tooltip, &AdTooltip::openChanged, openCheck, &QCheckBox::setChecked);
-  connect(tooltip, &AdTooltip::openChanged, this, [updateStatus](bool) { updateStatus(); });
-  connect(refreshButton, &QPushButton::clicked, this, [updateStatus]() { updateStatus(); });
-
-  updateStatus();
-  layout->addWidget(openCheck, 0, Qt::AlignLeft);
-  layout->addWidget(tooltip, 0, Qt::AlignLeft);
-  layout->addWidget(refreshButton, 0, Qt::AlignLeft);
-  layout->addWidget(status);
+  row->addWidget(tooltip);
+  row->addStretch();
   return box;
 }
 

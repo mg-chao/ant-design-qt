@@ -36,7 +36,7 @@ class TooltipDocsPage final : public QWidget {
   QWidget* buildArrowDemo();
   QWidget* buildShiftDemo();
   QWidget* buildAutoAdjustOverflowDemo();
-  QWidget* buildDestroyOnCloseDemo();
+  QWidget* buildDestroyOnHiddenDemo();
   QWidget* buildColorfulDemo();
   QWidget* buildDisabledDemo();
   QWidget* buildDisabledChildrenDemo();

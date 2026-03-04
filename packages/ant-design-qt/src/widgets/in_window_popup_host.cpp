@@ -1,12 +1,14 @@
 #include "in_window_popup_host.h"
 #include "detail/timing_hub.h"
 
+#include <QAbstractScrollArea>
 #include <QApplication>
 #include <QEvent>
 #include <QHash>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QScrollBar>
 #include <QSet>
 #include <QString>
 #include <QTouchEvent>
@@ -20,6 +22,7 @@ namespace {
 
 constexpr char kRelayoutTaskKey[] = "InWindowPopupHost.Relayout";
 constexpr char kRefreshAnchorWatchersTaskKey[] = "InWindowPopupHost.RefreshAnchorWatchers";
+constexpr char kFrameRelayoutTaskKey[] = "InWindowPopupHost.FrameRelayout";
 
 QPoint mouseEventGlobalPos(const QMouseEvent* event) {
   if (!event) {
@@ -69,8 +72,29 @@ bool isAnchorGeometryEvent(QEvent::Type type) {
     case QEvent::LayoutRequest:
     case QEvent::Wheel:
     case QEvent::ContentsRectChange:
+    case QEvent::ScrollPrepare:
+    case QEvent::Scroll:
     case QEvent::StyleChange:
     case QEvent::PolishRequest:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool isScrollBarActivityEvent(QEvent::Type type) {
+  switch (type) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::MouseMove:
+    case QEvent::Wheel:
+    case QEvent::Move:
+    case QEvent::Resize:
+    case QEvent::Show:
+    case QEvent::Hide:
+    case QEvent::LayoutRequest:
+    case QEvent::StyleChange:
+    case QEvent::Paint:
       return true;
     default:
       return false;
@@ -97,6 +121,7 @@ class InWindowPopupHost final : public QObject {
 
     if (activeOwner_ == owner) {
       refreshAnchorChainWatchers();
+      refreshFrameRelayoutSubscription();
       if (owner->popupIsVisible()) {
         scheduleRelayout();
       }
@@ -127,6 +152,7 @@ class InWindowPopupHost final : public QObject {
       scopeWindow_->removeEventFilter(this);
       scopeWindow_->installEventFilter(this);
     }
+    refreshFrameRelayoutSubscription();
 
     refreshAnchorChainWatchers();
     if (owner->popupIsVisible()) {
@@ -150,6 +176,14 @@ class InWindowPopupHost final : public QObject {
 
     const bool watchedScope = (scopeWindow_ && watched == scopeWindow_.data());
     const bool watchedAnchorChain = watchedInAnchorChain(watched);
+
+    if (auto* scrollBar = qobject_cast<QScrollBar*>(watched)) {
+      if (scopeWindow_ && (scrollBar == scopeWindow_.data() || scopeWindow_->isAncestorOf(scrollBar)) &&
+          isScrollBarActivityEvent(event->type())) {
+        scheduleRelayout();
+      }
+      return QObject::eventFilter(watched, event);
+    }
 
     // Application-level event filters receive the concrete target QObject (not qApp itself),
     // so outside-click close must not depend on watched == qApp.
@@ -185,13 +219,10 @@ class InWindowPopupHost final : public QObject {
         case QEvent::WindowDeactivate:
           requestCloseActive(PopupCloseReason::ScopeDeactivated);
           break;
-        case QEvent::Move:
-        case QEvent::Resize:
-        case QEvent::Show:
-        case QEvent::LayoutRequest:
-          scheduleRelayout();
-          break;
         default:
+          if (isAnchorGeometryEvent(event->type())) {
+            scheduleRelayout();
+          }
           break;
       }
       return QObject::eventFilter(watched, event);
@@ -219,6 +250,11 @@ class InWindowPopupHost final : public QObject {
   }
 
  private:
+  struct ScrollBarWatch {
+    QMetaObject::Connection valueChanged;
+    QMetaObject::Connection destroyed;
+  };
+
   bool watchedInAnchorChain(QObject* watched) const {
     for (const QPointer<QWidget>& widget : watchedAnchorChain_) {
       if (widget && widget.data() == watched) {
@@ -245,9 +281,7 @@ class InWindowPopupHost final : public QObject {
         requestCloseActive(PopupCloseReason::OwnerHidden);
         return;
       }
-      if (activeOwner_->popupIsVisible()) {
-        activeOwner_->popupRelayoutFromHost();
-      }
+      activeOwner_->popupRelayoutFromHost();
     });
   }
 
@@ -259,7 +293,7 @@ class InWindowPopupHost final : public QObject {
     InWindowPopupOwner* owner = activeOwner_;
     owner->popupCloseFromHost(reason);
     closingActive_ = false;
-    if (activeOwner_ == owner) {
+    if (activeOwner_ == owner && !owner->popupIsVisible()) {
       deactivateOwner(owner);
     }
   }
@@ -271,6 +305,7 @@ class InWindowPopupHost final : public QObject {
       }
     }
     watchedAnchorChain_.clear();
+    clearScrollBarWatchers();
 
     if (scopeWindow_) {
       scopeWindow_->removeEventFilter(this);
@@ -278,6 +313,22 @@ class InWindowPopupHost final : public QObject {
     if (qApp) {
       qApp->removeEventFilter(this);
     }
+    detail::clearFrameSubscription(this, QString::fromLatin1(kFrameRelayoutTaskKey));
+  }
+
+  void refreshFrameRelayoutSubscription() {
+    if (!activeOwner_ || !activeOwner_->popupWantsHostFrameRelayout()) {
+      detail::clearFrameSubscription(this, QString::fromLatin1(kFrameRelayoutTaskKey));
+      return;
+    }
+
+    detail::setFrameSubscription(this, QString::fromLatin1(kFrameRelayoutTaskKey), true,
+                                 [this](qint64, qint64) {
+                                   if (!activeOwner_) {
+                                     return;
+                                   }
+                                   scheduleRelayout();
+                                 });
   }
 
   void refreshAnchorChainWatchers() {
@@ -318,6 +369,63 @@ class InWindowPopupHost final : public QObject {
       widget->installEventFilter(this);
       watchedAnchorChain_.append(widget);
     }
+
+    refreshScrollBarWatchers(nextChain);
+  }
+
+  void refreshScrollBarWatchers(const QVector<QWidget*>& anchorChain) {
+    QSet<QScrollBar*> nextScrollBars;
+    for (QWidget* widget : anchorChain) {
+      auto* scrollArea = qobject_cast<QAbstractScrollArea*>(widget);
+      if (!scrollArea) {
+        continue;
+      }
+      if (QScrollBar* verticalBar = scrollArea->verticalScrollBar()) {
+        nextScrollBars.insert(verticalBar);
+      }
+      if (QScrollBar* horizontalBar = scrollArea->horizontalScrollBar()) {
+        nextScrollBars.insert(horizontalBar);
+      }
+    }
+
+    for (auto it = watchedScrollBars_.begin(); it != watchedScrollBars_.end();) {
+      QScrollBar* bar = it.key();
+      if (!bar || !nextScrollBars.contains(bar)) {
+        QObject::disconnect(it.value().valueChanged);
+        QObject::disconnect(it.value().destroyed);
+        it = watchedScrollBars_.erase(it);
+        continue;
+      }
+      ++it;
+    }
+
+    for (QScrollBar* bar : nextScrollBars) {
+      if (!bar || watchedScrollBars_.contains(bar)) {
+        continue;
+      }
+
+      ScrollBarWatch watch;
+      watch.valueChanged =
+          QObject::connect(bar, &QScrollBar::valueChanged, this, [this](int) { scheduleRelayout(); });
+      watch.destroyed = QObject::connect(bar, &QObject::destroyed, this, [this, bar]() {
+        auto it = watchedScrollBars_.find(bar);
+        if (it == watchedScrollBars_.end()) {
+          return;
+        }
+        QObject::disconnect(it.value().valueChanged);
+        QObject::disconnect(it.value().destroyed);
+        watchedScrollBars_.erase(it);
+      });
+      watchedScrollBars_.insert(bar, watch);
+    }
+  }
+
+  void clearScrollBarWatchers() {
+    for (auto it = watchedScrollBars_.begin(); it != watchedScrollBars_.end(); ++it) {
+      QObject::disconnect(it.value().valueChanged);
+      QObject::disconnect(it.value().destroyed);
+    }
+    watchedScrollBars_.clear();
   }
 
   void clearActiveOwner() {
@@ -336,6 +444,7 @@ class InWindowPopupHost final : public QObject {
   QPointer<QObject> activeOwnerObject_;
   QPointer<QWidget> activeAnchorWidget_;
   QVector<QPointer<QWidget>> watchedAnchorChain_;
+  QHash<QScrollBar*, ScrollBarWatch> watchedScrollBars_;
   QMetaObject::Connection ownerDestroyedConnection_;
   bool relayoutQueued_ = false;
   bool closingActive_ = false;

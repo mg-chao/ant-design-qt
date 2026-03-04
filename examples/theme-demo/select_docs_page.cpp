@@ -840,7 +840,7 @@ QWidget* SelectDocsPage::buildPlacementDemo() {
   select->setOptions(cityOptions());
   select->setValue("HangZhou");
   select->setPopupMatchSelectWidth(false);
-  select->setFixedWidth(180);
+  select->setFixedWidth(120);
 
   connect(radio, QOverload<int>::of(&QComboBox::currentIndexChanged), select,
           [radio, select](int) {

@@ -389,6 +389,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   void selectSingleValue(const QString& value, bool emitSignals);
   void ensurePopup();
   void rebuildPopupExtraContent();
+  int popupContentWidthHint() const;
   void syncPopupGeometry();
   void closePopup();
   void openPopup();

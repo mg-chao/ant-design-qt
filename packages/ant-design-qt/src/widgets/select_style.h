@@ -13,7 +13,7 @@ struct SelectMetrics {
   int popupBorderRadius = 8;
   int optionBorderRadius = 4;
   int borderWidth = 1;
-  qreal focusOutlineWidth = 2.0;
+  qreal focusOutlineWidth = 3.0;
   qreal focusOutlineOffset = 0.0;
   int inputPaddingHorizontalBase = 11;
   int horizontalPadding = 11;

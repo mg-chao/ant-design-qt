@@ -174,7 +174,7 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   style.metrics.popupBorderRadius = std::max(0, qRound(map.borderRadiusLG));
   style.metrics.optionBorderRadius = std::max(0, qRound(map.borderRadiusSM));
   style.metrics.borderWidth = std::max(1, qRound(map.lineWidth));
-  style.metrics.focusOutlineWidth = std::max<qreal>(1.0, map.lineWidth * 2.0);
+  style.metrics.focusOutlineWidth = std::max<qreal>(1.0, map.lineWidth * 3.0);
   style.metrics.focusOutlineOffset = 0.0;
   style.metrics.inputPaddingHorizontalBase = std::max(8, qRound(map.sizeSM - map.lineWidth));
   style.metrics.horizontalPadding = style.metrics.inputPaddingHorizontalBase;
@@ -409,9 +409,15 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
       style.selectorBg = style.disabledBg;
       style.selectorHoverBg = style.disabledBg;
       style.selectorActiveBg = style.disabledBg;
-      style.selectorBorderColor = style.disabledBorderColor;
-      style.selectorHoverBorderColor = style.disabledBorderColor;
-      style.selectorActiveBorderColor = style.disabledBorderColor;
+      if (input.variant == AdSelect::Variant::Underlined) {
+        // Match Ant Design: underlined has no dedicated disabled border token.
+        style.selectorHoverBorderColor = style.selectorBorderColor;
+        style.selectorActiveBorderColor = style.selectorBorderColor;
+      } else {
+        style.selectorBorderColor = style.disabledBorderColor;
+        style.selectorHoverBorderColor = style.disabledBorderColor;
+        style.selectorActiveBorderColor = style.disabledBorderColor;
+      }
       style.selectorFocusOutlineColor = transparent;
     }
     style.selectorTextColor = style.disabledTextColor;

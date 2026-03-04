@@ -4,9 +4,12 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QElapsedTimer>
+#include <QFontMetrics>
 #include <QIcon>
 #include <QImage>
 #include <QInputMethodEvent>
+#include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QListView>
 #include <QPushButton>
@@ -22,7 +25,10 @@
 #include "widgets/in_window_popup_host.h"
 #include "widgets/interaction_overlay_manager.h"
 #include "widgets/menu.h"
+#define private public
 #include "widgets/select.h"
+#undef private
+#include "widgets/select_style.h"
 
 namespace {
 
@@ -455,6 +461,117 @@ class TimingRefactorTests final : public QObject {
     QCOMPARE(clearButton->geometry(), suffixButton->geometry());
   }
 
+  void select_popupMatchSelectWidthFalseExpandsPopupToContent() {
+    AdSelect select;
+    select.resize(120, 32);
+    select.setPopupMatchSelectWidth(false);
+
+    AdSelect::Option shortOption;
+    shortOption.value = QStringLiteral("short");
+    shortOption.label = QStringLiteral("Short");
+
+    AdSelect::Option longOption;
+    longOption.value = QStringLiteral("long");
+    longOption.label = QStringLiteral("This is a very long option label for placement popup width");
+
+    select.setOptions({shortOption, longOption});
+    select.setValue(shortOption.value);
+    select.show();
+    QTRY_VERIFY_WITH_TIMEOUT(select.isVisible(), 400);
+
+    select.setOpen(true);
+    QTRY_VERIFY_WITH_TIMEOUT(select.open(), 400);
+
+    QWidget* scopeWindow = select.window();
+    QVERIFY(scopeWindow != nullptr);
+    QWidget* popup = scopeWindow->findChild<QWidget*>(QStringLiteral("adselect-popup"),
+                                                      Qt::FindChildrenRecursively);
+    QTRY_VERIFY_WITH_TIMEOUT(popup != nullptr, 400);
+    QTRY_VERIFY_WITH_TIMEOUT(popup->isVisible(), 400);
+
+    QListView* listView =
+        scopeWindow->findChild<QListView*>(QStringLiteral("adselect-list"), Qt::FindChildrenRecursively);
+    QVERIFY(listView != nullptr);
+    const QAbstractItemModel* model = listView->model();
+    QVERIFY(model != nullptr);
+
+    QModelIndex selectedIndex;
+    for (int row = 0; row < model->rowCount(); ++row) {
+      const QModelIndex index = model->index(row, 0);
+      if (index.data(Qt::UserRole).toString() == shortOption.value) {
+        selectedIndex = index;
+        break;
+      }
+    }
+    QVERIFY(selectedIndex.isValid());
+
+    const QString selectedText = selectedIndex.data(Qt::DisplayRole).toString();
+    QFont selectedFont = selectedIndex.data(Qt::FontRole).value<QFont>();
+    if (selectedFont.family().isEmpty()) {
+      selectedFont = listView->font();
+    }
+    const QFontMetrics selectedMetrics(selectedFont);
+    const int textWidth = std::max(selectedMetrics.horizontalAdvance(selectedText),
+                                   selectedMetrics.boundingRect(selectedText).width());
+    const int optionPadding = std::max(0, select.visualStyle_->metrics.optionPaddingHorizontal);
+    const int popupContentWidth = textWidth + optionPadding * 2 + 2;
+    const QMargins popupMargins =
+        popup->layout() ? popup->layout()->contentsMargins() : QMargins(0, 0, 0, 0);
+    const int expectedPopupWidth = popupContentWidth + popupMargins.left() + popupMargins.right();
+
+    QVERIFY(popup->width() > select.width());
+    QVERIFY(popup->width() >= expectedPopupWidth);
+  }
+
+  void select_multipleWrapsAndCapsTagWidth() {
+    QWidget host;
+    host.resize(320, 220);
+
+    AdSelect select(&host);
+    select.setMode(AdSelect::Mode::Multiple);
+    select.setGeometry(20, 20, 180, 32);
+
+    QVector<AdSelect::Option> options;
+    QStringList values;
+    for (int i = 0; i < 6; ++i) {
+      AdSelect::Option option;
+      option.value = QStringLiteral("value-%1").arg(i);
+      option.label = QStringLiteral("This is a very long selected label %1").arg(i);
+      options.push_back(option);
+      values.push_back(option.value);
+    }
+    select.setOptions(options);
+    select.setValues({values.constFirst()});
+    host.show();
+
+    QTRY_VERIFY_WITH_TIMEOUT(host.isVisible(), 400);
+    QTRY_VERIFY_WITH_TIMEOUT(select.isVisible(), 400);
+    QCoreApplication::processEvents();
+    const int singleLineHeight = select.height();
+    QVERIFY(singleLineHeight > 0);
+
+    select.setValues(values);
+    QTRY_VERIFY_WITH_TIMEOUT(select.height() > singleLineHeight, 400);
+
+    QWidget* tagsContainer = select.findChild<QWidget*>(QStringLiteral("adselect-tags"));
+    QVERIFY(tagsContainer != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(tagsContainer->isVisible(), 400);
+
+    const int containerWidth = tagsContainer->contentsRect().width();
+    QVERIFY(containerWidth > 0);
+    const QList<QWidget*> tagItems = tagsContainer->findChildren<QWidget*>(
+        QStringLiteral("adselect-tag-item"), Qt::FindChildrenRecursively);
+    QVERIFY(!tagItems.isEmpty());
+    for (QWidget* tagItem : tagItems) {
+      QVERIFY(tagItem != nullptr);
+      QVERIFY(tagItem->width() <= containerWidth);
+      QLabel* tagLabel = tagItem->findChild<QLabel*>(QStringLiteral("adselect-tag-text"),
+                                                      Qt::FindChildrenRecursively);
+      QVERIFY(tagLabel != nullptr);
+      QVERIFY(!tagLabel->text().isEmpty());
+    }
+  }
+
   void select_multipleOptionClickRestoresInputFocus() {
     AdSelect select;
     select.setMode(AdSelect::Mode::Multiple);
@@ -622,6 +739,51 @@ class TimingRefactorTests final : public QObject {
 
     QVERIFY(distToOpen > 10);
     QVERIFY(distToClosed + 6 < distToOpen);
+  }
+
+  void select_underlinedFocusedBorderUsesActiveColor() {
+    AdSelect select;
+    select.setVariant(AdSelect::Variant::Underlined);
+    select.setStatus(AdSelect::Status::Error);
+    select.resize(280, 40);
+    select.show();
+    QTRY_VERIFY_WITH_TIMEOUT(select.isVisible(), 400);
+
+    QVERIFY(select.visualStyle_ != nullptr);
+
+    select.hovered_ = true;
+    select.hasFocusWithin_ = false;
+    select.open_ = false;
+    const QColor hoveredBorder = select.resolveSelectorBorderColor();
+    QCOMPARE(hoveredBorder, select.visualStyle_->selectorHoverBorderColor);
+
+    select.hasFocusWithin_ = true;
+    const QColor focusedBorder = select.resolveSelectorBorderColor();
+    QCOMPARE(focusedBorder, select.visualStyle_->selectorActiveBorderColor);
+
+    select.hasFocusWithin_ = false;
+    select.open_ = true;
+    const QColor openedBorder = select.resolveSelectorBorderColor();
+    QCOMPARE(openedBorder, select.visualStyle_->selectorActiveBorderColor);
+  }
+
+  void select_underlinedDisabledStatusPreservesStatusBorderColor() {
+    adqt::widgets::detail::SelectStyleInput enabledInput;
+    enabledInput.variant = AdSelect::Variant::Underlined;
+    enabledInput.status = AdSelect::Status::Error;
+    enabledInput.baseFont = QFont();
+
+    adqt::widgets::detail::SelectStyleInput disabledInput = enabledInput;
+    disabledInput.disabled = true;
+
+    const adqt::widgets::detail::SelectVisualStyle enabledStyle =
+        adqt::widgets::detail::resolveSelectVisualStyle(enabledInput);
+    const adqt::widgets::detail::SelectVisualStyle disabledStyle =
+        adqt::widgets::detail::resolveSelectVisualStyle(disabledInput);
+
+    QCOMPARE(disabledStyle.selectorBorderColor, enabledStyle.selectorBorderColor);
+    QCOMPARE(disabledStyle.selectorHoverBorderColor, enabledStyle.selectorBorderColor);
+    QCOMPARE(disabledStyle.selectorActiveBorderColor, enabledStyle.selectorBorderColor);
   }
 
   void popupHost_relayoutBurstIsDeferredAndDeduplicated() {

@@ -172,6 +172,10 @@ bool setWidgetFixedHeightIfChanged(QWidget* widget, int height) {
     widget->setMaximumHeight(normalized);
     changed = true;
   }
+  if (widget->height() != normalized) {
+    widget->resize(widget->width(), normalized);
+    changed = true;
+  }
   return changed;
 }
 
@@ -401,7 +405,10 @@ class WrappingTagsLayout final : public QLayout {
     }
 
     const int horizontalSpacing = std::max(0, spacing());
-    const int verticalSpacing = std::max(0, spacing());
+    // Match Ant Design multiple selector layout:
+    // item vertical rhythm is driven by each tag's marginBlock, so wrapped
+    // lines should not add extra row spacing on top.
+    const int verticalSpacing = 0;
     int x = effectiveRect.x();
     int y = effectiveRect.y();
     int lineHeight = 0;
@@ -420,12 +427,22 @@ class WrappingTagsLayout final : public QLayout {
         itemSize = item->minimumSize();
       }
       const QSize minimum = item->minimumSize();
-      const int minWidth = std::max(0, minimum.width());
-      const int itemHeight = std::max(itemSize.height(), minimum.height());
+      int minWidth = std::max(0, minimum.width());
+      int itemHeight = std::max(itemSize.height(), minimum.height());
 
       QWidget* widget = item->widget();
       bool expanding = false;
       if (widget) {
+        minWidth = std::max(minWidth, std::max(0, widget->minimumWidth()));
+        itemHeight = std::max(itemHeight, std::max(0, widget->minimumHeight()));
+        if (itemSize.width() <= 0) {
+          const QSize hint = widget->sizeHint().isValid() ? widget->sizeHint() : widget->minimumSizeHint();
+          minWidth = std::max(minWidth, std::max(0, hint.width()));
+        }
+        if (itemHeight <= 0) {
+          const QSize hint = widget->sizeHint().isValid() ? widget->sizeHint() : widget->minimumSizeHint();
+          itemHeight = std::max(itemHeight, std::max(0, hint.height()));
+        }
         const QSizePolicy::Policy horizontalPolicy = widget->sizePolicy().horizontalPolicy();
         expanding = horizontalPolicy == QSizePolicy::Expanding ||
                     horizontalPolicy == QSizePolicy::MinimumExpanding;
@@ -435,6 +452,10 @@ class WrappingTagsLayout final : public QLayout {
       if (expanding) {
         itemWidth = std::max(minWidth, remainingWidth());
       }
+      const int maxItemWidth = std::max(0, effectiveRect.width());
+      if (maxItemWidth > 0) {
+        itemWidth = std::min(itemWidth, maxItemWidth);
+      }
 
       if (x > effectiveRect.x() && x + itemWidth > effectiveRect.right() + 1) {
         x = effectiveRect.x();
@@ -442,6 +463,9 @@ class WrappingTagsLayout final : public QLayout {
         lineHeight = 0;
         if (expanding) {
           itemWidth = std::max(minWidth, remainingWidth());
+          if (maxItemWidth > 0) {
+            itemWidth = std::min(itemWidth, maxItemWidth);
+          }
         }
       }
 
@@ -752,22 +776,17 @@ class AdSelect::PopupFrame final : public QFrame {
     background_ = background;
     borderColor_ = borderColor;
     borderRadius_ = normalizedRadius;
-    syncRoundedMask();
     update();
   }
 
  protected:
-  void resizeEvent(QResizeEvent* event) override {
-    QFrame::resizeEvent(event);
-    syncRoundedMask();
-  }
-
   void paintEvent(QPaintEvent* event) override {
     Q_UNUSED(event)
 
-    const qreal borderWidth =
+    const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(borderRadius_));
+    const qreal popupBorderWidth =
         (borderColor_.isValid() && borderColor_.alpha() > 0) ? 1.0 : 0.0;
-    const qreal inset = borderWidth > 0.0 ? borderWidth * 0.5 : 0.0;
+    const qreal inset = popupBorderWidth > 0.0 ? popupBorderWidth * 0.5 : 0.5;
     const QRectF frameRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
     if (!frameRect.isValid()) {
       return;
@@ -775,39 +794,21 @@ class AdSelect::PopupFrame final : public QFrame {
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    const QPainterPath framePath = roundedRectPath(frameRect, borderRadius_);
+    QPainterPath framePath;
+    framePath.addRoundedRect(frameRect, popupRadius, popupRadius);
     if (background_.isValid() && background_.alpha() > 0) {
       painter.fillPath(framePath, background_);
     }
 
-    if (borderWidth > 0.0) {
-      QPen borderPen(borderColor_, borderWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    if (popupBorderWidth > 0.0) {
+      QPen borderPen(borderColor_, popupBorderWidth);
       painter.setPen(borderPen);
       painter.setBrush(Qt::NoBrush);
-      painter.drawPath(framePath);
+      painter.drawRoundedRect(frameRect, popupRadius, popupRadius);
     }
   }
 
  private:
-  void syncRoundedMask() {
-    if (rect().isEmpty() || borderRadius_ <= 0) {
-      clearMask();
-      return;
-    }
-
-    const qreal clampedRadius =
-        std::clamp(static_cast<qreal>(borderRadius_), 0.0,
-                   std::min(static_cast<qreal>(width()), static_cast<qreal>(height())) / 2.0);
-    if (clampedRadius <= 0.0) {
-      clearMask();
-      return;
-    }
-
-    QPainterPath maskPath;
-    maskPath.addRoundedRect(QRectF(rect()), clampedRadius, clampedRadius);
-    setMask(QRegion(maskPath.toFillPolygon().toPolygon()));
-  }
-
   QColor background_;
   QColor borderColor_;
   int borderRadius_ = 0;
@@ -2139,19 +2140,40 @@ int AdSelect::responsiveVisibleTagCount(const QStringList& labels, int available
       std::max(8, visualStyle_ ? (visualStyle_->metrics.iconSize - 2) : 10);
   const int interTagGap =
       std::max(2, visualStyle_ ? visualStyle_->metrics.tagItemGap : 4);
-  int usedWidth = 0;
-  int count = 0;
-  for (const QString& label : labels) {
-    const int width = fm.horizontalAdvance(label) + tagPaddingStart + tagPaddingEnd +
-                      removeIconWidth + tagInnerGap;
-    const int gap = count > 0 ? interTagGap : 0;
-    if (count > 0 && usedWidth + gap + width > availableWidth) {
-      break;
+
+  const auto selectedTagWidth = [&](const QString& text) {
+    return fm.horizontalAdvance(text) + tagPaddingStart + tagPaddingEnd + removeIconWidth + tagInnerGap;
+  };
+  const auto restTagWidth = [&](int hiddenCount) {
+    if (hiddenCount <= 0) {
+      return 0;
     }
-    usedWidth += gap + width;
-    ++count;
+    const QString restText = QStringLiteral("+%1...").arg(hiddenCount);
+    return fm.horizontalAdvance(restText) + tagPaddingStart + tagPaddingEnd;
+  };
+
+  QVector<int> prefixWidths(labels.size() + 1, 0);
+  for (int i = 0; i < labels.size(); ++i) {
+    const int gap = i > 0 ? interTagGap : 0;
+    prefixWidths[i + 1] = prefixWidths[i] + gap + selectedTagWidth(labels.at(i));
   }
-  return std::max(1, count);
+
+  int bestVisibleCount = 0;
+  for (int candidate = 0; candidate <= labels.size(); ++candidate) {
+    const int hiddenCount = labels.size() - candidate;
+    int totalWidth = prefixWidths[candidate];
+    if (hiddenCount > 0) {
+      if (candidate > 0) {
+        totalWidth += interTagGap;
+      }
+      totalWidth += restTagWidth(hiddenCount);
+    }
+    if (totalWidth <= availableWidth) {
+      bestVisibleCount = candidate;
+    }
+  }
+
+  return bestVisibleCount;
 }
 
 void AdSelect::clearTagWidgets() {
@@ -2204,6 +2226,18 @@ void AdSelect::rebuildTagWidgets() {
   visibleCount = std::clamp(visibleCount, 0, static_cast<int>(labels.size()));
   const int hiddenCount = labels.size() - visibleCount;
   const bool hasPrefix = prefixLabel_ && prefixLabel_->isVisible();
+  int contentWidth = tagsContainer_->contentsRect().width();
+  if (contentHost_) {
+    contentWidth = std::max(contentWidth, contentHost_->contentsRect().width());
+  }
+  if (contentWidth <= 0) {
+    contentWidth = contentsRect().width();
+  }
+  if (contentWidth <= 0) {
+    contentWidth = std::max(1, width());
+  }
+  constexpr int kFixedInputMinWidth = 4;
+  const int maxTagItemWidth = std::max(kFixedInputMinWidth, contentWidth - kFixedInputMinWidth);
 
   const int tagHeight = std::max(16, visualStyle_ ? visualStyle_->metrics.tagHeight : 20);
   const int tagRadius = std::max(0, visualStyle_ ? visualStyle_->metrics.tagBorderRadius : 4);
@@ -2236,6 +2270,7 @@ void AdSelect::rebuildTagWidgets() {
                          tagPaddingEnd,
                          tagGap,
                          removeIconSize,
+                         maxTagItemWidth,
                          tagBg,
                          tagBorderColor,
                          tagTextColor,
@@ -2248,15 +2283,26 @@ void AdSelect::rebuildTagWidgets() {
     chip->setObjectName(QStringLiteral("adselect-tag-item"));
     chip->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     setWidgetFixedHeightIfChanged(chip, tagOuterHeight);
+    chip->setMaximumWidth(maxTagItemWidth);
 
     auto* chipLayout = new QHBoxLayout(chip);
     chipLayout->setContentsMargins(tagPaddingStart, tagItemMargin, tagPaddingEnd, tagItemMargin);
     chipLayout->setSpacing(tagGap);
 
-    auto* label = new QLabel(text, chip);
+    const bool showRemoveButton = removable && !disabled() && !value.isEmpty();
+    const int removeSlotWidth = showRemoveButton ? (removeIconSize + tagGap) : 0;
+    const int textAvailableWidth =
+        std::max(8, maxTagItemWidth - tagPaddingStart - tagPaddingEnd - removeSlotWidth);
+    auto* label = new QLabel(chip);
     label->setObjectName(QStringLiteral("adselect-tag-text"));
-    label->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    label->setMinimumWidth(1);
+    label->setMaximumWidth(textAvailableWidth);
     label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    const QFontMetrics tagLabelMetrics(label->font());
+    const QString displayText = tagLabelMetrics.elidedText(text, Qt::ElideRight, textAvailableWidth);
+    label->setText(displayText);
+    label->setToolTip(displayText != text ? text : QString());
     setWidgetFixedHeightIfChanged(label, std::max(1, tagHeight - tagBorderWidth * 2));
     chipLayout->addWidget(label);
 
@@ -2276,7 +2322,7 @@ void AdSelect::rebuildTagWidgets() {
     setWidgetCursorIfChanged(chip, selectorCursorShape());
     setWidgetCursorIfChanged(label, selectorCursorShape());
 
-    if (removable && !disabled() && !value.isEmpty()) {
+    if (showRemoveButton) {
       auto* removeButton = new FlatIconToolButton(chip);
       removeButton->setObjectName(QStringLiteral("adselect-tag-remove"));
       removeButton->setText(QString());
@@ -2583,7 +2629,18 @@ void AdSelect::updateDisplay() {
         effectiveInputText.isEmpty()
             ? 4
             : std::max(4, inputMetrics.horizontalAdvance(effectiveInputText + QStringLiteral(" ")) + 2);
-    setWidgetFixedWidthIfChanged(lineEdit_, inputWidth);
+    int availableInputWidth = tagsContainer_->contentsRect().width();
+    if (contentHost_) {
+      availableInputWidth = std::max(availableInputWidth, contentHost_->contentsRect().width());
+    }
+    if (availableInputWidth <= 0) {
+      availableInputWidth = contentsRect().width();
+    }
+    if (availableInputWidth <= 0) {
+      availableInputWidth = std::max(4, width());
+    }
+    const int cappedInputWidth = std::min(inputWidth, std::max(4, availableInputWidth));
+    setWidgetFixedWidthIfChanged(lineEdit_, cappedInputWidth);
     const int tagHeight = std::max(16, visualStyle_ ? visualStyle_->metrics.tagHeight : 20);
     const int tagItemMargin =
         std::max(0, visualStyle_ ? visualStyle_->metrics.tagItemMargin : 2);
@@ -3515,6 +3572,77 @@ void AdSelect::rebuildPopupExtraContent() {
   popupLayout_->addWidget(popupExtraContent_);
 }
 
+int AdSelect::popupContentWidthHint() const {
+  if (!visualStyle_) {
+    return 0;
+  }
+
+  const detail::SelectMetrics& metrics = visualStyle_->metrics;
+  const int horizontalPadding = std::max(0, metrics.optionPaddingHorizontal);
+  const int selectedIconSize = std::max(10, metrics.iconSize);
+  const int selectedStateGap = std::max(2, metrics.optionStateGap);
+
+  auto measureRowTextWidth = [horizontalPadding](const QString& text, const QFont& font) {
+    const QFontMetrics fm(font);
+    const int textWidth = std::max(fm.horizontalAdvance(text), fm.boundingRect(text).width());
+    // Leave a tiny safety room to avoid boundary elide caused by font hinting/rounding.
+    return textWidth + horizontalPadding * 2 + 2;
+  };
+
+  int maxRowWidth = 0;
+  for (const ModelRow& row : rows_) {
+    if (row.empty) {
+      QFont emptyFont = metrics.optionFont;
+      emptyFont.setWeight(QFont::Normal);
+      emptyFont.setPixelSize(std::max(12, metrics.emptyDescriptionFontSize));
+
+      const QFontMetrics emptyMetrics(emptyFont);
+      const int emptyTextWidth = emptyMetrics.horizontalAdvance(row.headerText);
+      const int emptyIconWidth = std::max(30, metrics.emptyStateIconWidth);
+      const int emptyInlineMargin = std::max(0, metrics.emptyStateMarginInline);
+      const int emptyContentWidth = std::max(emptyTextWidth, emptyIconWidth) + emptyInlineMargin * 2;
+      maxRowWidth = std::max(maxRowWidth, emptyContentWidth + horizontalPadding * 2);
+      continue;
+    }
+
+    if (row.header) {
+      QFont headerFont = metrics.optionFont;
+      headerFont.setBold(true);
+      maxRowWidth = std::max(maxRowWidth, measureRowTextWidth(row.headerText, headerFont));
+      continue;
+    }
+
+    if (row.optionIndex < 0 || row.optionIndex >= options_.size()) {
+      continue;
+    }
+
+    const Option& option = options_.at(row.optionIndex);
+    QFont optionFont = metrics.optionFont;
+    const bool selected = isValueSelected(option.value);
+    if (selected) {
+      optionFont.setWeight(QFont::DemiBold);
+    }
+
+    int optionWidth = measureRowTextWidth(formattedOptionText(option), optionFont);
+    if (selected && mode_ != Mode::Single) {
+      optionWidth += selectedIconSize + selectedStateGap;
+    }
+    maxRowWidth = std::max(maxRowWidth, optionWidth);
+  }
+
+  if (maxRowWidth <= 0) {
+    maxRowWidth = horizontalPadding * 2;
+  }
+
+  const QMargins popupMargins =
+      popupLayout_ ? popupLayout_->contentsMargins()
+                   : QMargins(std::max(0, metrics.popupPadding),
+                              std::max(0, metrics.popupPadding),
+                              std::max(0, metrics.popupPadding),
+                              std::max(0, metrics.popupPadding));
+  return maxRowWidth + popupMargins.left() + popupMargins.right();
+}
+
 void AdSelect::syncPopupGeometry() {
   if (!popup_ || !visualStyle_) {
     return;
@@ -3554,6 +3682,8 @@ void AdSelect::syncPopupGeometry() {
     popupW = std::max(width(), popupWidth_ > 0 ? popupWidth_ : width());
   } else if (popupWidth_ > 0) {
     popupW = popupWidth_;
+  } else {
+    popupW = std::max(popupW, popupContentWidthHint());
   }
   popupW = std::max(120, popupW);
 

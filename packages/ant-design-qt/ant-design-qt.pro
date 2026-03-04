@@ -17,10 +17,18 @@ HEADERS += \
     src/widgets/interaction_overlay_manager.h \
     src/widgets/menu.h \
     src/widgets/menu_style.h \
+    src/widgets/popover.h \
+    src/widgets/popover_style.h \
     src/widgets/popup_placement.h \
+    src/widgets/radio.h \
+    src/widgets/radio_group.h \
+    src/widgets/radio_style.h \
     src/widgets/scroll_area.h \
     src/widgets/select.h \
     src/widgets/select_style.h \
+    src/widgets/slider.h \
+    src/widgets/slider_style.h \
+    src/widgets/tooltip.h \
     src/widgets/widgets.h \
     src/theme/fast_color_lite.h \
     src/theme/palette_generate.h \
@@ -40,10 +48,18 @@ SOURCES += \
     src/widgets/interaction_overlay_manager.cpp \
     src/widgets/menu.cpp \
     src/widgets/menu_style.cpp \
+    src/widgets/popover.cpp \
+    src/widgets/popover_style.cpp \
     src/widgets/popup_placement.cpp \
+    src/widgets/radio.cpp \
+    src/widgets/radio_group.cpp \
+    src/widgets/radio_style.cpp \
     src/widgets/scroll_area.cpp \
     src/widgets/select.cpp \
     src/widgets/select_style.cpp \
+    src/widgets/slider.cpp \
+    src/widgets/slider_style.cpp \
+    src/widgets/tooltip.cpp \
     src/theme/fast_color_lite.cpp \
     src/theme/palette_generate.cpp \
     src/theme/theme_algorithms.cpp \

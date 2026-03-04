@@ -9,6 +9,7 @@ namespace adqt::widgets::detail {
 
 enum class PopupCloseReason {
   OutsidePressInScope,
+  EscapeKeyPress,
   ScopeHidden,
   ScopeDeactivated,
   OwnerHidden,
@@ -33,4 +34,3 @@ class InWindowPopupOwner {
 void setInWindowPopupHostOpen(InWindowPopupOwner* owner, bool open);
 
 }  // namespace adqt::widgets::detail
-

@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QEvent>
 #include <QHash>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QSet>
@@ -164,6 +165,14 @@ class InWindowPopupHost final : public QObject {
       if (scopeGlobalRect.isValid() && scopeGlobalRect.contains(interactionGlobalPos.value()) &&
           !activeOwner_->popupContainsGlobalPos(interactionGlobalPos.value())) {
         requestCloseActive(PopupCloseReason::OutsidePressInScope);
+      }
+      return QObject::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::KeyPress && activeOwner_->popupIsVisible()) {
+      const auto* keyEvent = static_cast<const QKeyEvent*>(event);
+      if (keyEvent && keyEvent->key() == Qt::Key_Escape) {
+        requestCloseActive(PopupCloseReason::EscapeKeyPress);
       }
       return QObject::eventFilter(watched, event);
     }

@@ -23,7 +23,11 @@
 #include "icon_theme_adapter.h"
 #include "icons.h"
 #include "menu_docs_page.h"
+#include "popover_docs_page.h"
+#include "radio_docs_page.h"
 #include "select_docs_page.h"
+#include "slider_docs_page.h"
+#include "tooltip_docs_page.h"
 #include "theme/theme.h"
 #include "widgets/detail/timing_hub.h"
 #include "widgets/widgets.h"
@@ -895,9 +899,17 @@ class DemoWindow final : public QWidget {
     buttonPage_ = new ButtonDocsPage();
     menuPage_ = new MenuDocsPage();
     selectPage_ = new SelectDocsPage();
+    sliderPage_ = new SliderDocsPage();
+    popoverPage_ = new PopoverDocsPage();
+    tooltipPage_ = new TooltipDocsPage();
+    radioPage_ = new RadioDocsPage();
     docsStack_->addWidget(buttonPage_);
     docsStack_->addWidget(menuPage_);
     docsStack_->addWidget(selectPage_);
+    docsStack_->addWidget(sliderPage_);
+    docsStack_->addWidget(popoverPage_);
+    docsStack_->addWidget(tooltipPage_);
+    docsStack_->addWidget(radioPage_);
     scroll_->setWidget(docsStack_);
     body->addWidget(scroll_, 1);
 
@@ -914,6 +926,14 @@ class DemoWindow final : public QWidget {
         switchDocs(DocsKind::Menu, false);
       } else if (key == QStringLiteral("select-docs")) {
         switchDocs(DocsKind::Select, false);
+      } else if (key == QStringLiteral("slider-docs")) {
+        switchDocs(DocsKind::Slider, false);
+      } else if (key == QStringLiteral("popover-docs")) {
+        switchDocs(DocsKind::Popover, false);
+      } else if (key == QStringLiteral("tooltip-docs")) {
+        switchDocs(DocsKind::Tooltip, false);
+      } else if (key == QStringLiteral("radio-docs")) {
+        switchDocs(DocsKind::Radio, false);
       }
     });
     connect(scroll_->verticalScrollBar(), &QAbstractSlider::valueChanged, this,
@@ -933,6 +953,10 @@ class DemoWindow final : public QWidget {
     Button,
     Menu,
     Select,
+    Slider,
+    Popover,
+    Tooltip,
+    Radio,
   };
 
   QString docsRootKey(DocsKind kind) const {
@@ -942,7 +966,19 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Menu) {
       return QStringLiteral("menu-docs");
     }
-    return QStringLiteral("select-docs");
+    if (kind == DocsKind::Select) {
+      return QStringLiteral("select-docs");
+    }
+    if (kind == DocsKind::Slider) {
+      return QStringLiteral("slider-docs");
+    }
+    if (kind == DocsKind::Popover) {
+      return QStringLiteral("popover-docs");
+    }
+    if (kind == DocsKind::Tooltip) {
+      return QStringLiteral("tooltip-docs");
+    }
+    return QStringLiteral("radio-docs");
   }
 
   QString sectionKey(DocsKind kind, int row) const {
@@ -951,8 +987,16 @@ class DemoWindow final : public QWidget {
       prefix = QStringLiteral("button");
     } else if (kind == DocsKind::Menu) {
       prefix = QStringLiteral("menu");
-    } else {
+    } else if (kind == DocsKind::Select) {
       prefix = QStringLiteral("select");
+    } else if (kind == DocsKind::Slider) {
+      prefix = QStringLiteral("slider");
+    } else if (kind == DocsKind::Popover) {
+      prefix = QStringLiteral("popover");
+    } else if (kind == DocsKind::Tooltip) {
+      prefix = QStringLiteral("tooltip");
+    } else {
+      prefix = QStringLiteral("radio");
     }
     return QStringLiteral("%1-section-%2")
         .arg(prefix)
@@ -1002,6 +1046,62 @@ class DemoWindow final : public QWidget {
       }
       return false;
     }
+    if (key.startsWith(QStringLiteral("slider-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("slider-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Slider;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("popover-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("popover-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Popover;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("tooltip-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("tooltip-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Tooltip;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("radio-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("radio-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Radio;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
     return false;
   }
 
@@ -1016,6 +1116,18 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Select && selectPage_) {
       return selectPage_->sectionAnchors();
     }
+    if (kind == DocsKind::Slider && sliderPage_) {
+      return sliderPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Popover && popoverPage_) {
+      return popoverPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Tooltip && tooltipPage_) {
+      return tooltipPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Radio && radioPage_) {
+      return radioPage_->sectionAnchors();
+    }
     return kEmpty;
   }
 
@@ -1029,6 +1141,18 @@ class DemoWindow final : public QWidget {
     }
     if (kind == DocsKind::Select && selectPage_) {
       return selectPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Slider && sliderPage_) {
+      return sliderPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Popover && popoverPage_) {
+      return popoverPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Tooltip && tooltipPage_) {
+      return tooltipPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Radio && radioPage_) {
+      return radioPage_->sectionTitles();
     }
     return kEmpty;
   }
@@ -1074,7 +1198,35 @@ class DemoWindow final : public QWidget {
     selectRoot.icon = outlined_icons::Select();
     selectRoot.children = buildSectionItems(DocsKind::Select);
 
-    navMenu_->setItems({buttonRoot, menuRoot, selectRoot});
+    AdMenu::Item sliderRoot;
+    sliderRoot.key = docsRootKey(DocsKind::Slider);
+    sliderRoot.label = "Slider";
+    sliderRoot.type = AdMenu::ItemType::SubMenu;
+    sliderRoot.icon = outlined_icons::Sliders();
+    sliderRoot.children = buildSectionItems(DocsKind::Slider);
+
+    AdMenu::Item popoverRoot;
+    popoverRoot.key = docsRootKey(DocsKind::Popover);
+    popoverRoot.label = "Popover";
+    popoverRoot.type = AdMenu::ItemType::SubMenu;
+    popoverRoot.icon = outlined_icons::Message();
+    popoverRoot.children = buildSectionItems(DocsKind::Popover);
+
+    AdMenu::Item tooltipRoot;
+    tooltipRoot.key = docsRootKey(DocsKind::Tooltip);
+    tooltipRoot.label = "Tooltip";
+    tooltipRoot.type = AdMenu::ItemType::SubMenu;
+    tooltipRoot.icon = outlined_icons::QuestionCircle();
+    tooltipRoot.children = buildSectionItems(DocsKind::Tooltip);
+
+    AdMenu::Item radioRoot;
+    radioRoot.key = docsRootKey(DocsKind::Radio);
+    radioRoot.label = "Radio";
+    radioRoot.type = AdMenu::ItemType::SubMenu;
+    radioRoot.icon = outlined_icons::Appstore();
+    radioRoot.children = buildSectionItems(DocsKind::Radio);
+
+    navMenu_->setItems({buttonRoot, menuRoot, selectRoot, sliderRoot, popoverRoot, tooltipRoot, radioRoot});
     navMenu_->setOpenKeys({});
   }
 
@@ -1099,8 +1251,16 @@ class DemoWindow final : public QWidget {
         target = buttonPage_;
       } else if (kind == DocsKind::Menu) {
         target = menuPage_;
-      } else {
+      } else if (kind == DocsKind::Select) {
         target = selectPage_;
+      } else if (kind == DocsKind::Slider) {
+        target = sliderPage_;
+      } else if (kind == DocsKind::Popover) {
+        target = popoverPage_;
+      } else if (kind == DocsKind::Tooltip) {
+        target = tooltipPage_;
+      } else {
+        target = radioPage_;
       }
       docsStack_->setCurrentWidget(target);
     }
@@ -1174,6 +1334,10 @@ class DemoWindow final : public QWidget {
   ButtonDocsPage* buttonPage_ = nullptr;
   MenuDocsPage* menuPage_ = nullptr;
   SelectDocsPage* selectPage_ = nullptr;
+  SliderDocsPage* sliderPage_ = nullptr;
+  PopoverDocsPage* popoverPage_ = nullptr;
+  TooltipDocsPage* tooltipPage_ = nullptr;
+  RadioDocsPage* radioPage_ = nullptr;
   DocsKind currentKind_ = DocsKind::Button;
 };
 

@@ -4,6 +4,7 @@
 #include "icons.h"
 #include "input_style.h"
 #include "interaction_overlay_manager.h"
+#include "scroll_area.h"
 #include "theme/fast_color_lite.h"
 #include "theme/theme.h"
 
@@ -11,16 +12,22 @@
 #include <QCursor>
 #include <QEvent>
 #include <QFontMetrics>
+#include <QFocusEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayoutItem>
 #include <QLineEdit>
+#include <QMouseEvent>
+#include <QMoveEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QResizeEvent>
+#include <QShowEvent>
+#include <QHideEvent>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QTextEdit>
 #include <QTextDocument>
@@ -46,6 +53,26 @@ bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconS
 
 bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
   return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
+}
+
+QPoint mouseEventPos(const QMouseEvent* event) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  return event ? event->position().toPoint() : QPoint();
+#else
+  return event ? event->pos() : QPoint();
+#endif
+}
+
+bool isLeftMouseActivationEvent(const QEvent* event) {
+  if (!event) {
+    return false;
+  }
+  if (event->type() != QEvent::MouseButtonPress &&
+      event->type() != QEvent::MouseButtonDblClick) {
+    return false;
+  }
+  const auto* mouseEvent = static_cast<const QMouseEvent*>(event);
+  return mouseEvent->button() == Qt::LeftButton;
 }
 
 QString cssRgba(const QColor& color) {
@@ -138,6 +165,13 @@ int textAreaRowPaddingExtra(const detail::InputVisualStyle& style) {
   return std::max(0, verticalPadding * 2 + 6);
 }
 
+constexpr int kTextAreaScrollBarBaseThickness = 8;
+constexpr int kTextAreaScrollBarCollapsedVisualThickness = 3;
+
+int textAreaScrollBarHoverThickness() {
+  return kTextAreaScrollBarBaseThickness + std::max(1, kTextAreaScrollBarBaseThickness / 2);
+}
+
 QRectF joinedBorderRect(const QRect& bounds, qreal borderWidth, bool joinedLeft, bool joinedRight) {
   const qreal half = std::max<qreal>(0.0, borderWidth / 2.0);
   qreal leftInset = half + 0.5;
@@ -148,7 +182,9 @@ QRectF joinedBorderRect(const QRect& bounds, qreal borderWidth, bool joinedLeft,
   if (joinedRight) {
     rightInset = half;
   }
-  return QRectF(bounds).adjusted(leftInset, half + 0.5, -rightInset, -half - 0.5);
+  // Keep top/bottom border centers on the outer edge pixels so Input height
+  // visually matches adjacent compact buttons.
+  return QRectF(bounds).adjusted(leftInset, half, -rightInset, -half);
 }
 
 qreal snapToDevicePixelCoord(qreal value, qreal dpr) {
@@ -287,6 +323,7 @@ AdInput::AdInput(QWidget* parent) : QWidget(parent) {
 
   shell_ = new InputShellWidget(this);
   shell_->setObjectName(QStringLiteral("adinput-shell"));
+  shell_->installEventFilter(this);
 
   shellLayout_ = new QHBoxLayout(shell_);
   shellLayout_->setContentsMargins(0, 0, 0, 0);
@@ -295,10 +332,12 @@ AdInput::AdInput(QWidget* parent) : QWidget(parent) {
   prefixIconLabel_ = new QLabel(shell_);
   prefixIconLabel_->setAlignment(Qt::AlignCenter);
   prefixIconLabel_->setVisible(false);
+  prefixIconLabel_->installEventFilter(this);
 
   prefixLabel_ = new QLabel(shell_);
   prefixLabel_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
   prefixLabel_->setVisible(false);
+  prefixLabel_->installEventFilter(this);
 
   lineEdit_ = new QLineEdit(shell_);
   lineEdit_->setFrame(false);
@@ -312,27 +351,39 @@ AdInput::AdInput(QWidget* parent) : QWidget(parent) {
   clearButton_->setVisible(false);
   clearButton_->installEventFilter(this);
 
+  suffixActionButton_ = new QToolButton(shell_);
+  suffixActionButton_->setAutoRaise(true);
+  suffixActionButton_->setFocusPolicy(Qt::NoFocus);
+  suffixActionButton_->setVisible(false);
+  suffixActionButton_->installEventFilter(this);
+
   suffixLabel_ = new QLabel(shell_);
   suffixLabel_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
   suffixLabel_->setVisible(false);
+  suffixLabel_->installEventFilter(this);
 
   suffixIconLabel_ = new QLabel(shell_);
   suffixIconLabel_->setAlignment(Qt::AlignCenter);
   suffixIconLabel_->setVisible(false);
+  suffixIconLabel_->installEventFilter(this);
 
   shellLayout_->addWidget(prefixIconLabel_);
   shellLayout_->addWidget(prefixLabel_);
   shellLayout_->addWidget(lineEdit_, 1);
   shellLayout_->addWidget(clearButton_);
+
+  countLabel_ = new QLabel(shell_);
+  countLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  countLabel_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+  countLabel_->setVisible(false);
+  countLabel_->installEventFilter(this);
+
+  shellLayout_->addWidget(countLabel_);
+  shellLayout_->addWidget(suffixActionButton_);
   shellLayout_->addWidget(suffixLabel_);
   shellLayout_->addWidget(suffixIconLabel_);
 
-  countLabel_ = new QLabel(this);
-  countLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  countLabel_->setVisible(false);
-
   rootLayout_->addWidget(shell_);
-  rootLayout_->addWidget(countLabel_);
 
   connect(lineEdit_, &QLineEdit::textChanged, this, [this](const QString& text) {
     updateCountLabel();
@@ -369,6 +420,17 @@ AdInput::AdInput(QWidget* parent) : QWidget(parent) {
     internalTextUpdate_ = false;
     emit cleared();
     focusInput(FocusCursor::Start);
+  });
+
+  connect(suffixActionButton_, &QToolButton::clicked, this, [this]() {
+    if (disabled()) {
+      return;
+    }
+    emit suffixActionTriggered();
+    if (!lineEdit_ || lineEdit_->hasFocus()) {
+      return;
+    }
+    focusInput(FocusCursor::Keep);
   });
 
   connect(&adqt::theme::ThemeManager::instance(), &adqt::theme::ThemeManager::themeChanged, this,
@@ -434,6 +496,9 @@ void AdInput::setDisabled(bool value) {
   }
   if (clearButton_) {
     clearButton_->setDisabled(value);
+  }
+  if (suffixActionButton_) {
+    suffixActionButton_->setDisabled(value);
   }
   updateClearButton();
   applyVisualStyle();
@@ -577,6 +642,7 @@ void AdInput::setJoinedLeft(bool value) {
     return;
   }
   joinedLeft_ = value;
+  bumpJoinedZOrder();
   applyVisualStyle();
 }
 
@@ -587,6 +653,7 @@ void AdInput::setJoinedRight(bool value) {
     return;
   }
   joinedRight_ = value;
+  bumpJoinedZOrder();
   applyVisualStyle();
 }
 
@@ -624,6 +691,30 @@ void AdInput::setSuffixIconToken(const adqt::icons::IconToken& token) {
   updateSuffixVisual();
   updateAccessoryVisibility();
   emit suffixIconTokenChanged(suffixIconToken_);
+}
+
+bool AdInput::suffixActionVisible() const { return suffixActionVisible_; }
+
+void AdInput::setSuffixActionVisible(bool value) {
+  if (suffixActionVisible_ == value) {
+    return;
+  }
+  suffixActionVisible_ = value;
+  updateAccessoryVisibility();
+  updateInteractiveCursor();
+  emit suffixActionVisibleChanged(suffixActionVisible_);
+}
+
+adqt::icons::IconToken AdInput::suffixActionIconToken() const { return suffixActionIconToken_; }
+
+void AdInput::setSuffixActionIconToken(const adqt::icons::IconToken& token) {
+  if (iconTokensEqual(suffixActionIconToken_, token)) {
+    return;
+  }
+  suffixActionIconToken_ = token;
+  updateSuffixVisual();
+  updateAccessoryVisibility();
+  emit suffixActionIconTokenChanged(suffixActionIconToken_);
 }
 
 AdInput::CountStrategy AdInput::countStrategy() const { return countStrategy_; }
@@ -686,16 +777,13 @@ QSize AdInput::sizeHint() const {
   styleInput.semanticStyles = semanticStyles_;
   const detail::InputVisualStyle style = detail::resolveInputVisualStyle(styleInput);
 
-  const bool showCountRow = showCount_ || effectiveCountMax() > 0;
-  const int countHeight = showCountRow ? style.metrics.countTopMargin + style.metrics.countHeight : 0;
-
   int widthHint = std::max(160, style.metrics.height * 4);
   if (lineEdit_) {
     QFontMetrics fm(style.metrics.font);
     widthHint = std::max(widthHint, fm.horizontalAdvance(lineEdit_->placeholderText()) + 96);
   }
 
-  return QSize(widthHint, style.metrics.height + countHeight);
+  return QSize(widthHint, style.metrics.height);
 }
 
 QSize AdInput::minimumSizeHint() const {
@@ -710,6 +798,9 @@ void AdInput::focusInput(FocusCursor cursor, bool preventScroll) {
   }
 
   lineEdit_->setFocus(Qt::OtherFocusReason);
+  if (joinedLeft_ || joinedRight_) {
+    raise();
+  }
   const QString text = lineEdit_->text();
   if (cursor == FocusCursor::Start) {
     lineEdit_->setCursorPosition(0);
@@ -728,6 +819,73 @@ void AdInput::blurInput() {
 
 QLineEdit* AdInput::lineEdit() const { return lineEdit_; }
 
+void AdInput::focusFromMouseGlobalPos(const QPoint& globalPos, Qt::FocusReason reason) {
+  if (disabled() || !lineEdit_) {
+    return;
+  }
+
+  const QPoint editPos = lineEdit_->mapFromGlobal(globalPos);
+  if (lineEdit_->rect().contains(editPos)) {
+    lineEdit_->setCursorPosition(lineEdit_->cursorPositionAt(editPos));
+  } else if (editPos.x() <= 0) {
+    lineEdit_->setCursorPosition(0);
+  } else if (editPos.x() >= lineEdit_->width()) {
+    lineEdit_->setCursorPosition(lineEdit_->text().size());
+  }
+
+  lineEdit_->setFocus(reason);
+  if (joinedLeft_ || joinedRight_) {
+    raise();
+  }
+}
+
+void AdInput::updateInteractiveCursor() {
+  const bool isDisabled = disabled();
+  const Qt::CursorShape defaultCursor = isDisabled ? Qt::ForbiddenCursor : Qt::ArrowCursor;
+  setCursor(defaultCursor);
+  if (shell_) {
+    shell_->setCursor(defaultCursor);
+  }
+  if (lineEdit_) {
+    lineEdit_->setCursor(isDisabled ? Qt::ForbiddenCursor : Qt::IBeamCursor);
+  }
+  if (prefixLabel_) {
+    prefixLabel_->setCursor(defaultCursor);
+  }
+  if (suffixLabel_) {
+    suffixLabel_->setCursor(defaultCursor);
+  }
+  if (countLabel_) {
+    countLabel_->setCursor(defaultCursor);
+  }
+  if (prefixIconLabel_) {
+    prefixIconLabel_->setCursor(defaultCursor);
+  }
+  if (suffixIconLabel_) {
+    suffixIconLabel_->setCursor(defaultCursor);
+  }
+  if (clearButton_) {
+    const Qt::CursorShape clearCursor =
+        (!isDisabled && !clearButton_->isHidden()) ? Qt::PointingHandCursor : defaultCursor;
+    clearButton_->setCursor(clearCursor);
+  }
+  if (suffixActionButton_) {
+    const Qt::CursorShape actionCursor =
+        (!isDisabled && !suffixActionButton_->isHidden()) ? Qt::PointingHandCursor : defaultCursor;
+    suffixActionButton_->setCursor(actionCursor);
+  }
+}
+
+void AdInput::bumpJoinedZOrder() {
+  if (!(joinedLeft_ || joinedRight_)) {
+    return;
+  }
+  if (!(focused_ || hovered_)) {
+    return;
+  }
+  raise();
+}
+
 bool AdInput::eventFilter(QObject* watched, QEvent* event) {
   if (!event) {
     return QWidget::eventFilter(watched, event);
@@ -736,6 +894,10 @@ bool AdInput::eventFilter(QObject* watched, QEvent* event) {
   if (watched == lineEdit_) {
     if (event->type() == QEvent::FocusIn) {
       focused_ = true;
+      const auto* focusEvent = static_cast<QFocusEvent*>(event);
+      if (focusEvent && focusEvent->reason() != Qt::ActiveWindowFocusReason) {
+        bumpJoinedZOrder();
+      }
       updateClearButton();
       applyVisualStyle();
     } else if (event->type() == QEvent::FocusOut) {
@@ -747,13 +909,45 @@ bool AdInput::eventFilter(QObject* watched, QEvent* event) {
     if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
       updateClearButton();
     }
+  } else if (watched == shell_ || watched == prefixLabel_ || watched == suffixLabel_ ||
+             watched == prefixIconLabel_ || watched == suffixIconLabel_ || watched == countLabel_) {
+    if (isLeftMouseActivationEvent(event)) {
+      if (disabled() || !lineEdit_) {
+        return true;
+      }
+
+      if (QWidget* source = qobject_cast<QWidget*>(watched)) {
+        const auto* mouseEvent = static_cast<const QMouseEvent*>(event);
+        focusFromMouseGlobalPos(source->mapToGlobal(mouseEventPos(mouseEvent)), Qt::MouseFocusReason);
+      }
+      return true;
+    }
   }
 
   return QWidget::eventFilter(watched, event);
 }
 
+void AdInput::mousePressEvent(QMouseEvent* event) {
+  if (event && event->button() == Qt::LeftButton && !disabled() && lineEdit_) {
+    focusFromMouseGlobalPos(mapToGlobal(mouseEventPos(event)), Qt::MouseFocusReason);
+    event->accept();
+    return;
+  }
+  QWidget::mousePressEvent(event);
+}
+
+void AdInput::mouseDoubleClickEvent(QMouseEvent* event) {
+  if (event && event->button() == Qt::LeftButton && !disabled() && lineEdit_) {
+    focusFromMouseGlobalPos(mapToGlobal(mouseEventPos(event)), Qt::MouseFocusReason);
+    event->accept();
+    return;
+  }
+  QWidget::mouseDoubleClickEvent(event);
+}
+
 void AdInput::enterEvent(QEnterEvent* event) {
   hovered_ = true;
+  bumpJoinedZOrder();
   updateClearButton();
   applyVisualStyle();
   QWidget::enterEvent(event);
@@ -765,8 +959,6 @@ void AdInput::leaveEvent(QEvent* event) {
   applyVisualStyle();
   QWidget::leaveEvent(event);
 }
-
-void AdInput::paintEvent(QPaintEvent* event) { QWidget::paintEvent(event); }
 
 void AdInput::changeEvent(QEvent* event) {
   QWidget::changeEvent(event);
@@ -781,8 +973,23 @@ void AdInput::changeEvent(QEvent* event) {
   }
 }
 
+void AdInput::moveEvent(QMoveEvent* event) {
+  QWidget::moveEvent(event);
+  updateInteractionFocusOverlay();
+}
+
 void AdInput::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
+  updateInteractionFocusOverlay();
+}
+
+void AdInput::showEvent(QShowEvent* event) {
+  QWidget::showEvent(event);
+  updateInteractionFocusOverlay();
+}
+
+void AdInput::hideEvent(QHideEvent* event) {
+  QWidget::hideEvent(event);
   updateInteractionFocusOverlay();
 }
 
@@ -793,7 +1000,7 @@ void AdInput::updateCountLabel() {
 
   const int count = effectiveCount(lineEdit_->text());
   const int max = effectiveCountMax();
-  const bool visible = showCount_ || max > 0;
+  const bool visible = showCount_;
   countLabel_->setVisible(visible);
   if (!visible) {
     return;
@@ -861,12 +1068,14 @@ void AdInput::updateClearButton() {
 }
 
 void AdInput::updateAccessoryVisibility() {
-  if (!prefixLabel_ || !prefixIconLabel_ || !suffixLabel_ || !suffixIconLabel_) {
+  if (!prefixLabel_ || !prefixIconLabel_ || !suffixLabel_ || !suffixIconLabel_ ||
+      !suffixActionButton_) {
     return;
   }
 
   prefixLabel_->setVisible(!prefixText_.trimmed().isEmpty());
   prefixIconLabel_->setVisible(adqt::icons::isValid(prefixIconToken_));
+  suffixActionButton_->setVisible(suffixActionVisible_ && adqt::icons::isValid(suffixActionIconToken_));
   suffixLabel_->setVisible(!suffixText_.trimmed().isEmpty());
   suffixIconLabel_->setVisible(adqt::icons::isValid(suffixIconToken_));
 }
@@ -920,7 +1129,7 @@ void AdInput::updatePrefixVisual() {
 }
 
 void AdInput::updateSuffixVisual() {
-  if (!suffixLabel_ || !suffixIconLabel_) {
+  if (!suffixLabel_ || !suffixIconLabel_ || !suffixActionButton_) {
     return;
   }
 
@@ -965,6 +1174,15 @@ void AdInput::updateSuffixVisual() {
   const QPixmap px = renderTintedIcon(suffixIconToken_, style.suffixColor, iconSide, devicePixelRatioF());
   suffixIconLabel_->setPixmap(px);
   suffixIconLabel_->setFixedSize(iconSide, iconSide);
+
+  const QPixmap actionPx =
+      renderTintedIcon(suffixActionIconToken_, style.suffixColor, iconSide, devicePixelRatioF());
+  suffixActionButton_->setIcon(QIcon(actionPx));
+  suffixActionButton_->setIconSize(QSize(iconSide, iconSide));
+  suffixActionButton_->setFixedSize(iconSide, iconSide);
+  suffixActionButton_->setText(QString());
+  suffixActionButton_->setStyleSheet(
+      QStringLiteral("QToolButton { border: none; background: transparent; padding: 0; }"));
 }
 
 void AdInput::applyVisualStyle() {
@@ -1053,10 +1271,8 @@ void AdInput::applyVisualStyle() {
   lineEdit_->setPalette(linePalette);
   lineEdit_->setStyleSheet(QStringLiteral("QLineEdit { border: none; background: transparent; padding: 0; }"));
 
-  QFont countFont = style.metrics.font;
-  countFont.setPixelSize(std::max(10, style.metrics.font.pixelSize() - 1));
-  countLabel_->setFont(countFont);
-  countLabel_->setMinimumHeight(style.metrics.countHeight);
+  countLabel_->setFont(style.metrics.font);
+  countLabel_->setMinimumHeight(0);
   QPalette countPalette = countLabel_->palette();
   countPalette.setColor(QPalette::WindowText, style.countColor);
   countLabel_->setPalette(countPalette);
@@ -1065,6 +1281,7 @@ void AdInput::applyVisualStyle() {
   updateSuffixVisual();
   updateClearButton();
   updateCountLabel();
+  updateInteractiveCursor();
   updateInteractionFocusOverlay();
   update();
 }
@@ -1162,6 +1379,7 @@ AdInputTextArea::AdInputTextArea(QWidget* parent) : QWidget(parent) {
   shell_ = new InputShellWidget(this);
   shell_->setObjectName(QStringLiteral("adinput-textarea-shell"));
   shell_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  shell_->installEventFilter(this);
 
   shellLayout_ = new QHBoxLayout(shell_);
   shellLayout_->setContentsMargins(0, 0, 0, 0);
@@ -1174,6 +1392,42 @@ AdInputTextArea::AdInputTextArea(QWidget* parent) : QWidget(parent) {
   textEdit_->setAttribute(Qt::WA_Hover, true);
   textEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   textEdit_->installEventFilter(this);
+  textEdit_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  textEdit_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  if (QWidget* viewport = textEdit_->viewport()) {
+    viewport->installEventFilter(this);
+    overlayVerticalScrollBar_ = new QScrollBar(Qt::Vertical, viewport);
+    overlayVerticalScrollBar_->setObjectName(QStringLiteral("adinput-textarea-overlay-vbar"));
+    overlayVerticalScrollBar_->setFocusPolicy(Qt::NoFocus);
+    overlayVerticalScrollBar_->setAttribute(Qt::WA_Hover, true);
+    overlayVerticalScrollBar_->installEventFilter(this);
+    overlayVerticalScrollBar_->hide();
+    overlayVerticalScrollBar_->raise();
+  }
+  if (QScrollBar* vBar = textEdit_->verticalScrollBar()) {
+    connect(vBar, &QScrollBar::rangeChanged, this, [this](int, int) {
+      syncOverlayTextEditScrollBar();
+    });
+    connect(vBar, &QScrollBar::valueChanged, this, [this](int) {
+      syncOverlayTextEditScrollBar();
+    });
+  }
+  if (QScrollBar* hBar = textEdit_->horizontalScrollBar()) {
+    hBar->setAttribute(Qt::WA_Hover, true);
+    hBar->installEventFilter(this);
+  }
+  if (overlayVerticalScrollBar_) {
+    connect(overlayVerticalScrollBar_, &QScrollBar::valueChanged, this, [this](int value) {
+      if (!textEdit_) {
+        return;
+      }
+      QScrollBar* source = textEdit_->verticalScrollBar();
+      if (!source || source->value() == value) {
+        return;
+      }
+      source->setValue(value);
+    });
+  }
 
   clearButton_ = new QToolButton(shell_);
   clearButton_->setAutoRaise(true);
@@ -1215,12 +1469,20 @@ AdInputTextArea::AdInputTextArea(QWidget* parent) : QWidget(parent) {
       internalTextUpdate_ = false;
     }
 
+    const QString current = textEdit_->toPlainText();
+    const int effectiveMax = effectiveCountMax();
+    const bool warningByCount = status_ == Status::None && effectiveMax > 0;
+    const bool warningStateChanged =
+        warningByCount && (effectiveCount(lastValue_) > effectiveMax) !=
+                              (effectiveCount(current) > effectiveMax);
+
     updateCountLabel();
     updateClearButton();
     updateAutoSize();
-    applyVisualStyle();
+    if (warningStateChanged || semanticStyleResolver_) {
+      applyVisualStyle();
+    }
 
-    const QString current = textEdit_->toPlainText();
     if (lastValue_ != current) {
       lastValue_ = current;
       emit valueChanged(current);
@@ -1560,6 +1822,7 @@ bool AdInputTextArea::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
   }
 
+  QWidget* textViewport = textEdit_ ? textEdit_->viewport() : nullptr;
   if (watched == textEdit_) {
     if (event->type() == QEvent::FocusIn) {
       focused_ = true;
@@ -1569,10 +1832,38 @@ bool AdInputTextArea::eventFilter(QObject* watched, QEvent* event) {
       focused_ = false;
       updateClearButton();
       applyVisualStyle();
+    } else if (event->type() == QEvent::Resize || event->type() == QEvent::Show ||
+               event->type() == QEvent::LayoutRequest) {
+      syncOverlayTextEditScrollBar();
+    }
+  } else if (watched == textViewport) {
+    if (event->type() == QEvent::Resize || event->type() == QEvent::Show ||
+        event->type() == QEvent::LayoutRequest) {
+      updateOverlayTextEditScrollBarGeometry();
     }
   } else if (watched == clearButton_) {
     if (event->type() == QEvent::Enter || event->type() == QEvent::Leave) {
       updateClearButton();
+    }
+  } else if (watched == overlayVerticalScrollBar_) {
+    if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter) {
+      if (!verticalScrollBarHovered_) {
+        verticalScrollBarHovered_ = true;
+        updateTextEditScrollBars();
+      }
+    } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave ||
+               event->type() == QEvent::Hide) {
+      if (verticalScrollBarHovered_) {
+        verticalScrollBarHovered_ = false;
+        updateTextEditScrollBars();
+      }
+    }
+  } else if (watched == shell_) {
+    if (isLeftMouseActivationEvent(event)) {
+      if (!disabled() && textEdit_) {
+        textEdit_->setFocus(Qt::MouseFocusReason);
+      }
+      return true;
     }
   }
 
@@ -1593,8 +1884,6 @@ void AdInputTextArea::leaveEvent(QEvent* event) {
   QWidget::leaveEvent(event);
 }
 
-void AdInputTextArea::paintEvent(QPaintEvent* event) { QWidget::paintEvent(event); }
-
 void AdInputTextArea::changeEvent(QEvent* event) {
   QWidget::changeEvent(event);
   if (!event) {
@@ -1609,9 +1898,25 @@ void AdInputTextArea::changeEvent(QEvent* event) {
   }
 }
 
+void AdInputTextArea::moveEvent(QMoveEvent* event) {
+  QWidget::moveEvent(event);
+  updateInteractionFocusOverlay();
+}
+
 void AdInputTextArea::resizeEvent(QResizeEvent* event) {
   QWidget::resizeEvent(event);
   updateAutoSize();
+  syncOverlayTextEditScrollBar();
+  updateInteractionFocusOverlay();
+}
+
+void AdInputTextArea::showEvent(QShowEvent* event) {
+  QWidget::showEvent(event);
+  updateInteractionFocusOverlay();
+}
+
+void AdInputTextArea::hideEvent(QHideEvent* event) {
+  QWidget::hideEvent(event);
   updateInteractionFocusOverlay();
 }
 
@@ -1623,7 +1928,9 @@ void AdInputTextArea::updateCountLabel() {
   const int count = effectiveCount(textEdit_->toPlainText());
   const int max = effectiveCountMax();
   const bool visible = showCount_;
-  countLabel_->setVisible(visible);
+  if (countLabel_->isVisible() != visible) {
+    countLabel_->setVisible(visible);
+  }
   if (!visible) {
     return;
   }
@@ -1636,7 +1943,9 @@ void AdInputTextArea::updateCountLabel() {
   } else {
     formatted = QString::number(count);
   }
-  countLabel_->setText(formatted);
+  if (countLabel_->text() != formatted) {
+    countLabel_->setText(formatted);
+  }
 }
 
 void AdInputTextArea::updateClearButton() {
@@ -1644,9 +1953,14 @@ void AdInputTextArea::updateClearButton() {
     return;
   }
 
-  const bool canShow =
-      allowClear_ && !disabled() && !textEdit_->toPlainText().isEmpty();
-  clearButton_->setVisible(canShow);
+  const QString currentText = textEdit_->toPlainText();
+  const bool canShow = allowClear_ && !disabled() && !currentText.isEmpty();
+  if (clearButton_->isVisible() != canShow) {
+    clearButton_->setVisible(canShow);
+  }
+  if (!canShow) {
+    return;
+  }
 
   StyleContext context;
   context.size = size_;
@@ -1656,8 +1970,8 @@ void AdInputTextArea::updateClearButton() {
   context.focused = focused_;
   context.hovered = hovered_;
   context.showCount = showCount_;
-  context.valueLength = value().size();
-  context.count = effectiveCount(value());
+  context.valueLength = currentText.size();
+  context.count = effectiveCount(currentText);
   context.countMax = effectiveCountMax();
 
   SemanticStyles effectiveSemantic = semanticStyles_;
@@ -1681,13 +1995,96 @@ void AdInputTextArea::updateClearButton() {
   const int iconSide = std::max(10, style.metrics.iconSize);
   const QColor color =
       (clearButton_->underMouse() && canShow && !disabled()) ? style.clearHoverColor : style.clearColor;
-  const QPixmap px = renderTintedIcon(filled_icons::CloseCircle(), color, iconSide, devicePixelRatioF());
-  clearButton_->setIcon(QIcon(px));
-  clearButton_->setIconSize(QSize(iconSide, iconSide));
-  clearButton_->setFixedSize(iconSide, iconSide);
-  clearButton_->setText(px.isNull() ? QStringLiteral("x") : QString());
-  clearButton_->setStyleSheet(
-      QStringLiteral("QToolButton { border: none; padding: 0; background: transparent; }"));
+  if (clearButton_->property("adqtClearButtonIconSide").toInt() != iconSide ||
+      clearButton_->property("adqtClearButtonIconColor").value<QColor>() != color ||
+      clearButton_->icon().isNull()) {
+    const QPixmap px = renderTintedIcon(filled_icons::CloseCircle(), color, iconSide, devicePixelRatioF());
+    clearButton_->setIcon(QIcon(px));
+    clearButton_->setIconSize(QSize(iconSide, iconSide));
+    clearButton_->setText(px.isNull() ? QStringLiteral("x") : QString());
+    clearButton_->setProperty("adqtClearButtonIconSide", iconSide);
+    clearButton_->setProperty("adqtClearButtonIconColor", color);
+  }
+  if (clearButton_->width() != iconSide || clearButton_->height() != iconSide) {
+    clearButton_->setFixedSize(iconSide, iconSide);
+  }
+  if (clearButton_->styleSheet().isEmpty()) {
+    clearButton_->setStyleSheet(
+        QStringLiteral("QToolButton { border: none; padding: 0; background: transparent; }"));
+  }
+}
+
+void AdInputTextArea::updateTextEditScrollBars() {
+  if (!textEdit_) {
+    return;
+  }
+
+  const int hoverThickness = textAreaScrollBarHoverThickness();
+  const int collapsedInset =
+      std::max(0, kTextAreaScrollBarBaseThickness - kTextAreaScrollBarCollapsedVisualThickness);
+
+  QScrollBar* styledVerticalBar = overlayVerticalScrollBar_ ? overlayVerticalScrollBar_ : textEdit_->verticalScrollBar();
+  if (styledVerticalBar) {
+    const bool hovered = verticalScrollBarHovered_ || styledVerticalBar->underMouse();
+    const int extent = hovered ? hoverThickness : kTextAreaScrollBarBaseThickness;
+    const int inset = hovered ? 0 : collapsedInset;
+    const int visualWidth = std::max(1, extent - inset);
+    const int radius = std::max(1, (visualWidth + 1) / 2);
+    AdScrollArea::applyThemedScrollBar(styledVerticalBar, extent, radius, inset,
+                                       textEditScrollBarVerticalMargin_,
+                                       textEditScrollBarVerticalMargin_);
+  }
+
+  if (QScrollBar* hBar = textEdit_->horizontalScrollBar()) {
+    AdScrollArea::applyThemedScrollBar(hBar, kTextAreaScrollBarBaseThickness,
+                                       std::max(1, kTextAreaScrollBarBaseThickness / 2), 0);
+  }
+
+  syncOverlayTextEditScrollBar();
+}
+
+void AdInputTextArea::syncOverlayTextEditScrollBar() {
+  if (!textEdit_ || !overlayVerticalScrollBar_) {
+    return;
+  }
+
+  QScrollBar* source = textEdit_->verticalScrollBar();
+  if (!source) {
+    overlayVerticalScrollBar_->hide();
+    verticalScrollBarHovered_ = false;
+    return;
+  }
+
+  {
+    QSignalBlocker blocker(overlayVerticalScrollBar_);
+    overlayVerticalScrollBar_->setRange(source->minimum(), source->maximum());
+    overlayVerticalScrollBar_->setPageStep(source->pageStep());
+    overlayVerticalScrollBar_->setSingleStep(source->singleStep());
+    overlayVerticalScrollBar_->setValue(source->value());
+  }
+
+  const bool visible = source->maximum() > source->minimum();
+  if (!visible) {
+    verticalScrollBarHovered_ = false;
+  }
+  overlayVerticalScrollBar_->setVisible(visible);
+  updateOverlayTextEditScrollBarGeometry();
+  if (visible) {
+    overlayVerticalScrollBar_->raise();
+  }
+}
+
+void AdInputTextArea::updateOverlayTextEditScrollBarGeometry() {
+  if (!textEdit_ || !overlayVerticalScrollBar_ || !textEdit_->viewport()) {
+    return;
+  }
+
+  const int margin = 2;
+  const int overlayWidth =
+      verticalScrollBarHovered_ ? textAreaScrollBarHoverThickness() : kTextAreaScrollBarBaseThickness;
+  const int height = std::max(0, textEdit_->viewport()->height() - margin * 2);
+  const int x = std::max(0, textEdit_->viewport()->width() - overlayWidth - margin);
+  overlayVerticalScrollBar_->setGeometry(x, margin, overlayWidth, height);
 }
 
 void AdInputTextArea::updateAutoSize() {
@@ -1729,11 +2126,21 @@ void AdInputTextArea::updateAutoSize() {
 
   const int borderInset = std::max(0, style.metrics.borderWidth);
   const int shellHeight = desired + borderInset * 2;
-  textEdit_->setMinimumHeight(desired);
-  textEdit_->setMaximumHeight(desired);
-  shell_->setMinimumHeight(shellHeight);
-  shell_->setMaximumHeight(shellHeight);
-  updateGeometry();
+  const bool textHeightChanged =
+      textEdit_->minimumHeight() != desired || textEdit_->maximumHeight() != desired;
+  const bool shellHeightChanged =
+      shell_->minimumHeight() != shellHeight || shell_->maximumHeight() != shellHeight;
+  if (textHeightChanged) {
+    textEdit_->setMinimumHeight(desired);
+    textEdit_->setMaximumHeight(desired);
+  }
+  if (shellHeightChanged) {
+    shell_->setMinimumHeight(shellHeight);
+    shell_->setMaximumHeight(shellHeight);
+  }
+  if (textHeightChanged || shellHeightChanged) {
+    updateGeometry();
+  }
 }
 
 void AdInputTextArea::applyVisualStyle() {
@@ -1741,6 +2148,7 @@ void AdInputTextArea::applyVisualStyle() {
     return;
   }
 
+  const QString currentText = textEdit_->toPlainText();
   StyleContext context;
   context.size = size_;
   context.variant = variant_;
@@ -1749,8 +2157,8 @@ void AdInputTextArea::applyVisualStyle() {
   context.focused = focused_;
   context.hovered = hovered_;
   context.showCount = showCount_;
-  context.valueLength = value().size();
-  context.count = effectiveCount(value());
+  context.valueLength = currentText.size();
+  context.count = effectiveCount(currentText);
   context.countMax = effectiveCountMax();
 
   SemanticStyles effectiveSemantic = semanticStyles_;
@@ -1770,7 +2178,7 @@ void AdInputTextArea::applyVisualStyle() {
   styleInput.componentTokens = componentTokens_;
   styleInput.semanticStyles = effectiveSemantic;
 
-  if (status_ == Status::None && effectiveCountMax() > 0 && effectiveCount(value()) > effectiveCountMax()) {
+  if (status_ == Status::None && effectiveCountMax() > 0 && effectiveCount(currentText) > effectiveCountMax()) {
     styleInput.status = Status::Warning;
   }
 
@@ -1783,6 +2191,7 @@ void AdInputTextArea::applyVisualStyle() {
   const int hp = std::max(0, style.metrics.horizontalPadding);
   const int vp = std::max(0, style.metrics.verticalPadding);
   const int docMargin = vp;
+  textEditScrollBarVerticalMargin_ = docMargin;
   const int insetHorizontal = std::max(0, hp + borderInset - docMargin);
   shellLayout_->setContentsMargins(insetHorizontal, borderInset, insetHorizontal, borderInset);
   shellLayout_->setSpacing(std::max(4, hp / 2));
@@ -1822,13 +2231,12 @@ void AdInputTextArea::applyVisualStyle() {
   textEdit_->setPalette(editPalette);
   textEdit_->setStyleSheet(
       QStringLiteral("QTextEdit { border: none; background: transparent; padding: 0; }"));
+  updateTextEditScrollBars();
   if (textEdit_->document()) {
     textEdit_->document()->setDocumentMargin(docMargin);
   }
 
-  QFont countFont = style.metrics.font;
-  countFont.setPixelSize(std::max(10, style.metrics.font.pixelSize() - 1));
-  countLabel_->setFont(countFont);
+  countLabel_->setFont(style.metrics.font);
   countLabel_->setMinimumHeight(style.metrics.countHeight);
   QPalette countPalette = countLabel_->palette();
   countPalette.setColor(QPalette::WindowText, style.countColor);
@@ -1919,6 +2327,8 @@ AdInputSearch::AdInputSearch(QWidget* parent) : QWidget(parent) {
   button_->setText(QString());
 
   rootLayout_->addWidget(input_, 1);
+  joinOverlapSpacer_ = new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
+  rootLayout_->addItem(joinOverlapSpacer_);
   rootLayout_->addWidget(button_);
 
   connect(input_, &AdInput::valueChanged, this, [this](const QString& text) { emit valueChanged(text); });
@@ -2105,6 +2515,10 @@ void AdInputSearch::updateButtonVisual() {
 
   if (rootLayout_) {
     rootLayout_->setSpacing(0);
+    if (joinOverlapSpacer_) {
+      joinOverlapSpacer_->changeSize(-lineWidth, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
+      rootLayout_->invalidate();
+    }
   }
 
   const bool showSeparator = !enterButton_ && inputVariant == Variant::Filled;
@@ -2126,18 +2540,13 @@ AdInputPassword::AdInputPassword(QWidget* parent) : QWidget(parent) {
   input_ = new AdInput(this);
   input_->setEchoMode(QLineEdit::Password);
 
-  toggleButton_ = new QToolButton(this);
-  toggleButton_->setAutoRaise(true);
-  toggleButton_->setFocusPolicy(Qt::NoFocus);
-
   rootLayout_->addWidget(input_, 1);
-  rootLayout_->addWidget(toggleButton_);
 
   visibleIconToken_ = outlined_icons::Eye();
   hiddenIconToken_ = outlined_icons::EyeInvisible();
 
   connect(input_, &AdInput::valueChanged, this, [this](const QString& text) { emit valueChanged(text); });
-  connect(toggleButton_, &QToolButton::clicked, this, [this]() {
+  connect(input_, &AdInput::suffixActionTriggered, this, [this]() {
     if (!visibilityToggle_ || disabled()) {
       return;
     }
@@ -2198,9 +2607,6 @@ void AdInputPassword::setDisabled(bool value) {
   QWidget::setDisabled(value);
   if (input_) {
     input_->setDisabled(value);
-  }
-  if (toggleButton_) {
-    toggleButton_->setDisabled(value);
   }
   updateToggleVisual();
   emit disabledChanged(value);
@@ -2273,25 +2679,17 @@ void AdInputPassword::setHiddenIconToken(const adqt::icons::IconToken& value) {
 AdInput* AdInputPassword::input() const { return input_; }
 
 void AdInputPassword::updateToggleVisual() {
-  if (!toggleButton_) {
+  if (!input_) {
     return;
   }
 
   const bool showToggle = visibilityToggle_;
-  toggleButton_->setVisible(showToggle);
+  input_->setSuffixActionVisible(showToggle);
   if (!showToggle) {
     return;
   }
-
   const adqt::icons::IconToken token = passwordVisible_ ? visibleIconToken_ : hiddenIconToken_;
-  const QColor color = disabled() ? QColor("#bfbfbf") : QColor("#8c8c8c");
-  const int iconSide = 14;
-  const QPixmap px = renderTintedIcon(token, color, iconSide, devicePixelRatioF());
-  toggleButton_->setIcon(QIcon(px));
-  toggleButton_->setIconSize(QSize(iconSide, iconSide));
-  toggleButton_->setFixedSize(28, 28);
-  toggleButton_->setStyleSheet(
-      QStringLiteral("QToolButton { border: none; background: transparent; padding: 0; }"));
+  input_->setSuffixActionIconToken(token);
 }
 
 AdInputOtp::AdInputOtp(QWidget* parent) : QWidget(parent) {

@@ -158,8 +158,6 @@ QWidget* ColorPickerDocsPage::buildSizeDemo() {
     right->addWidget(pickerText, 0, Qt::AlignLeft);
   }
 
-  left->addStretch();
-  right->addStretch();
   row->addLayout(left);
   row->addLayout(right);
   row->addStretch();

@@ -8,6 +8,7 @@
 #include <QEvent>
 #include <QFocusEvent>
 #include <QFontMetrics>
+#include <QGradient>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -22,6 +23,7 @@ namespace adqt::widgets {
 namespace {
 
 constexpr double kEpsilon = 1e-6;
+constexpr double kEditableHandleDeleteThresholdPx = 24.0;
 
 bool fuzzyEq(double lhs, double rhs) { return std::abs(lhs - rhs) <= kEpsilon; }
 
@@ -60,8 +62,7 @@ bool marksEqual(const AdSlider::MarkMap& lhs, const AdSlider::MarkMap& rhs) {
 }
 
 bool isKeyboardFocusReason(Qt::FocusReason reason) {
-  return reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason ||
-         reason == Qt::ShortcutFocusReason;
+  return reason != Qt::MouseFocusReason && reason != Qt::NoFocusReason;
 }
 
 QString formatNumber(double value) {
@@ -113,6 +114,52 @@ AdTooltip::Placement toTooltipComponentPlacement(AdSlider::TooltipPlacement valu
       return AdTooltip::Placement::Right;
   }
   return AdTooltip::Placement::Top;
+}
+
+QColor lerpColor(const QColor& start, const QColor& end, double ratio) {
+  const double t = std::clamp(ratio, 0.0, 1.0);
+  return QColor(
+      std::clamp(qRound(start.red() + (end.red() - start.red()) * t), 0, 255),
+      std::clamp(qRound(start.green() + (end.green() - start.green()) * t), 0, 255),
+      std::clamp(qRound(start.blue() + (end.blue() - start.blue()) * t), 0, 255),
+      std::clamp(qRound(start.alpha() + (end.alpha() - start.alpha()) * t), 0, 255));
+}
+
+QColor sampleGradientStops(const QGradientStops& stops, double position, const QColor& fallback) {
+  if (stops.isEmpty()) {
+    return fallback;
+  }
+
+  const double target = std::clamp(position, 0.0, 1.0);
+  if (target <= stops.constFirst().first) {
+    return stops.constFirst().second;
+  }
+  if (target >= stops.constLast().first) {
+    return stops.constLast().second;
+  }
+
+  for (int i = 0; i + 1 < stops.size(); ++i) {
+    const auto& lhs = stops.at(i);
+    const auto& rhs = stops.at(i + 1);
+    if (target < lhs.first || target > rhs.first) {
+      continue;
+    }
+    const double span = rhs.first - lhs.first;
+    if (span <= kEpsilon) {
+      return rhs.second;
+    }
+    return lerpColor(lhs.second, rhs.second, (target - lhs.first) / span);
+  }
+
+  return fallback;
+}
+
+QColor sampleBrushColor(const QBrush& brush, double position, const QColor& fallback) {
+  const QGradient* gradient = brush.gradient();
+  if (!gradient) {
+    return fallback;
+  }
+  return sampleGradientStops(gradient->stops(), position, fallback);
 }
 
 }  // namespace
@@ -388,6 +435,8 @@ QList<double> AdSlider::values() const { return handles_; }
 
 void AdSlider::setValues(const QList<double>& values) { setHandlesInternal(values, true, false); }
 
+int AdSlider::activeHandleIndex() const { return focusHandleIndex_; }
+
 bool AdSlider::draggableTrack() const { return draggableTrack_; }
 
 void AdSlider::setDraggableTrack(bool value) {
@@ -623,6 +672,21 @@ AdSlider::SemanticStyles AdSlider::resolvedSemanticStyles() const {
   return merged;
 }
 
+void AdSlider::setFocusHandleIndex(int index) {
+  int nextIndex = index;
+  if (handles_.isEmpty()) {
+    nextIndex = -1;
+  } else {
+    nextIndex = std::clamp(index, 0, static_cast<int>(handles_.size()) - 1);
+  }
+
+  if (focusHandleIndex_ == nextIndex) {
+    return;
+  }
+  focusHandleIndex_ = nextIndex;
+  emit activeHandleIndexChanged(focusHandleIndex_);
+}
+
 QList<double> AdSlider::normalizedValues(const QList<double>& values, bool forceRangeMode) const {
   const bool rangeMode = forceRangeMode || mode_ == Mode::Range;
   QList<double> normalized = values;
@@ -733,9 +797,9 @@ void AdSlider::setHandlesInternal(const QList<double>& handles,
   handles_ = normalized;
 
   if (focusHandleIndex_ >= handles_.size()) {
-    focusHandleIndex_ = handles_.isEmpty() ? -1 : handles_.size() - 1;
+    setFocusHandleIndex(handles_.isEmpty() ? -1 : handles_.size() - 1);
   } else if (focusHandleIndex_ < 0 && !handles_.isEmpty()) {
-    focusHandleIndex_ = 0;
+    setFocusHandleIndex(0);
   }
 
   if (dragHandleIndex_ >= handles_.size()) {
@@ -986,40 +1050,33 @@ bool AdSlider::isMarkActive(double markValue) const {
   return markValue >= low - kEpsilon && markValue <= high + kEpsilon;
 }
 
-void AdSlider::handleRailAction(const QPoint& pos, const LayoutInfo& layout) {
+int AdSlider::handleRailAction(const QPoint& pos, const LayoutInfo& layout) {
   const double nextValue = valueFromPosition(pos, layout);
   if (mode_ == Mode::Single) {
-    const double previous = value();
     setHandlesInternal({nextValue}, true, true);
-    focusHandleIndex_ = 0;
-    if (!fuzzyEq(previous, value())) {
-      emitCompletedSignalsForCurrentMode();
-    }
-    return;
+    setFocusHandleIndex(0);
+    return handles_.isEmpty() ? -1 : 0;
   }
 
   if (editableHandles_) {
     int insertedIndex = -1;
     if (addHandleAt(nextValue, &insertedIndex)) {
-      focusHandleIndex_ = insertedIndex;
-      emitCompletedSignalsForCurrentMode();
-      return;
+      setFocusHandleIndex(insertedIndex);
+      return insertedIndex;
     }
   }
 
   const int index = nearestHandleIndex(nextValue);
   if (index < 0) {
-    return;
+    return -1;
   }
 
   QList<double> nextValues = handles_;
   nextValues[index] = nextValue;
-  const QList<double> before = handles_;
   setHandlesInternal(nextValues, true, true);
-  if (!listFuzzyEquals(before, handles_)) {
-    focusHandleIndex_ = nearestHandleIndex(nextValue);
-    emitCompletedSignalsForCurrentMode();
-  }
+  const int activeIndex = nearestHandleIndex(nextValue);
+  setFocusHandleIndex(activeIndex >= 0 ? activeIndex : index);
+  return focusHandleIndex_;
 }
 
 bool AdSlider::deleteHandleAt(int index) {
@@ -1040,7 +1097,7 @@ bool AdSlider::deleteHandleAt(int index) {
   }
 
   const int maxIndex = static_cast<int>(handles_.size()) - 1;
-  focusHandleIndex_ = std::clamp(index, 0, maxIndex);
+  setFocusHandleIndex(std::clamp(index, 0, maxIndex));
   return true;
 }
 
@@ -1288,6 +1345,8 @@ void AdSlider::paintEvent(QPaintEvent* event) {
     const bool active = (i == dragHandleIndex_) ||
                         ((hasFocus() && focusVisible_) && i == focusHandleIndex_) ||
                         (!dragging_ && i == hoverHandleIndex_);
+    const bool activeShadow =
+        (i == dragHandleIndex_) || ((hasFocus() && focusVisible_) && i == focusHandleIndex_);
     const qreal borderWidth = active ? layout.style.metrics.handleLineWidthHover
                                      : layout.style.metrics.handleLineWidth;
     QColor borderColor = layout.style.handleColor;
@@ -1299,6 +1358,9 @@ void AdSlider::paintEvent(QPaintEvent* event) {
       borderColor = layout.style.handleHoverColor;
     }
     QColor outlineColor = isDisabled ? QColor(0, 0, 0, 0) : layout.style.handleActiveOutlineColor;
+    QColor shadowColor = isDisabled ? QColor(0, 0, 0, 0)
+                                    : (activeShadow ? layout.style.handleActiveShadowColor
+                                                    : layout.style.handleShadowColor);
     const QPointF center = handleRect.center();
     const qreal coreRadius = std::max(handleRect.width(), handleRect.height()) / 2.0;
     const qreal ringOuterRadius = coreRadius + std::max<qreal>(0.0, borderWidth);
@@ -1319,7 +1381,28 @@ void AdSlider::paintEvent(QPaintEvent* event) {
     painter.drawEllipse(QRectF(center.x() - ringOuterRadius, center.y() - ringOuterRadius,
                                ringOuterRadius * 2.0, ringOuterRadius * 2.0));
 
-    painter.setBrush(layout.style.useHandleBrush ? layout.style.handleBrush : QBrush(layout.style.surfaceBg));
+    if (shadowColor.isValid() && shadowColor.alpha() > 0) {
+      // Align with Ant Design color-picker slider: a persistent 1px outer shadow ring that
+      // turns primary when the handle is focused or dragged.
+      painter.setBrush(Qt::NoBrush);
+      painter.setPen(QPen(shadowColor, 1.0));
+      painter.drawEllipse(
+          QRectF(center.x() - (ringOuterRadius + 0.5), center.y() - (ringOuterRadius + 0.5),
+                 (ringOuterRadius + 0.5) * 2.0, (ringOuterRadius + 0.5) * 2.0));
+    }
+
+    // Reset pen after optional shadow ring so the core fill does not inherit an extra stroke.
+    painter.setPen(Qt::NoPen);
+    QBrush handleFill =
+        layout.style.useHandleBrush ? layout.style.handleBrush : QBrush(layout.style.surfaceBg);
+    const bool canSampleRailGradient =
+        !layout.style.useHandleBrush && mode_ == Mode::Range && layout.style.useRailBrush &&
+        layout.style.surfaceBg.alpha() == 0 && i >= 0 && i < handles_.size() && maximum_ > minimum_;
+    if (canSampleRailGradient) {
+      const double ratio = std::clamp((handles_.at(i) - minimum_) / (maximum_ - minimum_), 0.0, 1.0);
+      handleFill = QBrush(sampleBrushColor(layout.style.railBrush, ratio, layout.style.surfaceBg));
+    }
+    painter.setBrush(handleFill);
     painter.drawEllipse(QRectF(center.x() - coreRadius, center.y() - coreRadius, coreRadius * 2.0,
                                coreRadius * 2.0));
   }
@@ -1358,7 +1441,7 @@ void AdSlider::mousePressEvent(QMouseEvent* event) {
     dragMode_ = DragMode::Handle;
     dragHandleIndex_ = hitIndex;
     hoverHandleIndex_ = hitIndex;
-    focusHandleIndex_ = hitIndex;
+    setFocusHandleIndex(hitIndex);
     dragStartPos_ = event->position().toPoint();
     dragStartValues_ = handles_;
     dragging_ = true;
@@ -1387,7 +1470,18 @@ void AdSlider::mousePressEvent(QMouseEvent* event) {
     }
   }
 
-  handleRailAction(event->position().toPoint(), layout);
+  const int railHandleIndex = handleRailAction(event->position().toPoint(), layout);
+  if (railHandleIndex >= 0) {
+    dragMode_ = DragMode::Handle;
+    dragHandleIndex_ = railHandleIndex;
+    hoverHandleIndex_ = railHandleIndex;
+    setFocusHandleIndex(railHandleIndex);
+    dragStartPos_ = event->position().toPoint();
+    dragStartValues_ = handles_;
+    dragging_ = true;
+    syncTooltipHosts();
+    update();
+  }
 }
 
 void AdSlider::mouseMoveEvent(QMouseEvent* event) {
@@ -1408,6 +1502,26 @@ void AdSlider::mouseMoveEvent(QMouseEvent* event) {
   }
 
   if (dragMode_ == DragMode::Handle && dragHandleIndex_ >= 0 && dragHandleIndex_ < handles_.size()) {
+    if (mode_ == Mode::Range && editableHandles_) {
+      const qreal mainAxisCoord = !layout.vertical ? event->position().x() : event->position().y();
+      const qreal axisMin = layout.axisStart;
+      const qreal axisMax = layout.axisStart + layout.axisLength;
+      const bool outOfAxisBounds = mainAxisCoord < (axisMin - kEditableHandleDeleteThresholdPx) ||
+                                   mainAxisCoord > (axisMax + kEditableHandleDeleteThresholdPx);
+      if (outOfAxisBounds) {
+        const int requiredMinCount = std::max(1, minHandleCount_);
+        if (handles_.size() > requiredMinCount && deleteHandleAt(dragHandleIndex_)) {
+          // Keep drag session alive until mouse up so completion signal timing
+          // stays aligned with regular drag flows.
+          dragHandleIndex_ = -1;
+          hoverHandleIndex_ = -1;
+          syncTooltipHosts();
+          update();
+          return;
+        }
+      }
+    }
+
     QList<double> next = handles_;
     if (dragHandleIndex_ >= next.size()) {
       return;
@@ -1423,7 +1537,7 @@ void AdSlider::mouseMoveEvent(QMouseEvent* event) {
         syncTooltipHosts();
         update();
       }
-      focusHandleIndex_ = activeIndex;
+      setFocusHandleIndex(activeIndex);
     }
     return;
   }
@@ -1486,7 +1600,7 @@ void AdSlider::keyPressEvent(QKeyEvent* event) {
   if (mode_ == Mode::Range && editableHandles_ &&
       (key == Qt::Key_Delete || key == Qt::Key_Backspace)) {
     if (focusHandleIndex_ < 0 || focusHandleIndex_ >= handles_.size()) {
-      focusHandleIndex_ = handles_.isEmpty() ? -1 : handles_.size() - 1;
+      setFocusHandleIndex(handles_.isEmpty() ? -1 : handles_.size() - 1);
     }
     if (deleteHandleAt(focusHandleIndex_)) {
       emitCompletedSignalsForCurrentMode();
@@ -1538,7 +1652,7 @@ void AdSlider::keyPressEvent(QKeyEvent* event) {
   next[index] = nextValue;
   const QList<double> before = handles_;
   setHandlesInternal(next, true, true);
-  focusHandleIndex_ = nearestHandleIndex(nextValue);
+  setFocusHandleIndex(nearestHandleIndex(nextValue));
   if (!listFuzzyEquals(before, handles_)) {
     dragChanged_ = true;
   }
@@ -1571,7 +1685,7 @@ void AdSlider::keyReleaseEvent(QKeyEvent* event) {
 void AdSlider::focusInEvent(QFocusEvent* event) {
   focusVisible_ = event && isKeyboardFocusReason(event->reason());
   if (focusHandleIndex_ < 0 && !handles_.isEmpty()) {
-    focusHandleIndex_ = 0;
+    setFocusHandleIndex(0);
   }
   QWidget::focusInEvent(event);
   update();

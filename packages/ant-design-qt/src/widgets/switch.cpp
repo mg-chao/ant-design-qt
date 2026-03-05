@@ -42,8 +42,7 @@ bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconT
 }
 
 bool isKeyboardFocusReason(Qt::FocusReason reason) {
-  return reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason ||
-         reason == Qt::ShortcutFocusReason;
+  return reason != Qt::MouseFocusReason && reason != Qt::NoFocusReason;
 }
 
 qreal clamp01(qreal value) { return std::clamp(value, 0.0, 1.0); }
@@ -202,7 +201,7 @@ AdSwitch::AdSwitch(QWidget* parent) : QAbstractButton(parent) {
 }
 
 AdSwitch::~AdSwitch() {
-  stopWaveEffect();
+  stopInteractionWaveForOwner(this);
   stopInteractionFocusForOwner(this);
   stopAnimations();
 }
@@ -220,7 +219,7 @@ void AdSwitch::setDisabled(bool value) {
   setEnabled(!value);
   if (value) {
     setPressedState(false);
-    stopWaveEffect();
+    stopInteractionWaveForOwner(this);
     stopInteractionFocusForOwner(this);
   }
   refreshAfterPropertyChange(false);
@@ -556,7 +555,7 @@ void AdSwitch::mouseReleaseEvent(QMouseEvent* event) {
   setPressedState(false);
   QAbstractButton::mouseReleaseEvent(event);
   if (triggerWave) {
-    startWaveEffect();
+    triggerInteractionWaveOverlay();
   }
   update();
 }
@@ -579,7 +578,7 @@ void AdSwitch::keyReleaseEvent(QKeyEvent* event) {
   setPressedState(false);
   QAbstractButton::keyReleaseEvent(event);
   if (triggerWave) {
-    startWaveEffect();
+    triggerInteractionWaveOverlay();
   }
   update();
 }
@@ -619,7 +618,7 @@ void AdSwitch::showEvent(QShowEvent* event) {
 void AdSwitch::hideEvent(QHideEvent* event) {
   QAbstractButton::hideEvent(event);
   stopInteractionFocusForOwner(this);
-  stopWaveEffect();
+  stopInteractionWaveForOwner(this);
   stopAnimations();
 }
 
@@ -633,7 +632,7 @@ void AdSwitch::changeEvent(QEvent* event) {
     if (effectiveDisabled()) {
       setPressedState(false);
       stopInteractionFocusForOwner(this);
-      stopWaveEffect();
+      stopInteractionWaveForOwner(this);
     }
     updateCursorForState();
     updateInteractionFocusOverlay();
@@ -946,7 +945,7 @@ void AdSwitch::updateInteractionFocusOverlay() {
   triggerInteractionFocus(request);
 }
 
-void AdSwitch::startWaveEffect() {
+void AdSwitch::triggerInteractionWaveOverlay() {
   if (effectiveDisabled() || !isVisible()) {
     return;
   }
@@ -989,8 +988,6 @@ void AdSwitch::startWaveEffect() {
   request.color = style.waveColor;
   triggerInteractionWave(request);
 }
-
-void AdSwitch::stopWaveEffect() { stopInteractionWaveForOwner(this); }
 
 void AdSwitch::stopAnimations() {
   if (thumbAnimationSubscribed_) {

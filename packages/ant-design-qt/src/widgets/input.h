@@ -14,8 +14,13 @@
 class QEnterEvent;
 class QHBoxLayout;
 class QLabel;
-class QPaintEvent;
+class QMouseEvent;
+class QMoveEvent;
 class QResizeEvent;
+class QShowEvent;
+class QHideEvent;
+class QScrollBar;
+class QSpacerItem;
 class QToolButton;
 class QTextEdit;
 class QVBoxLayout;
@@ -79,6 +84,7 @@ class AdInput final : public QWidget {
     std::optional<int> borderWidth;
     std::optional<int> horizontalPadding;
     std::optional<int> iconSize;
+    std::optional<int> inputFontSize;
     std::optional<QString> selectorBg;
     std::optional<QString> selectorBorderColor;
     std::optional<QString> selectorHoverBorderColor;
@@ -181,6 +187,12 @@ class AdInput final : public QWidget {
   adqt::icons::IconToken suffixIconToken() const;
   void setSuffixIconToken(const adqt::icons::IconToken& token);
 
+  bool suffixActionVisible() const;
+  void setSuffixActionVisible(bool value);
+
+  adqt::icons::IconToken suffixActionIconToken() const;
+  void setSuffixActionIconToken(const adqt::icons::IconToken& token);
+
   CountStrategy countStrategy() const;
   void setCountStrategy(CountStrategy value);
 
@@ -223,24 +235,34 @@ class AdInput final : public QWidget {
   void echoModeChanged(QLineEdit::EchoMode value);
   void prefixIconTokenChanged(const adqt::icons::IconToken& token);
   void suffixIconTokenChanged(const adqt::icons::IconToken& token);
+  void suffixActionVisibleChanged(bool value);
+  void suffixActionIconTokenChanged(const adqt::icons::IconToken& token);
   void componentTokensChanged();
   void semanticStylesChanged();
   void textEdited(const QString& value);
   void returnPressed();
   void cleared();
+  void suffixActionTriggered();
 
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void enterEvent(QEnterEvent* event) override;
   void leaveEvent(QEvent* event) override;
-  void paintEvent(QPaintEvent* event) override;
+  void mousePressEvent(QMouseEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
   void changeEvent(QEvent* event) override;
+  void moveEvent(QMoveEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
+  void showEvent(QShowEvent* event) override;
+  void hideEvent(QHideEvent* event) override;
 
  private:
   void updateCountLabel();
   void updateClearButton();
   void updateAccessoryVisibility();
+  void updateInteractiveCursor();
+  void focusFromMouseGlobalPos(const QPoint& globalPos, Qt::FocusReason reason);
+  void bumpJoinedZOrder();
   void updatePrefixVisual();
   void updateSuffixVisual();
   void applyVisualStyle();
@@ -262,6 +284,8 @@ class AdInput final : public QWidget {
   Qt::Alignment textAlignment_ = Qt::AlignLeft;
   adqt::icons::IconToken prefixIconToken_;
   adqt::icons::IconToken suffixIconToken_;
+  bool suffixActionVisible_ = false;
+  adqt::icons::IconToken suffixActionIconToken_;
   CountStrategy countStrategy_;
   CountFormatter countFormatter_;
   ExceedFormatter exceedFormatter_;
@@ -276,6 +300,7 @@ class AdInput final : public QWidget {
   QLabel* prefixLabel_ = nullptr;
   QLineEdit* lineEdit_ = nullptr;
   QToolButton* clearButton_ = nullptr;
+  QToolButton* suffixActionButton_ = nullptr;
   QLabel* suffixLabel_ = nullptr;
   QLabel* suffixIconLabel_ = nullptr;
   QLabel* countLabel_ = nullptr;
@@ -410,13 +435,18 @@ class AdInputTextArea final : public QWidget {
   bool eventFilter(QObject* watched, QEvent* event) override;
   void enterEvent(QEnterEvent* event) override;
   void leaveEvent(QEvent* event) override;
-  void paintEvent(QPaintEvent* event) override;
   void changeEvent(QEvent* event) override;
+  void moveEvent(QMoveEvent* event) override;
   void resizeEvent(QResizeEvent* event) override;
+  void showEvent(QShowEvent* event) override;
+  void hideEvent(QHideEvent* event) override;
 
  private:
   void updateCountLabel();
   void updateClearButton();
+  void updateTextEditScrollBars();
+  void syncOverlayTextEditScrollBar();
+  void updateOverlayTextEditScrollBarGeometry();
   void updateAutoSize();
   void applyVisualStyle();
   void updateInteractionFocusOverlay();
@@ -444,11 +474,14 @@ class AdInputTextArea final : public QWidget {
   QWidget* shell_ = nullptr;
   QHBoxLayout* shellLayout_ = nullptr;
   QTextEdit* textEdit_ = nullptr;
+  QScrollBar* overlayVerticalScrollBar_ = nullptr;
   QToolButton* clearButton_ = nullptr;
   QLabel* countLabel_ = nullptr;
 
   bool hovered_ = false;
   bool focused_ = false;
+  bool verticalScrollBarHovered_ = false;
+  int textEditScrollBarVerticalMargin_ = 0;
   bool internalTextUpdate_ = false;
   QString lastValue_;
 };
@@ -532,6 +565,7 @@ class AdInputSearch final : public QWidget {
 
   QHBoxLayout* rootLayout_ = nullptr;
   AdInput* input_ = nullptr;
+  QSpacerItem* joinOverlapSpacer_ = nullptr;
   AdButton* button_ = nullptr;
   bool loading_ = false;
   bool enterButton_ = false;
@@ -607,7 +641,6 @@ class AdInputPassword final : public QWidget {
 
   QHBoxLayout* rootLayout_ = nullptr;
   AdInput* input_ = nullptr;
-  QToolButton* toggleButton_ = nullptr;
   bool visibilityToggle_ = true;
   bool passwordVisible_ = false;
   adqt::icons::IconToken visibleIconToken_;

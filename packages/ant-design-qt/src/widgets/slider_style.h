@@ -40,6 +40,8 @@ struct SliderVisualStyle {
   QColor handleHoverColor;
   QColor handleActiveColor;
   QColor handleActiveOutlineColor;
+  QColor handleShadowColor;
+  QColor handleActiveShadowColor;
   QColor handleColorDisabled;
   QColor surfaceBg;
   QBrush handleBrush;

@@ -245,10 +245,20 @@ class OverlayScrollBarStyle final : public QProxyStyle {
       return groove;
     }
     const int inset = std::max(0, widget->property("_adqt_inset").toInt());
+    const int marginStart = std::max(0, widget->property("_adqt_margin_start").toInt());
+    const int marginEnd = std::max(0, widget->property("_adqt_margin_end").toInt());
     if (option->orientation == Qt::Vertical) {
-      groove.adjust(std::min(inset, std::max(0, groove.width() - 1)), 0, 0, 0);
+      const int boundedInset = std::min(inset, std::max(0, groove.width() - 1));
+      const int boundedTop = std::min(marginStart, std::max(0, groove.height() - 1));
+      const int remainingHeight = std::max(0, groove.height() - boundedTop);
+      const int boundedBottom = std::min(marginEnd, std::max(0, remainingHeight - 1));
+      groove.adjust(boundedInset, boundedTop, 0, -boundedBottom);
     } else {
-      groove.adjust(0, std::min(inset, std::max(0, groove.height() - 1)), 0, 0);
+      const int boundedInset = std::min(inset, std::max(0, groove.height() - 1));
+      const int boundedLeft = std::min(marginStart, std::max(0, groove.width() - 1));
+      const int remainingWidth = std::max(0, groove.width() - boundedLeft);
+      const int boundedRight = std::min(marginEnd, std::max(0, remainingWidth - 1));
+      groove.adjust(boundedLeft, boundedInset, -boundedRight, 0);
     }
     return groove;
   }
@@ -364,6 +374,69 @@ bool applyScrollBarPalette(QScrollBar* bar,
 }
 
 }  // namespace
+
+void AdScrollArea::applyThemedScrollBar(QScrollBar* bar,
+                                        int extent,
+                                        int radius,
+                                        int inset,
+                                        int marginStart,
+                                        int marginEnd) {
+  if (!bar) {
+    return;
+  }
+
+  const adqt::theme::ThemeMapToken& map = adqt::theme::ThemeManager::instance().currentMapToken();
+  const QColor baseColor = toColor(map.colorBgContainer, QColor("#ffffff"));
+  const QColor trackColor =
+      compositeOn(withAlpha(toColor(map.colorTextQuaternary, QColor("#8c8c8c")), 0.18), baseColor);
+  const QColor handleColor =
+      compositeOn(withAlpha(toColor(map.colorTextSecondary, QColor("#595959")), 0.45), trackColor);
+  const QColor handleHoverColor =
+      compositeOn(withAlpha(toColor(map.colorText, QColor("#141414")), 0.60), trackColor);
+  const QColor handlePressedColor = handleHoverColor;
+
+  const int normalizedExtent = std::max(6, extent);
+  const int normalizedInset = std::max(0, inset);
+  const int normalizedMarginStart = std::max(0, marginStart);
+  const int normalizedMarginEnd = std::max(0, marginEnd);
+  const int visibleThickness = std::max(1, normalizedExtent - normalizedInset);
+  const int fallbackRadius = std::max(1, (visibleThickness + 1) / 2);
+  const int normalizedRadius = radius > 0 ? radius : fallbackRadius;
+
+  bool changed = false;
+  ensureOverlayStyle(bar);
+  changed |= setIntPropertyIfChanged(bar, "_adqt_extent", normalizedExtent);
+  changed |= setIntPropertyIfChanged(bar, "_adqt_inset", normalizedInset);
+  changed |= setIntPropertyIfChanged(bar, "_adqt_radius", std::max(0, normalizedRadius));
+  changed |= setIntPropertyIfChanged(bar, "_adqt_margin_start", normalizedMarginStart);
+  changed |= setIntPropertyIfChanged(bar, "_adqt_margin_end", normalizedMarginEnd);
+  changed |= setColorPropertyIfChanged(bar, "_adqt_track_color", trackColor);
+  changed |= setColorPropertyIfChanged(bar, "_adqt_handle_color", handleColor);
+  changed |= setColorPropertyIfChanged(bar, "_adqt_handle_hover_color", handleHoverColor);
+  changed |= setColorPropertyIfChanged(bar, "_adqt_handle_pressed_color", handlePressedColor);
+
+  if (!bar->hasMouseTracking()) {
+    bar->setMouseTracking(true);
+    changed = true;
+  }
+
+  if (bar->orientation() == Qt::Vertical) {
+    if (bar->minimumWidth() != normalizedExtent || bar->maximumWidth() != normalizedExtent) {
+      bar->setFixedWidth(normalizedExtent);
+      changed = true;
+    }
+  } else {
+    if (bar->minimumHeight() != normalizedExtent || bar->maximumHeight() != normalizedExtent) {
+      bar->setFixedHeight(normalizedExtent);
+      changed = true;
+    }
+  }
+
+  changed |= applyScrollBarPalette(bar, trackColor, handleColor, handlePressedColor);
+  if (changed) {
+    bar->update();
+  }
+}
 
 AdScrollArea::AdScrollArea(QWidget* parent) : QScrollArea(parent) {
   setObjectName(QStringLiteral("adscrollarea"));
@@ -516,16 +589,6 @@ void AdScrollArea::resizeEvent(QResizeEvent* event) {
 }
 
 void AdScrollArea::applyScrollBarStyle() {
-  const adqt::theme::ThemeMapToken& map = adqt::theme::ThemeManager::instance().currentMapToken();
-
-  const QColor baseColor = toColor(map.colorBgContainer, QColor("#ffffff"));
-  const QColor trackColor =
-      compositeOn(withAlpha(toColor(map.colorTextQuaternary, QColor("#8c8c8c")), 0.18), baseColor);
-  const QColor handleColor =
-      compositeOn(withAlpha(toColor(map.colorTextSecondary, QColor("#595959")), 0.45), trackColor);
-  const QColor handleHoverColor =
-      compositeOn(withAlpha(toColor(map.colorText, QColor("#141414")), 0.60), trackColor);
-  const QColor handlePressedColor = handleHoverColor;
   const int thickness = std::max(6, scrollBarThickness_);
   const int hoverThickness = thickness + std::max(1, thickness / 2);
   const int verticalExtent = overlayHovered_ ? hoverThickness : thickness;
@@ -535,46 +598,12 @@ void AdScrollArea::applyScrollBarStyle() {
   const int visualWidth = std::max(1, verticalExtent - visualInset);
   const int visualRadius = std::max(1, (visualWidth + 1) / 2);
 
-  const auto applyPalette = [&](QScrollBar* bar,
-                                const QColor& barHandleColor,
-                                int extent,
-                                int inset,
-                                int radius) {
-    if (!bar) {
-      return;
-    }
-    ensureOverlayStyle(bar);
-    bool changed = false;
-    changed |= setIntPropertyIfChanged(bar, "_adqt_extent", std::max(1, extent));
-    changed |= setIntPropertyIfChanged(bar, "_adqt_inset", std::max(0, inset));
-    changed |= setIntPropertyIfChanged(bar, "_adqt_radius", std::max(0, radius));
-    changed |= setColorPropertyIfChanged(bar, "_adqt_track_color", trackColor);
-    changed |= setColorPropertyIfChanged(bar, "_adqt_handle_color", barHandleColor);
-    changed |= setColorPropertyIfChanged(bar, "_adqt_handle_hover_color", handleHoverColor);
-    changed |= setColorPropertyIfChanged(bar, "_adqt_handle_pressed_color", handlePressedColor);
-    if (!bar->hasMouseTracking()) {
-      bar->setMouseTracking(true);
-      changed = true;
-    }
-    changed |= applyScrollBarPalette(bar, trackColor, barHandleColor, handlePressedColor);
-    if (changed) {
-      bar->update();
-    }
-  };
-
   if (overlayVerticalScrollBar_) {
-    if (overlayVerticalScrollBar_->minimumWidth() != verticalExtent ||
-        overlayVerticalScrollBar_->maximumWidth() != verticalExtent) {
-      overlayVerticalScrollBar_->setFixedWidth(verticalExtent);
-    }
-    applyPalette(overlayVerticalScrollBar_, handleColor, verticalExtent, visualInset, visualRadius);
+    applyThemedScrollBar(overlayVerticalScrollBar_, verticalExtent, visualRadius, visualInset);
   }
 
   if (QScrollBar* hBar = horizontalScrollBar()) {
-    if (hBar->minimumHeight() != thickness || hBar->maximumHeight() != thickness) {
-      hBar->setFixedHeight(thickness);
-    }
-    applyPalette(hBar, handleColor, thickness, 0, std::max(1, thickness / 2));
+    applyThemedScrollBar(hBar, thickness, std::max(1, thickness / 2), 0);
   }
 
   updateOverlayGeometry();

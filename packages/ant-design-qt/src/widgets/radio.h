@@ -163,8 +163,7 @@ class AdRadio : public QAbstractButton {
   SemanticStyles resolvedSemanticStyles() const;
   void refreshAfterPropertyChange(bool updateGeometry = true);
   void updateInteractionFocusOverlay();
-  void startWaveEffect();
-  void stopWaveEffect();
+  void triggerInteractionWaveOverlay();
   void bumpButtonGroupZOrder();
   int textWidth(const QFontMetrics& metrics) const;
   qreal cornerRadius() const;

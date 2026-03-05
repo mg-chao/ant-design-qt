@@ -121,6 +121,8 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
     std::optional<int> optionHeight;
     std::optional<int> tagHeight;
     std::optional<int> iconSize;
+    std::optional<int> selectorFontSize;
+    std::optional<int> optionFontSize;
     std::optional<QString> selectorBg;
     std::optional<QString> selectorBorderColor;
     std::optional<QString> selectorHoverBorderColor;
@@ -407,6 +409,7 @@ class AdSelect final : public QWidget, private detail::InWindowPopupOwner {
   qreal resolveSelectorRadius() const;
   void paintSelectorShell(QPainter& painter) const;
   void updateInteractionFocusOverlay();
+  void bumpJoinedZOrder();
 
   QObject* popupOwnerObject() const override;
   QWidget* popupAnchorWidget() const override;

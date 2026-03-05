@@ -222,8 +222,8 @@ class AdButton final : public QPushButton {
   void applyBlockSizePolicy();
   void bumpGroupZOrder();
   void updateCursorForRole();
-  void startWaveEffect();
-  void stopWaveEffect();
+  void updateInteractionFocusOverlay();
+  void triggerInteractionWaveOverlay();
 
   Size effectiveSize() const;
   bool usesExplicitSize() const;

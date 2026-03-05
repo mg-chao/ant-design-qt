@@ -41,6 +41,48 @@ constexpr int kSubMenuArrowBoxHeight = 14;
 constexpr int kSubMenuArrowTextGap = 6;
 constexpr char kHoverOpenTaskKey[] = "AdMenu.HoverOpen";
 constexpr char kHoverCloseTaskKey[] = "AdMenu.HoverClose";
+constexpr int kMenuIconPixmapCacheMaxEntries = 512;
+
+struct IconPixmapCacheKey {
+  int index = -1;
+  QSize size;
+  int dprMilli = 1000;
+  int mode = 0;
+  bool hasPrimary = false;
+  bool hasSecondary = false;
+  bool hasTertiary = false;
+  QRgb primary = 0;
+  QRgb secondary = 0;
+  QRgb tertiary = 0;
+
+  bool operator==(const IconPixmapCacheKey& other) const {
+    return index == other.index && size == other.size && dprMilli == other.dprMilli &&
+           mode == other.mode && hasPrimary == other.hasPrimary &&
+           hasSecondary == other.hasSecondary && hasTertiary == other.hasTertiary &&
+           primary == other.primary && secondary == other.secondary &&
+           tertiary == other.tertiary;
+  }
+};
+
+size_t qHash(const IconPixmapCacheKey& key, size_t seed) {
+  return qHashMulti(seed,
+                    key.index,
+                    key.size.width(),
+                    key.size.height(),
+                    key.dprMilli,
+                    key.mode,
+                    key.hasPrimary,
+                    key.hasSecondary,
+                    key.hasTertiary,
+                    key.primary,
+                    key.secondary,
+                    key.tertiary);
+}
+
+QHash<IconPixmapCacheKey, QPixmap>& menuIconPixmapCache() {
+  static QHash<IconPixmapCacheKey, QPixmap> cache;
+  return cache;
+}
 
 QPoint mouseEventPos(const QMouseEvent* event) {
   if (!event) {
@@ -150,7 +192,32 @@ void paintMenuIcon(QPainter& painter,
   }
   const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
   const QIcon::Mode mode = disabled ? QIcon::Disabled : QIcon::Normal;
-  const QPixmap pixmap = adqt::icons::renderIconPixmap(icon, targetRect.size(), dpr, mode, QIcon::Off);
+  IconPixmapCacheKey cacheKey;
+  cacheKey.index = icon.index;
+  cacheKey.size = targetRect.size();
+  cacheKey.dprMilli = std::max(1, qRound(dpr * 1000.0));
+  cacheKey.mode = static_cast<int>(mode);
+  cacheKey.hasPrimary = icon.style.hasPrimary;
+  cacheKey.hasSecondary = icon.style.hasSecondary;
+  cacheKey.hasTertiary = icon.style.hasTertiary;
+  cacheKey.primary = icon.style.primary.rgba();
+  cacheKey.secondary = icon.style.secondary.rgba();
+  cacheKey.tertiary = icon.style.tertiary.rgba();
+
+  QPixmap pixmap;
+  auto& cache = menuIconPixmapCache();
+  const auto cachedIt = cache.constFind(cacheKey);
+  if (cachedIt != cache.cend()) {
+    pixmap = cachedIt.value();
+  } else {
+    pixmap = adqt::icons::renderIconPixmap(icon, targetRect.size(), dpr, mode, QIcon::Off);
+    if (!pixmap.isNull()) {
+      if (cache.size() >= kMenuIconPixmapCacheMaxEntries) {
+        cache.clear();
+      }
+      cache.insert(cacheKey, pixmap);
+    }
+  }
   if (pixmap.isNull()) {
     return;
   }
@@ -310,6 +377,7 @@ PopupLayer* ensurePopupLayer(SharedPopupHost* host, int layerIndex) {
 
     QWidget* popupWindow = new QWidget(host->scopeWindow);
     popupWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+    popupWindow->setProperty("adqt.interaction.surface", true);
     popupWindow->setObjectName(layerIndex == 0
                                    ? QStringLiteral("admenu-shared-popup-window")
                                    : QStringLiteral("admenu-shared-popup-window-%1").arg(layerIndex));
@@ -321,6 +389,7 @@ PopupLayer* ensurePopupLayer(SharedPopupHost* host, int layerIndex) {
     popupMenu->setMode(AdMenu::Mode::Vertical);
     popupMenu->setInlineCollapsed(false);
     popupMenu->setTooltipEnabled(false);
+    popupMenu->setAttribute(Qt::WA_Hover, false);
 
     layer->popupWindow = popupWindow;
     layer->popupMenu = popupMenu;
@@ -828,8 +897,6 @@ QSize AdMenu::minimumSizeHint() const {
 }
 
 void AdMenu::paintEvent(QPaintEvent* event) {
-  Q_UNUSED(event)
-
   StyleContext ctx;
   ctx.mode = mode_;
   ctx.theme = theme_;
@@ -839,20 +906,50 @@ void AdMenu::paintEvent(QPaintEvent* event) {
       semanticStyleResolver_ ? semanticStyleResolver_(ctx) : semanticStyles_;
   MenuVisualStyle style = resolveVisualStyle(this, effectiveSemantic);
   QPainter painter(this);
-  painter.setRenderHint(QPainter::Antialiasing, true);
+  // Keep antialiasing off for frequent row repaints; enable it only where
+  // rounded popup chrome actually needs it.
+  painter.setRenderHint(QPainter::Antialiasing, false);
   painter.setFont(style.metrics.font);
+  const QRect dirtyRect = (event && event->rect().isValid()) ? event->rect() : rect();
 
   const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
+  QPainterPath popupPath;
+  bool clipRowsToPopupPath = false;
+  qreal popupRadius = 0.0;
+  qreal popupBorderWidth = 0.0;
   if (popupLayer) {
-    const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.popupBorderRadius));
-    const qreal popupBorderWidth = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.borderWidth));
-    const qreal inset = popupBorderWidth > 0.0 ? popupBorderWidth * 0.5 : 0.5;
-    const QRectF popupRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
-    QPainterPath popupPath;
-    popupPath.addRoundedRect(popupRect, popupRadius, popupRadius);
-    painter.fillPath(popupPath, style.popupBackground);
-    painter.save();
-    painter.setClipPath(popupPath);
+    popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.popupBorderRadius));
+    popupBorderWidth = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.borderWidth));
+
+    const QRect repaintRect = dirtyRect.intersected(rect());
+    const int cornerExtent =
+        std::max(0, static_cast<int>(std::ceil(std::max<qreal>(popupRadius, popupBorderWidth))));
+    const bool touchesRoundedRows =
+        cornerExtent > 0 && repaintRect.isValid() &&
+        (repaintRect.top() < cornerExtent ||
+         repaintRect.bottom() > rect().height() - cornerExtent - 1);
+
+    if (repaintRect.isValid()) {
+      if (touchesRoundedRows) {
+        const qreal inset = popupBorderWidth > 0.0 ? popupBorderWidth * 0.5 : 0.5;
+        const QRectF popupRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
+        popupPath.addRoundedRect(popupRect, popupRadius, popupRadius);
+
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setClipRect(repaintRect);
+        painter.fillPath(popupPath, style.popupBackground);
+        painter.restore();
+        clipRowsToPopupPath = true;
+      } else {
+        painter.fillRect(repaintRect, style.popupBackground);
+      }
+    }
+
+    if (clipRowsToPopupPath) {
+      painter.save();
+      painter.setClipPath(popupPath);
+    }
   } else {
     painter.fillRect(rect(), style.menuBackground);
   }
@@ -862,7 +959,7 @@ void AdMenu::paintEvent(QPaintEvent* event) {
     painter.setPen(Qt::NoPen);
     painter.setBrush(style.subMenuBackground);
     for (const QRect& subMenuRect : inlineSubMenuBackgroundRects_) {
-      const QRect clippedRect = subMenuRect.intersected(rect());
+      const QRect clippedRect = subMenuRect.intersected(rect()).intersected(dirtyRect);
       if (clippedRect.width() <= 0 || clippedRect.height() <= 0) {
         continue;
       }
@@ -891,7 +988,7 @@ void AdMenu::paintEvent(QPaintEvent* event) {
     }
 
     const QRect rowRect = entry.rect;
-    if (!rowRect.intersects(rect())) {
+    if (!rowRect.intersects(dirtyRect)) {
       continue;
     }
 
@@ -1157,14 +1254,29 @@ void AdMenu::paintEvent(QPaintEvent* event) {
   }
 
   if (popupLayer) {
-    painter.restore();
+    if (clipRowsToPopupPath) {
+      painter.restore();
+    }
     if (style.metrics.borderWidth > 0 && style.popupBorderColor.alpha() > 0) {
-      painter.setPen(QPen(style.popupBorderColor, style.metrics.borderWidth));
-      painter.setBrush(Qt::NoBrush);
-      const qreal popupRadius = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.popupBorderRadius));
-      const qreal inset = std::max<qreal>(0.0, static_cast<qreal>(style.metrics.borderWidth)) * 0.5;
-      const QRectF borderRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
-      painter.drawRoundedRect(borderRect, popupRadius, popupRadius);
+      const QRect repaintRect = dirtyRect.intersected(rect());
+      const int borderInset =
+          std::max(0, static_cast<int>(std::ceil(std::max<qreal>(popupRadius, popupBorderWidth))));
+      const bool touchesBorder =
+          !repaintRect.isValid() || borderInset <= 0 ||
+          repaintRect.top() < borderInset ||
+          repaintRect.bottom() > rect().height() - borderInset - 1 ||
+          repaintRect.left() < borderInset ||
+          repaintRect.right() > rect().width() - borderInset - 1;
+      if (touchesBorder) {
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(QPen(style.popupBorderColor, style.metrics.borderWidth));
+        painter.setBrush(Qt::NoBrush);
+        const qreal inset = popupBorderWidth * 0.5;
+        const QRectF borderRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
+        painter.drawRoundedRect(borderRect, popupRadius, popupRadius);
+        painter.restore();
+      }
     }
   }
 }
@@ -1192,18 +1304,32 @@ void AdMenu::leaveEvent(QEvent* event) {
 }
 
 void AdMenu::mouseMoveEvent(QMouseEvent* event) {
+  const int previousHoveredEntry = hoveredEntry_;
+  bool previousHoveredWasOpenable = false;
+  if (previousHoveredEntry >= 0 && previousHoveredEntry < entries_.size()) {
+    previousHoveredWasOpenable = rowIsOpenable(entries_.at(previousHoveredEntry));
+  }
+
   const int index = entryIndexAt(mouseEventPos(event));
+  const bool hoveredEntryChanged = (hoveredEntry_ != index);
   setHoveredEntry(index);
+  const bool popupLayer = (mode_ == Mode::Vertical && eventSink_ && eventSink_.data() != this);
+
+  auto applyCursorShape = [this](Qt::CursorShape shape) {
+    if (!testAttribute(Qt::WA_SetCursor) || cursor().shape() != shape) {
+      setCursor(shape);
+    }
+  };
 
   if (index >= 0 && index < entries_.size()) {
     const VisibleEntry& entry = entries_.at(index);
     const bool cursorEligible = entry.type == ItemType::Item || entry.type == ItemType::SubMenu;
     if (cursorEligible) {
-      setCursor(entry.disabled ? Qt::ForbiddenCursor : Qt::PointingHandCursor);
-    } else {
+      applyCursorShape(entry.disabled ? Qt::ForbiddenCursor : Qt::PointingHandCursor);
+    } else if (testAttribute(Qt::WA_SetCursor)) {
       unsetCursor();
     }
-  } else {
+  } else if (testAttribute(Qt::WA_SetCursor)) {
     unsetCursor();
   }
 
@@ -1211,6 +1337,12 @@ void AdMenu::mouseMoveEvent(QMouseEvent* event) {
                              (mode_ == Mode::Inline && inlineCollapsed_);
   const bool hoverPopupMode =
       triggerSubMenuAction_ == TriggerSubMenuAction::Hover && popupLikeMode;
+  if (hoverPopupMode && popupLayer) {
+    AdMenu* sink = (eventSink_ && eventSink_.data() != this) ? eventSink_.data() : this;
+    if (sink) {
+      detail::cancelTimingTask(sink, QString::fromLatin1(kHoverCloseTaskKey));
+    }
+  }
 
   bool hitOpenable = false;
   if (index >= 0 && index < entries_.size()) {
@@ -1218,14 +1350,20 @@ void AdMenu::mouseMoveEvent(QMouseEvent* event) {
     hitOpenable = rowIsOpenable(entry);
     if (hoverPopupMode && hitOpenable) {
       detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
-      requestHoverOpen(entry.key);
+      if (hoveredEntryChanged) {
+        requestHoverOpen(entry.key);
+      }
     }
   }
 
   if (hoverPopupMode && !hitOpenable) {
-    requestHoverOpen(QString());
-    if (!openKeys_.isEmpty()) {
-      requestHoverClose();
+    if (hoveredEntryChanged) {
+      if (!popupLayer || previousHoveredWasOpenable) {
+        requestHoverOpen(QString());
+      }
+      if (!openKeys_.isEmpty() && !popupLayer) {
+        requestHoverClose();
+      }
     }
   }
 
@@ -1414,9 +1552,7 @@ bool AdMenu::eventFilter(QObject* watched, QEvent* event) {
                watched == watchedLayer->popupWindow.data()) {
       watchedLayer->activeKey.clear();
     } else if (fromSharedPopup && event->type() == QEvent::Enter) {
-      if (anyPopupLayerContainsGlobalPos(host, QCursor::pos())) {
-        detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
-      }
+      detail::cancelTimingTask(this, QString::fromLatin1(kHoverCloseTaskKey));
     } else if (fromSharedPopup && event->type() == QEvent::Leave &&
                triggerSubMenuAction_ == TriggerSubMenuAction::Hover &&
                (mode_ == Mode::Vertical || mode_ == Mode::Horizontal ||
@@ -2164,9 +2300,22 @@ void AdMenu::setHoveredEntry(int index) {
   if (hoveredEntry_ == index) {
     return;
   }
+  const int previous = hoveredEntry_;
   hoveredEntry_ = index;
   syncTooltipForHoveredEntry();
-  update();
+
+  bool partialUpdated = false;
+  if (previous >= 0 && previous < entries_.size()) {
+    update(entries_.at(previous).rect);
+    partialUpdated = true;
+  }
+  if (hoveredEntry_ >= 0 && hoveredEntry_ < entries_.size()) {
+    update(entries_.at(hoveredEntry_).rect);
+    partialUpdated = true;
+  }
+  if (!partialUpdated) {
+    update();
+  }
 }
 
 void AdMenu::activateEntry(int index, bool fromKeyboard) {
@@ -2307,7 +2456,12 @@ void AdMenu::applyOpenInternal(const QStringList& keys, bool emitSignals) {
   if (mode_ == Mode::Inline && !inlineCollapsed_) {
     inlineCacheOpenKeys_ = openKeys_;
   }
-  rebuildEntries();
+  const bool openStateAffectsEntries = (mode_ == Mode::Inline && !inlineCollapsed_);
+  if (openStateAffectsEntries) {
+    rebuildEntries();
+  } else {
+    update();
+  }
   syncPopupVisibility();
   if (emitSignals) {
     emit openKeysChanged(openKeys_);
@@ -2528,6 +2682,9 @@ void AdMenu::requestHoverOpen(const QString& key) {
   }
 
   if (key.isEmpty()) {
+    if (pendingHoverOpenKey_.isEmpty()) {
+      return;
+    }
     pendingHoverOpenKey_.clear();
     detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
     return;
@@ -2538,17 +2695,18 @@ void AdMenu::requestHoverOpen(const QString& key) {
   if (delay == 0) {
     detail::cancelTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey));
     openSubMenuByKey(key);
-  } else {
-    detail::scheduleTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey), delay, [this]() {
-      if (pendingHoverOpenKey_.isEmpty()) {
-        return;
-      }
-      AdMenu* sink = (eventSink_ && eventSink_.data() != this) ? eventSink_.data() : this;
-      if (sink) {
-        sink->openSubMenuByKey(pendingHoverOpenKey_);
-      }
-    });
+    return;
   }
+
+  detail::scheduleTimingTask(this, QString::fromLatin1(kHoverOpenTaskKey), delay, [this, key]() {
+    if (pendingHoverOpenKey_ != key || key.isEmpty()) {
+      return;
+    }
+    AdMenu* sink = (eventSink_ && eventSink_.data() != this) ? eventSink_.data() : this;
+    if (sink) {
+      sink->openSubMenuByKey(key);
+    }
+  });
 }
 
 void AdMenu::requestHoverClose() {
@@ -2650,6 +2808,8 @@ AdMenu::PopupRecord* AdMenu::ensurePopupForEntry(const VisibleEntry& entry) {
   AdMenu* popupMenu = layer->popupMenu.data();
   popupMenu->eventSink_ = QPointer<AdMenu>(sink);
   popupMenu->keyPathPrefix_ = mergeKeyPathWithPrefix(entryKeyPath);
+  const bool layerTargetChanged = ownerChanged || layer->activeKey != entryKey;
+
   popupMenu->setMode(Mode::Vertical);
   popupMenu->setTheme(entryPopupTheme);
   popupMenu->setSelectable(selectable_);
@@ -2661,17 +2821,26 @@ AdMenu::PopupRecord* AdMenu::ensurePopupForEntry(const VisibleEntry& entry) {
   popupMenu->setSubMenuCloseDelayMs(subMenuCloseDelayMs_);
   popupMenu->setTooltipEnabled(false);
   popupMenu->setOverflowedIndicatorText(overflowedIndicatorText_);
-  popupMenu->setComponentTokens(componentTokens_);
-  popupMenu->setSemanticStyles(semanticStyles_);
-  popupMenu->setSemanticStyleResolver(semanticStyleResolver_);
-  popupMenu->setPopupRender(popupRender_);
   popupMenu->setExpandIcon(expandIcon_);
   popupMenu->setPopupOffset(popupOffset_);
-  popupMenu->setItemPaintHook(itemPaintHook_);
-  popupMenu->setSubMenuPaintHook(subMenuPaintHook_);
-  popupMenu->setItems(itemSnapshot.children);
-  popupMenu->setSelectedKeys(selectedKeys_);
-  popupMenu->setOpenKeys(openKeys_);
+
+  if (layerTargetChanged) {
+    // Expensive setters (function hooks / token-driven rebuild and items flattening)
+    // are only needed when this popup layer switches to a different submenu key.
+    popupMenu->setComponentTokens(componentTokens_);
+    popupMenu->setSemanticStyles(semanticStyles_);
+    popupMenu->setSemanticStyleResolver(semanticStyleResolver_);
+    popupMenu->setPopupRender(popupRender_);
+    popupMenu->setItemPaintHook(itemPaintHook_);
+    popupMenu->setSubMenuPaintHook(subMenuPaintHook_);
+    popupMenu->setItems(itemSnapshot.children);
+  }
+  if (popupMenu->selectedKeys() != selectedKeys_) {
+    popupMenu->setSelectedKeys(selectedKeys_);
+  }
+  if (popupMenu->openKeys() != openKeys_) {
+    popupMenu->setOpenKeys(openKeys_);
+  }
 
   const bool customPopupRender = static_cast<bool>(popupRender_);
   const bool renderedRootIsPopupMenu = layer->renderedRoot == popupMenu;
@@ -2771,9 +2940,11 @@ void AdMenu::positionPopup(const VisibleEntry& entry, PopupRecord& popupRecord) 
       horizontalStretchWidth =
           std::max(0, triggerRect.width() - style.metrics.itemPaddingInline * 2);
     } else {
-      // Match antd visual gap in side popup chains:
-      // visible panel spacing is effectively tied to item inline margin.
-      sidePopupGap = std::max(0, style.metrics.itemMarginInline);
+      // Align with antd side popup spacing (paddingXS) in visual result.
+      // We anchor side popups to the full row rect, while visible row content
+      // is inset by itemMarginInline. Subtract it to avoid double-counting gap.
+      sidePopupGap =
+          std::max(0, style.metrics.popupPlacementGap - std::max(0, style.metrics.itemMarginInline));
     }
   }
 

@@ -1,7 +1,7 @@
 TEMPLATE = lib
 TARGET = ant-design-qt
 
-QT += core gui widgets
+QT += core gui widgets network
 CONFIG += c++17
 CONFIG += staticlib
 
@@ -9,13 +9,19 @@ INCLUDEPATH += $$PWD/src
 INCLUDEPATH += $$clean_path($$PWD/../ant-design-icons-qt/src)
 
 HEADERS += \
+    src/widgets/alert.h \
+    src/widgets/alert_style.h \
     src/widgets/button.h \
     src/widgets/button_group.h \
     src/widgets/button_style.h \
     src/widgets/color_picker.h \
     src/widgets/color_picker_style.h \
     src/widgets/detail/timing_hub.h \
+    src/widgets/image.h \
+    src/widgets/image_style.h \
     src/widgets/input.h \
+    src/widgets/input_number.h \
+    src/widgets/input_number_style.h \
     src/widgets/input_style.h \
     src/widgets/in_window_popup_host.h \
     src/widgets/interaction_overlay_manager.h \
@@ -48,13 +54,19 @@ HEADERS += \
 
 SOURCES += \
     src/placeholder.cpp \
+    src/widgets/alert.cpp \
+    src/widgets/alert_style.cpp \
     src/widgets/button.cpp \
     src/widgets/button_group.cpp \
     src/widgets/button_style.cpp \
     src/widgets/color_picker.cpp \
     src/widgets/color_picker_style.cpp \
     src/widgets/detail/timing_hub.cpp \
+    src/widgets/image.cpp \
+    src/widgets/image_style.cpp \
     src/widgets/input.cpp \
+    src/widgets/input_number.cpp \
+    src/widgets/input_number_style.cpp \
     src/widgets/input_style.cpp \
     src/widgets/in_window_popup_host.cpp \
     src/widgets/interaction_overlay_manager.cpp \

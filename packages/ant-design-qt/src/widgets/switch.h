@@ -155,8 +155,7 @@ class AdSwitch final : public QAbstractButton {
   void updatePressAnimationState();
   void updateLoadingSpinnerState();
   void updateInteractionFocusOverlay();
-  void startWaveEffect();
-  void stopWaveEffect();
+  void triggerInteractionWaveOverlay();
   void stopAnimations();
   void drawSpinner(QPainter* painter,
                    const QRectF& rect,

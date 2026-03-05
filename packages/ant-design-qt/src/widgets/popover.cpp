@@ -1369,6 +1369,7 @@ void AdPopover::ensurePopup() {
   QWidget* scopeWindow = detail::resolvePopupScopeWindow(this);
   auto* popup = new PopoverPopupWidget(scopeWindow);
   popup->setObjectName(QStringLiteral("adpopover-popup"));
+  popup->setProperty("adqt.interaction.surface", true);
   popup->setAttribute(Qt::WA_DeleteOnClose, false);
   popup->setAttribute(Qt::WA_Hover, true);
   popup->setMouseTracking(true);
@@ -1781,7 +1782,71 @@ void AdPopover::refreshGeometryFrameSync() {
                                    geometryFrameSyncDeadlineMs_ = -1;
                                    refreshGeometryFrameSync();
                                  }
-                               });
+                                });
+}
+
+bool AdPopover::shouldSkipQueuedRelayoutSync() const {
+  if (!open_ || !popup_ || !geometrySyncSnapshotValid_) {
+    return false;
+  }
+
+  QWidget* popupParent = popup_->parentWidget();
+  if (!popupParent || geometrySyncParent_ != popupParent) {
+    return false;
+  }
+
+  QWidget* anchor = popupAnchorWidget();
+  QWidget* scope = popupScopeWindow();
+  const qint64 now = detail::timingNowMs();
+  if (anchorScrollWatchersDirty_ || watchedScrollAnchor_ != anchor || watchedScrollScope_ != scope ||
+      now >= nextAnchorScrollWatchersRefreshMs_) {
+    return false;
+  }
+
+  QRect anchorRect;
+  if (contextMenuGlobalPos_.has_value() && reasonOpen(InternalOpenReason::ContextMenu)) {
+    anchorRect = QRect(contextMenuGlobalPos_.value(), QSize(1, 1));
+  } else {
+    anchorRect = widgetGlobalRectIfEffectivelyVisible(anchor, popupParent);
+  }
+  if (!anchorRect.isValid()) {
+    return false;
+  }
+
+  QSize popupSize = popup_->sizeHint();
+  popupSize.setWidth(std::max(1, popupSize.width()));
+  popupSize.setHeight(std::max(1, popupSize.height()));
+
+  const QRect bounds = detail::popupBoundsInGlobal(popupParent);
+  const int popupOffset = std::max(0, cachedPopupOffset_);
+  const int arrowOffsetHorizontal = arrowOffsetHorizontalForRadius(std::max(0, cachedBorderRadius_));
+  const int arrowOffsetVertical = arrowOffsetVerticalForRadius(std::max(0, cachedBorderRadius_));
+
+  const PlacementComputation currentPlacement =
+      resolvePlacement(placement_, anchorRect, popupSize, bounds, autoAdjustOverflow_,
+                       popupOffset, arrowPointAtCenter_, arrowOffsetHorizontal, arrowOffsetVertical);
+  const PlacementComputation previousPlacement =
+      resolvePlacement(geometrySyncPlacement_, geometrySyncAnchorRect_, geometrySyncPopupSize_,
+                       geometrySyncBounds_, geometrySyncAutoAdjustOverflow_, geometrySyncPopupOffset_,
+                       geometrySyncArrowPointAtCenter_, geometrySyncArrowOffsetHorizontal_,
+                       geometrySyncArrowOffsetVertical_);
+
+  const bool placementUnchanged = currentPlacement.placement == previousPlacement.placement;
+  const bool topLeftUnchanged = currentPlacement.topLeft == previousPlacement.topLeft;
+  const bool arrowUnchanged =
+      qFuzzyCompare(currentPlacement.arrowCenterCoord + 1.0, previousPlacement.arrowCenterCoord + 1.0);
+  if (!placementUnchanged || !topLeftUnchanged || !arrowUnchanged) {
+    return false;
+  }
+
+  const QPoint expectedPopupPos = popupParent->mapFromGlobal(currentPlacement.topLeft);
+  if (popup_->pos() != expectedPopupPos) {
+    return false;
+  }
+  if (popup_->size() != popupSize) {
+    return false;
+  }
+  return true;
 }
 
 void AdPopover::resetGeometrySyncSnapshot() {
@@ -2408,6 +2473,9 @@ void AdPopover::popupCloseFromHost(detail::PopupCloseReason reason) {
 
 void AdPopover::popupRelayoutFromHost() {
   if (open_) {
+    if (shouldSkipQueuedRelayoutSync()) {
+      return;
+    }
     const bool canShowPopup = syncPopupGeometry();
     applyPopupVisibility(popup_, canShowPopup, true);
   }

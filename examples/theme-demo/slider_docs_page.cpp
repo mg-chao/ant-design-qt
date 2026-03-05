@@ -1,14 +1,13 @@
 #include "slider_docs_page.h"
 
 #include <QCheckBox>
-#include <QDoubleSpinBox>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLinearGradient>
 #include <QPalette>
-#include <QSpinBox>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -17,6 +16,7 @@
 #include "icons.h"
 
 using adqt::widgets::AdSlider;
+using adqt::widgets::AdInputNumber;
 namespace outlined_icons = adqt::icons::outlined;
 
 namespace {
@@ -175,18 +175,26 @@ QWidget* SliderDocsPage::buildInputNumberDemo() {
   integerSlider->setStep(1);
   integerSlider->setValue(1);
   integerSlider->setFixedWidth(300);
-  auto* integerSpin = new QSpinBox();
-  integerSpin->setRange(1, 20);
-  integerSpin->setValue(1);
+  auto* integerInput = new AdInputNumber();
+  integerInput->setMin(1);
+  integerInput->setMax(20);
+  integerInput->setStep(1);
+  integerInput->setValue(1);
+  integerInput->setFixedWidth(120);
 
-  connect(integerSlider, &AdSlider::valueChanged, integerSpin, [integerSpin](double value) {
-    integerSpin->setValue(qRound(value));
+  connect(integerSlider, &AdSlider::valueChanged, integerInput, [integerInput](double value) {
+    integerInput->setValue(qRound(value));
   });
-  connect(integerSpin, QOverload<int>::of(&QSpinBox::valueChanged), integerSlider,
-          [integerSlider](int value) { integerSlider->setValue(value); });
+  connect(integerInput, &AdInputNumber::valueChanged, integerSlider, [integerSlider](const QVariant& value) {
+    bool ok = false;
+    const double parsed = value.toDouble(&ok);
+    if (ok) {
+      integerSlider->setValue(parsed);
+    }
+  });
 
   row1->addWidget(integerSlider);
-  row1->addWidget(integerSpin);
+  row1->addWidget(integerInput);
   row1->addStretch();
 
   auto* row2 = new QHBoxLayout();
@@ -196,20 +204,27 @@ QWidget* SliderDocsPage::buildInputNumberDemo() {
   decimalSlider->setStep(0.01);
   decimalSlider->setValue(0.0);
   decimalSlider->setFixedWidth(300);
-  auto* decimalSpin = new QDoubleSpinBox();
-  decimalSpin->setDecimals(2);
-  decimalSpin->setSingleStep(0.01);
-  decimalSpin->setRange(0.0, 1.0);
-  decimalSpin->setValue(0.0);
+  auto* decimalInput = new AdInputNumber();
+  decimalInput->setMin(0.0);
+  decimalInput->setMax(1.0);
+  decimalInput->setStep(0.01);
+  decimalInput->setPrecision(2);
+  decimalInput->setValue(0.0);
+  decimalInput->setFixedWidth(120);
 
-  connect(decimalSlider, &AdSlider::valueChanged, decimalSpin, [decimalSpin](double value) {
-    decimalSpin->setValue(value);
+  connect(decimalSlider, &AdSlider::valueChanged, decimalInput, [decimalInput](double value) {
+    decimalInput->setValue(value);
   });
-  connect(decimalSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), decimalSlider,
-          [decimalSlider](double value) { decimalSlider->setValue(value); });
+  connect(decimalInput, &AdInputNumber::valueChanged, decimalSlider, [decimalSlider](const QVariant& value) {
+    bool ok = false;
+    const double parsed = value.toDouble(&ok);
+    if (ok) {
+      decimalSlider->setValue(parsed);
+    }
+  });
 
   row2->addWidget(decimalSlider);
-  row2->addWidget(decimalSpin);
+  row2->addWidget(decimalInput);
   row2->addStretch();
 
   layout->addLayout(row1);

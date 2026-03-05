@@ -79,8 +79,7 @@ bool isTwoChineseCharacters(const QString& text) {
 }
 
 bool isKeyboardFocusReason(Qt::FocusReason reason) {
-  return reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason ||
-         reason == Qt::ShortcutFocusReason;
+  return reason != Qt::MouseFocusReason && reason != Qt::NoFocusReason;
 }
 
 QPoint mouseEventPos(const QMouseEvent* event) {
@@ -263,7 +262,7 @@ AdButton::AdButton(QWidget* parent) : QPushButton(parent), baseSizePolicy_(sizeP
 AdButton::AdButton(const QString& text, QWidget* parent) : AdButton(parent) { setText(text); }
 
 AdButton::~AdButton() {
-  stopWaveEffect();
+  stopInteractionWaveForOwner(this);
   stopInteractionFocusForOwner(this);
   detail::cancelTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey));
   detail::clearFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey));
@@ -323,6 +322,7 @@ void AdButton::setJoinedLeft(bool value) {
     return;
   }
   joinedLeft_ = value;
+  updateInteractionFocusOverlay();
   update();
 }
 
@@ -333,6 +333,7 @@ void AdButton::setJoinedRight(bool value) {
     return;
   }
   joinedRight_ = value;
+  updateInteractionFocusOverlay();
   update();
 }
 
@@ -613,32 +614,6 @@ void AdButton::paintEvent(QPaintEvent* event) {
     }
   }
 
-  if (hasFocus() && enabled && focusVisible_) {
-    const qreal focusWidth = std::max<qreal>(1.0, style.metrics.focusOutlineWidth);
-    const qreal focusOffset = std::max<qreal>(0.0, style.metrics.focusOutlineOffset);
-
-    QRectF focusBaseRectInWindow = shapeRect;
-    QWidget* hostWindow = window();
-    if (hostWindow) {
-      const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
-      focusBaseRectInWindow = shapeRect.translated(origin.x(), origin.y());
-    }
-
-    InteractionFocusRequest request;
-    request.owner = this;
-    request.baseRectInWindow = focusBaseRectInWindow;
-    request.topLeft = topLeft;
-    request.topRight = topRight;
-    request.bottomRight = bottomRight;
-    request.bottomLeft = bottomLeft;
-    request.color = style.metrics.focusOutline;
-    request.strokeWidth = focusWidth;
-    request.offset = focusOffset;
-    triggerInteractionFocus(request);
-  } else {
-    stopInteractionFocusForOwner(this);
-  }
-
   painter.setFont(style.metrics.font);
   QFontMetrics fm(style.metrics.font);
 
@@ -792,10 +767,11 @@ void AdButton::changeEvent(QEvent* event) {
   switch (event->type()) {
     case QEvent::EnabledChange:
       if (!isEnabled()) {
-        stopWaveEffect();
+        stopInteractionWaveForOwner(this);
         stopInteractionFocusForOwner(this);
       }
       updateCursorForRole();
+      updateInteractionFocusOverlay();
       update();
       break;
     case QEvent::FontChange:
@@ -825,6 +801,7 @@ void AdButton::mousePressEvent(QMouseEvent* event) {
     return;
   }
   focusVisible_ = false;
+  updateInteractionFocusOverlay();
   QPushButton::mousePressEvent(event);
   bumpGroupZOrder();
 }
@@ -839,7 +816,7 @@ void AdButton::mouseReleaseEvent(QMouseEvent* event) {
       event && event->button() == Qt::LeftButton && rect().contains(mouseEventPos(event));
   QPushButton::mouseReleaseEvent(event);
   if (shouldStartWave && isEnabled() && !interactionBlocked()) {
-    startWaveEffect();
+    triggerInteractionWaveOverlay();
   }
 }
 
@@ -865,51 +842,42 @@ void AdButton::keyReleaseEvent(QKeyEvent* event) {
       (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return ||
        event->key() == Qt::Key_Enter) &&
       isEnabled() && !interactionBlocked()) {
-    startWaveEffect();
+    triggerInteractionWaveOverlay();
   }
 }
 
 void AdButton::focusInEvent(QFocusEvent* event) {
   QPushButton::focusInEvent(event);
   focusVisible_ = event && isKeyboardFocusReason(event->reason());
+  updateInteractionFocusOverlay();
   update();
 }
 
 void AdButton::focusOutEvent(QFocusEvent* event) {
   QPushButton::focusOutEvent(event);
   focusVisible_ = false;
-  stopInteractionFocusForOwner(this);
+  updateInteractionFocusOverlay();
   update();
 }
 
 void AdButton::moveEvent(QMoveEvent* event) {
   QPushButton::moveEvent(event);
-  if (hasFocus() && isEnabled() && focusVisible_) {
-    update();
-  } else {
-    stopInteractionFocusForOwner(this);
-  }
+  updateInteractionFocusOverlay();
 }
 
 void AdButton::resizeEvent(QResizeEvent* event) {
   QPushButton::resizeEvent(event);
-  if (hasFocus() && isEnabled() && focusVisible_) {
-    update();
-  } else {
-    stopInteractionFocusForOwner(this);
-  }
+  updateInteractionFocusOverlay();
 }
 
 void AdButton::showEvent(QShowEvent* event) {
   QPushButton::showEvent(event);
-  if (hasFocus() && isEnabled() && focusVisible_) {
-    update();
-  }
+  updateInteractionFocusOverlay();
 }
 
 void AdButton::hideEvent(QHideEvent* event) {
   QPushButton::hideEvent(event);
-  stopInteractionFocusForOwner(this);
+  updateInteractionFocusOverlay();
 }
 
 bool AdButton::interactionBlocked() const { return loadingVisible_; }
@@ -964,6 +932,7 @@ void AdButton::refreshAfterPropertyChange(bool updateGeometryHint) {
   if (updateGeometryHint) {
     updateGeometry();
   }
+  updateInteractionFocusOverlay();
   update();
 }
 
@@ -989,7 +958,7 @@ void AdButton::updateLoadingVisualState() {
 
   updateSpinnerState();
   if (interactionBlocked()) {
-    stopWaveEffect();
+    stopInteractionWaveForOwner(this);
   }
   refreshAfterPropertyChange();
 }
@@ -1022,7 +991,7 @@ void AdButton::applyBlockSizePolicy() {
 }
 
 void AdButton::bumpGroupZOrder() {
-  if (groupPosition_ != GroupPosition::None) {
+  if (groupPosition_ != GroupPosition::None || joinedLeft_ || joinedRight_) {
     raise();
   }
 }
@@ -1035,7 +1004,105 @@ void AdButton::updateCursorForRole() {
   setCursor(Qt::PointingHandCursor);
 }
 
-void AdButton::startWaveEffect() {
+void AdButton::updateInteractionFocusOverlay() {
+  if (!(hasFocus() && isEnabled() && focusVisible_ && isVisible())) {
+    stopInteractionFocusForOwner(this);
+    return;
+  }
+
+  detail::ButtonStyleInput input;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
+  input.baseFont = font();
+
+  const detail::ButtonVisualStyle style = detail::resolveButtonVisualStyle(input);
+  detail::ButtonStateStyle state = style.normal;
+  if (isDown()) {
+    state = style.active;
+  } else if (hovered_) {
+    state = style.hover;
+  }
+
+  qreal radius = static_cast<qreal>(style.metrics.borderRadius);
+  if (shape_ == Shape::Square) {
+    radius = 0.0;
+  } else if (shape_ == Shape::Round || shape_ == Shape::Circle) {
+    radius = style.metrics.height / 2.0;
+  }
+
+  qreal topLeft = radius;
+  qreal topRight = radius;
+  qreal bottomRight = radius;
+  qreal bottomLeft = radius;
+
+  switch (groupPosition_) {
+    case GroupPosition::First:
+      topRight = 0.0;
+      bottomRight = 0.0;
+      break;
+    case GroupPosition::Middle:
+      topLeft = 0.0;
+      topRight = 0.0;
+      bottomRight = 0.0;
+      bottomLeft = 0.0;
+      break;
+    case GroupPosition::Last:
+      topLeft = 0.0;
+      bottomLeft = 0.0;
+      break;
+    case GroupPosition::Only:
+    case GroupPosition::None:
+    default:
+      break;
+  }
+  if (joinedLeft_) {
+    topLeft = 0.0;
+    bottomLeft = 0.0;
+  }
+  if (joinedRight_) {
+    topRight = 0.0;
+    bottomRight = 0.0;
+  }
+
+  const bool hasVisibleBorder = style.metrics.borderWidth > 0 && state.border.alpha() > 0;
+  const QRectF borderRect =
+      joinedBorderRect(rect(), style.metrics.borderWidth, joinedLeft_, joinedRight_);
+  const QRectF shapeRect = hasVisibleBorder ? borderRect : QRectF(rect());
+
+  QWidget* hostWindow = window();
+  if (!hostWindow) {
+    stopInteractionFocusForOwner(this);
+    return;
+  }
+
+  const QColor focusColor = style.metrics.focusOutline;
+  const qreal focusWidth = std::max<qreal>(1.0, style.metrics.focusOutlineWidth);
+  if (!focusColor.isValid() || focusColor.alpha() <= 0 || focusWidth <= 0.0) {
+    stopInteractionFocusForOwner(this);
+    return;
+  }
+
+  const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
+  InteractionFocusRequest request;
+  request.owner = this;
+  request.baseRectInWindow = shapeRect.translated(origin.x(), origin.y());
+  request.topLeft = topLeft;
+  request.topRight = topRight;
+  request.bottomRight = bottomRight;
+  request.bottomLeft = bottomLeft;
+  request.color = focusColor;
+  request.strokeWidth = focusWidth;
+  request.offset = std::max<qreal>(0.0, style.metrics.focusOutlineOffset);
+  triggerInteractionFocus(request);
+}
+
+void AdButton::triggerInteractionWaveOverlay() {
   if (!isEnabled() || interactionBlocked()) {
     return;
   }
@@ -1132,8 +1199,6 @@ void AdButton::startWaveEffect() {
   triggerInteractionWave(request);
 }
 
-void AdButton::stopWaveEffect() { stopInteractionWaveForOwner(this); }
-
 AdButton::Size AdButton::effectiveSize() const {
   if (usesExplicitSize()) {
     return size_;
@@ -1151,6 +1216,7 @@ void AdButton::setGroupPosition(GroupPosition position) {
     return;
   }
   groupPosition_ = position;
+  updateInteractionFocusOverlay();
   update();
 }
 

@@ -23,8 +23,7 @@ namespace adqt::widgets {
 namespace {
 
 bool isKeyboardFocusReason(Qt::FocusReason reason) {
-  return reason == Qt::TabFocusReason || reason == Qt::BacktabFocusReason ||
-         reason == Qt::ShortcutFocusReason;
+  return reason != Qt::MouseFocusReason && reason != Qt::NoFocusReason;
 }
 
 qreal snapToDevicePixelSize(qreal value, qreal dpr) {
@@ -159,7 +158,7 @@ AdRadio::AdRadio(QWidget* parent) : QAbstractButton(parent) {
 AdRadio::AdRadio(const QString& text, QWidget* parent) : AdRadio(parent) { setText(text); }
 
 AdRadio::~AdRadio() {
-  stopWaveEffect();
+  stopInteractionWaveForOwner(this);
   stopInteractionFocusForOwner(this);
 }
 
@@ -171,7 +170,7 @@ void AdRadio::setDisabled(bool value) {
   }
   setEnabled(!value);
   if (value) {
-    stopWaveEffect();
+    stopInteractionWaveForOwner(this);
     stopInteractionFocusForOwner(this);
   }
   refreshAfterPropertyChange(false);
@@ -488,7 +487,7 @@ void AdRadio::mouseReleaseEvent(QMouseEvent* event) {
     return;
   }
   if (triggerWave) {
-    startWaveEffect();
+    triggerInteractionWaveOverlay();
   }
   QAbstractButton::mouseReleaseEvent(event);
   update();
@@ -517,7 +516,7 @@ void AdRadio::keyReleaseEvent(QKeyEvent* event) {
     return;
   }
   if (triggerWave) {
-    startWaveEffect();
+    triggerInteractionWaveOverlay();
   }
   QAbstractButton::keyReleaseEvent(event);
   update();
@@ -558,7 +557,7 @@ void AdRadio::showEvent(QShowEvent* event) {
 void AdRadio::hideEvent(QHideEvent* event) {
   QAbstractButton::hideEvent(event);
   stopInteractionFocusForOwner(this);
-  stopWaveEffect();
+  stopInteractionWaveForOwner(this);
 }
 
 void AdRadio::changeEvent(QEvent* event) {
@@ -570,7 +569,7 @@ void AdRadio::changeEvent(QEvent* event) {
   if (event->type() == QEvent::EnabledChange) {
     if (effectiveDisabled()) {
       stopInteractionFocusForOwner(this);
-      stopWaveEffect();
+      stopInteractionWaveForOwner(this);
     }
     emit disabledChanged(disabled());
     update();
@@ -679,7 +678,7 @@ void AdRadio::updateInteractionFocusOverlay() {
   triggerInteractionFocus(request);
 }
 
-void AdRadio::startWaveEffect() {
+void AdRadio::triggerInteractionWaveOverlay() {
   if (effectiveDisabled() || !isVisible()) {
     return;
   }
@@ -731,8 +730,6 @@ void AdRadio::startWaveEffect() {
 
   triggerInteractionWave(request);
 }
-
-void AdRadio::stopWaveEffect() { stopInteractionWaveForOwner(this); }
 
 void AdRadio::bumpButtonGroupZOrder() {
   if (optionType_ != OptionType::Button || groupPosition_ == GroupPosition::None || !isVisible()) {

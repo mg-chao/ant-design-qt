@@ -10,10 +10,10 @@ SOURCES += \
     timing_refactor_tests.cpp
 
 isEmpty(ADQT_LIB_BUILD_DIR) {
-    ADQT_LIB_BUILD_DIR = $$clean_path($$PWD/../build-mingw)
+    ADQT_LIB_BUILD_DIR = $$clean_path($$OUT_PWD/../..)
 }
 !exists($$ADQT_LIB_BUILD_DIR/release):!exists($$ADQT_LIB_BUILD_DIR/debug) {
-    ADQT_LIB_BUILD_DIR = $$clean_path($$OUT_PWD/../..)
+    ADQT_LIB_BUILD_DIR = $$clean_path($$PWD/../build-mingw)
 }
 
 isEmpty(ADQT_ICONS_LIB_BUILD_DIR) {

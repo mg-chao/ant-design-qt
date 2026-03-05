@@ -22,8 +22,11 @@
 
 #include "icon_theme_adapter.h"
 #include "icons.h"
+#include "alert_docs_page.h"
 #include "color_picker_docs_page.h"
+#include "image_docs_page.h"
 #include "input_docs_page.h"
+#include "input_number_docs_page.h"
 #include "menu_docs_page.h"
 #include "modal_docs_page.h"
 #include "popconfirm_docs_page.h"
@@ -902,25 +905,31 @@ class DemoWindow final : public QWidget {
     scroll_->setWidgetResizable(true);
     docsStack_ = new QStackedWidget();
     buttonPage_ = new ButtonDocsPage();
+    alertPage_ = new AlertDocsPage();
     inputPage_ = new InputDocsPage();
+    inputNumberPage_ = new InputNumberDocsPage();
     switchPage_ = new SwitchDocsPage();
     menuPage_ = new MenuDocsPage();
     modalPage_ = new ModalDocsPage();
     selectPage_ = new SelectDocsPage();
     sliderPage_ = new SliderDocsPage();
     colorPickerPage_ = new ColorPickerDocsPage();
+    imagePage_ = new ImageDocsPage();
     popoverPage_ = new PopoverDocsPage();
     popconfirmPage_ = new PopconfirmDocsPage();
     tooltipPage_ = new TooltipDocsPage();
     radioPage_ = new RadioDocsPage();
     docsStack_->addWidget(buttonPage_);
+    docsStack_->addWidget(alertPage_);
     docsStack_->addWidget(inputPage_);
+    docsStack_->addWidget(inputNumberPage_);
     docsStack_->addWidget(switchPage_);
     docsStack_->addWidget(menuPage_);
     docsStack_->addWidget(modalPage_);
     docsStack_->addWidget(selectPage_);
     docsStack_->addWidget(sliderPage_);
     docsStack_->addWidget(colorPickerPage_);
+    docsStack_->addWidget(imagePage_);
     docsStack_->addWidget(popoverPage_);
     docsStack_->addWidget(popconfirmPage_);
     docsStack_->addWidget(tooltipPage_);
@@ -937,8 +946,12 @@ class DemoWindow final : public QWidget {
     connect(navMenu_, &AdMenu::titleClicked, this, [this](const QString& key) {
       if (key == QStringLiteral("button-docs")) {
         switchDocs(DocsKind::Button, false);
+      } else if (key == QStringLiteral("alert-docs")) {
+        switchDocs(DocsKind::Alert, false);
       } else if (key == QStringLiteral("input-docs")) {
         switchDocs(DocsKind::Input, false);
+      } else if (key == QStringLiteral("inputnumber-docs")) {
+        switchDocs(DocsKind::InputNumber, false);
       } else if (key == QStringLiteral("switch-docs")) {
         switchDocs(DocsKind::Switch, false);
       } else if (key == QStringLiteral("menu-docs")) {
@@ -951,6 +964,8 @@ class DemoWindow final : public QWidget {
         switchDocs(DocsKind::Slider, false);
       } else if (key == QStringLiteral("colorpicker-docs")) {
         switchDocs(DocsKind::ColorPicker, false);
+      } else if (key == QStringLiteral("image-docs")) {
+        switchDocs(DocsKind::Image, false);
       } else if (key == QStringLiteral("popover-docs")) {
         switchDocs(DocsKind::Popover, false);
       } else if (key == QStringLiteral("popconfirm-docs")) {
@@ -976,13 +991,16 @@ class DemoWindow final : public QWidget {
  private:
   enum class DocsKind {
     Button,
+    Alert,
     Input,
+    InputNumber,
     Switch,
     Menu,
     Modal,
     Select,
     Slider,
     ColorPicker,
+    Image,
     Popover,
     Popconfirm,
     Tooltip,
@@ -993,8 +1011,14 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Button) {
       return QStringLiteral("button-docs");
     }
+    if (kind == DocsKind::Alert) {
+      return QStringLiteral("alert-docs");
+    }
     if (kind == DocsKind::Input) {
       return QStringLiteral("input-docs");
+    }
+    if (kind == DocsKind::InputNumber) {
+      return QStringLiteral("inputnumber-docs");
     }
     if (kind == DocsKind::Switch) {
       return QStringLiteral("switch-docs");
@@ -1014,6 +1038,9 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::ColorPicker) {
       return QStringLiteral("colorpicker-docs");
     }
+    if (kind == DocsKind::Image) {
+      return QStringLiteral("image-docs");
+    }
     if (kind == DocsKind::Popover) {
       return QStringLiteral("popover-docs");
     }
@@ -1030,8 +1057,12 @@ class DemoWindow final : public QWidget {
     QString prefix;
     if (kind == DocsKind::Button) {
       prefix = QStringLiteral("button");
+    } else if (kind == DocsKind::Alert) {
+      prefix = QStringLiteral("alert");
     } else if (kind == DocsKind::Input) {
       prefix = QStringLiteral("input");
+    } else if (kind == DocsKind::InputNumber) {
+      prefix = QStringLiteral("inputnumber");
     } else if (kind == DocsKind::Switch) {
       prefix = QStringLiteral("switch");
     } else if (kind == DocsKind::Menu) {
@@ -1044,6 +1075,8 @@ class DemoWindow final : public QWidget {
       prefix = QStringLiteral("slider");
     } else if (kind == DocsKind::ColorPicker) {
       prefix = QStringLiteral("colorpicker");
+    } else if (kind == DocsKind::Image) {
+      prefix = QStringLiteral("image");
     } else if (kind == DocsKind::Popover) {
       prefix = QStringLiteral("popover");
     } else if (kind == DocsKind::Popconfirm) {
@@ -1073,12 +1106,40 @@ class DemoWindow final : public QWidget {
       }
       return false;
     }
+    if (key.startsWith(QStringLiteral("alert-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("alert-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Alert;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
     if (key.startsWith(QStringLiteral("input-section-"))) {
       bool ok = false;
       const int value = key.mid(QStringLiteral("input-section-").size()).toInt(&ok);
       if (ok) {
         if (kind) {
           *kind = DocsKind::Input;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
+    if (key.startsWith(QStringLiteral("inputnumber-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("inputnumber-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::InputNumber;
         }
         if (row) {
           *row = value;
@@ -1171,6 +1232,20 @@ class DemoWindow final : public QWidget {
       }
       return false;
     }
+    if (key.startsWith(QStringLiteral("image-section-"))) {
+      bool ok = false;
+      const int value = key.mid(QStringLiteral("image-section-").size()).toInt(&ok);
+      if (ok) {
+        if (kind) {
+          *kind = DocsKind::Image;
+        }
+        if (row) {
+          *row = value;
+        }
+        return true;
+      }
+      return false;
+    }
     if (key.startsWith(QStringLiteral("popover-section-"))) {
       bool ok = false;
       const int value = key.mid(QStringLiteral("popover-section-").size()).toInt(&ok);
@@ -1235,8 +1310,14 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Button && buttonPage_) {
       return buttonPage_->sectionAnchors();
     }
+    if (kind == DocsKind::Alert && alertPage_) {
+      return alertPage_->sectionAnchors();
+    }
     if (kind == DocsKind::Input && inputPage_) {
       return inputPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::InputNumber && inputNumberPage_) {
+      return inputNumberPage_->sectionAnchors();
     }
     if (kind == DocsKind::Switch && switchPage_) {
       return switchPage_->sectionAnchors();
@@ -1255,6 +1336,9 @@ class DemoWindow final : public QWidget {
     }
     if (kind == DocsKind::ColorPicker && colorPickerPage_) {
       return colorPickerPage_->sectionAnchors();
+    }
+    if (kind == DocsKind::Image && imagePage_) {
+      return imagePage_->sectionAnchors();
     }
     if (kind == DocsKind::Popover && popoverPage_) {
       return popoverPage_->sectionAnchors();
@@ -1276,8 +1360,14 @@ class DemoWindow final : public QWidget {
     if (kind == DocsKind::Button && buttonPage_) {
       return buttonPage_->sectionTitles();
     }
+    if (kind == DocsKind::Alert && alertPage_) {
+      return alertPage_->sectionTitles();
+    }
     if (kind == DocsKind::Input && inputPage_) {
       return inputPage_->sectionTitles();
+    }
+    if (kind == DocsKind::InputNumber && inputNumberPage_) {
+      return inputNumberPage_->sectionTitles();
     }
     if (kind == DocsKind::Switch && switchPage_) {
       return switchPage_->sectionTitles();
@@ -1296,6 +1386,9 @@ class DemoWindow final : public QWidget {
     }
     if (kind == DocsKind::ColorPicker && colorPickerPage_) {
       return colorPickerPage_->sectionTitles();
+    }
+    if (kind == DocsKind::Image && imagePage_) {
+      return imagePage_->sectionTitles();
     }
     if (kind == DocsKind::Popover && popoverPage_) {
       return popoverPage_->sectionTitles();
@@ -1339,12 +1432,26 @@ class DemoWindow final : public QWidget {
     buttonRoot.icon = outlined_icons::Appstore();
     buttonRoot.children = buildSectionItems(DocsKind::Button);
 
+    AdMenu::Item alertRoot;
+    alertRoot.key = docsRootKey(DocsKind::Alert);
+    alertRoot.label = "Alert";
+    alertRoot.type = AdMenu::ItemType::SubMenu;
+    alertRoot.icon = outlined_icons::Alert();
+    alertRoot.children = buildSectionItems(DocsKind::Alert);
+
     AdMenu::Item inputRoot;
     inputRoot.key = docsRootKey(DocsKind::Input);
     inputRoot.label = "Input";
     inputRoot.type = AdMenu::ItemType::SubMenu;
     inputRoot.icon = outlined_icons::Edit();
     inputRoot.children = buildSectionItems(DocsKind::Input);
+
+    AdMenu::Item inputNumberRoot;
+    inputNumberRoot.key = docsRootKey(DocsKind::InputNumber);
+    inputNumberRoot.label = "InputNumber";
+    inputNumberRoot.type = AdMenu::ItemType::SubMenu;
+    inputNumberRoot.icon = outlined_icons::Number();
+    inputNumberRoot.children = buildSectionItems(DocsKind::InputNumber);
 
     AdMenu::Item switchRoot;
     switchRoot.key = docsRootKey(DocsKind::Switch);
@@ -1388,6 +1495,13 @@ class DemoWindow final : public QWidget {
     colorPickerRoot.icon = outlined_icons::BgColors();
     colorPickerRoot.children = buildSectionItems(DocsKind::ColorPicker);
 
+    AdMenu::Item imageRoot;
+    imageRoot.key = docsRootKey(DocsKind::Image);
+    imageRoot.label = "Image";
+    imageRoot.type = AdMenu::ItemType::SubMenu;
+    imageRoot.icon = outlined_icons::Picture();
+    imageRoot.children = buildSectionItems(DocsKind::Image);
+
     AdMenu::Item popoverRoot;
     popoverRoot.key = docsRootKey(DocsKind::Popover);
     popoverRoot.label = "Popover";
@@ -1416,8 +1530,9 @@ class DemoWindow final : public QWidget {
     radioRoot.icon = outlined_icons::Appstore();
     radioRoot.children = buildSectionItems(DocsKind::Radio);
 
-    navMenu_->setItems({buttonRoot, inputRoot, switchRoot, menuRoot, modalRoot, selectRoot, sliderRoot,
-                        colorPickerRoot, popoverRoot, popconfirmRoot, tooltipRoot, radioRoot});
+    navMenu_->setItems({buttonRoot, alertRoot, inputRoot, inputNumberRoot, switchRoot, menuRoot, modalRoot,
+                        selectRoot, sliderRoot, colorPickerRoot, imageRoot, popoverRoot, popconfirmRoot,
+                        tooltipRoot, radioRoot});
     navMenu_->setOpenKeys({});
   }
 
@@ -1440,8 +1555,12 @@ class DemoWindow final : public QWidget {
       QWidget* target = nullptr;
       if (kind == DocsKind::Button) {
         target = buttonPage_;
+      } else if (kind == DocsKind::Alert) {
+        target = alertPage_;
       } else if (kind == DocsKind::Input) {
         target = inputPage_;
+      } else if (kind == DocsKind::InputNumber) {
+        target = inputNumberPage_;
       } else if (kind == DocsKind::Switch) {
         target = switchPage_;
       } else if (kind == DocsKind::Menu) {
@@ -1454,6 +1573,8 @@ class DemoWindow final : public QWidget {
         target = sliderPage_;
       } else if (kind == DocsKind::ColorPicker) {
         target = colorPickerPage_;
+      } else if (kind == DocsKind::Image) {
+        target = imagePage_;
       } else if (kind == DocsKind::Popover) {
         target = popoverPage_;
       } else if (kind == DocsKind::Popconfirm) {
@@ -1533,13 +1654,16 @@ class DemoWindow final : public QWidget {
   QScrollArea* scroll_ = nullptr;
   QStackedWidget* docsStack_ = nullptr;
   ButtonDocsPage* buttonPage_ = nullptr;
+  AlertDocsPage* alertPage_ = nullptr;
   InputDocsPage* inputPage_ = nullptr;
+  InputNumberDocsPage* inputNumberPage_ = nullptr;
   SwitchDocsPage* switchPage_ = nullptr;
   MenuDocsPage* menuPage_ = nullptr;
   ModalDocsPage* modalPage_ = nullptr;
   SelectDocsPage* selectPage_ = nullptr;
   SliderDocsPage* sliderPage_ = nullptr;
   ColorPickerDocsPage* colorPickerPage_ = nullptr;
+  ImageDocsPage* imagePage_ = nullptr;
   PopoverDocsPage* popoverPage_ = nullptr;
   PopconfirmDocsPage* popconfirmPage_ = nullptr;
   TooltipDocsPage* tooltipPage_ = nullptr;

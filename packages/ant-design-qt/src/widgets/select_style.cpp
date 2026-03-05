@@ -349,6 +349,12 @@ SelectVisualStyle resolveSelectVisualStyle(const SelectStyleInput& input) {
   if (tokens.iconSize.has_value()) {
     style.metrics.iconSize = std::max(10, tokens.iconSize.value());
   }
+  if (tokens.selectorFontSize.has_value()) {
+    style.metrics.selectorFont.setPixelSize(std::max(8, tokens.selectorFontSize.value()));
+  }
+  if (tokens.optionFontSize.has_value()) {
+    style.metrics.optionFont.setPixelSize(std::max(8, tokens.optionFontSize.value()));
+  }
   recomputeOptionPadding();
   recomputeMultiplePadding();
   recomputeEmptyHeight();

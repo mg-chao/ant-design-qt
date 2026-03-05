@@ -1,9 +1,12 @@
 #pragma once
 
+#include "alert.h"
 #include "button.h"
 #include "button_group.h"
 #include "color_picker.h"
+#include "image.h"
 #include "input.h"
+#include "input_number.h"
 #include "modal.h"
 #include "menu.h"
 #include "popover.h"

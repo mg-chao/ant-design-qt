@@ -873,6 +873,7 @@ void AdModal::ensureOverlay() {
 
   auto* overlay = new ModalOverlayWidget(scopeWindow_);
   overlay->setObjectName(QStringLiteral("ad-modal-overlay"));
+  overlay->setProperty("adqt.interaction.surface", true);
   overlay->setGeometry(scopeWindow_->rect());
   overlay->hide();
   overlay->installEventFilter(this);

@@ -1441,6 +1441,7 @@ void AdSelect::setJoinedLeft(bool value) {
     return;
   }
   joinedLeft_ = value;
+  bumpJoinedZOrder();
   updateInteractionFocusOverlay();
   update();
 }
@@ -1452,6 +1453,7 @@ void AdSelect::setJoinedRight(bool value) {
     return;
   }
   joinedRight_ = value;
+  bumpJoinedZOrder();
   updateInteractionFocusOverlay();
   update();
 }
@@ -1698,8 +1700,16 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
         lineEdit_->deselect();
         return true;
       }
-      if (!disabled() && !open_) {
-        openPopup();
+      if (!disabled()) {
+        // Single-select should behave like a pure toggle target even when
+        // search is enabled: repeated clicks on the selector close popup.
+        if (mode_ == Mode::Single && open_) {
+          closePopup();
+          return true;
+        }
+        if (!open_) {
+          openPopup();
+        }
       }
     } else if (event->type() == QEvent::MouseMove) {
       if (lineEdit_->isReadOnly()) {
@@ -1844,7 +1854,6 @@ void AdSelect::paintEvent(QPaintEvent* event) {
   QWidget::paintEvent(event);
   QPainter painter(this);
   paintSelectorShell(painter);
-  updateInteractionFocusOverlay();
 }
 
 QRectF AdSelect::selectorPaintRect() const {
@@ -1947,6 +1956,7 @@ void AdSelect::paintSelectorShell(QPainter& painter) const {
 void AdSelect::enterEvent(QEnterEvent* event) {
   QWidget::enterEvent(event);
   hovered_ = true;
+  bumpJoinedZOrder();
   updateClearButton();
   update();
 }
@@ -1975,12 +1985,14 @@ void AdSelect::mousePressEvent(QMouseEvent* event) {
         openPopup();
       }
     } else {
-      // Keep Ant Design selector behavior: clicking selector content should
-      // always activate the input, even when dropdown is already open.
       if (lineEdit_ && !lineEdit_->hasFocus()) {
         lineEdit_->setFocus(Qt::MouseFocusReason);
       }
-      if (!open_) {
+      // Keep multiple/tags editable interaction unchanged, but in single mode
+      // clicking the selector while open should close the popup.
+      if (mode_ == Mode::Single && open_) {
+        closePopup();
+      } else if (!open_) {
         openPopup();
       }
     }
@@ -3537,6 +3549,7 @@ void AdSelect::ensurePopup() {
   popup_ = new PopupFrame(scopeWindow);
   popup_->setAttribute(Qt::WA_DeleteOnClose, false);
   popup_->setObjectName(QStringLiteral("adselect-popup"));
+  popup_->setProperty("adqt.interaction.surface", true);
   popup_->installEventFilter(this);
 
   popupLayout_ = new QVBoxLayout(popup_);
@@ -3723,7 +3736,8 @@ void AdSelect::syncPopupGeometry() {
   } else {
     popupW = std::max(popupW, popupContentWidthHint());
   }
-  popupW = std::max(120, popupW);
+  const int popupMinWidth = popupWidth_ > 0 ? 1 : 120;
+  popupW = std::max(popupMinWidth, popupW);
 
   int popupH = popup_->sizeHint().height();
   if (popupLayout_ && (popupScrollArea_ || listView_)) {
@@ -3746,7 +3760,20 @@ void AdSelect::syncPopupGeometry() {
   placementInput.anchorTopLeft = mapToGlobal(QPoint(0, 0));
   placementInput.anchorSize = QSize(width(), height());
   placementInput.popupSize = popup_->size();
-  placementInput.bounds = detail::popupBoundsInGlobal(popupParent);
+  QRect popupBounds = detail::popupBoundsInGlobal(popupParent);
+  bool hostedInsidePopoverPopup = false;
+  for (QWidget* ancestor = this; ancestor != nullptr; ancestor = ancestor->parentWidget()) {
+    if (ancestor->objectName() == QStringLiteral("adpopover-popup")) {
+      hostedInsidePopoverPopup = true;
+      break;
+    }
+  }
+  if (hostedInsidePopoverPopup) {
+    // ColorPicker and other popover-hosted selects should align against the
+    // trigger without being clamped to the narrow popover surface.
+    popupBounds = detail::popupBoundsInGlobal(nullptr);
+  }
+  placementInput.bounds = popupBounds;
   placementInput.preferredPlacement = toPopupPlacement(placement_);
 
   const detail::PopupPlacementOutput placementOutput =
@@ -3809,6 +3836,7 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
       popup_->raise();
     }
     hasFocusWithin_ = true;
+    bumpJoinedZOrder();
     applyVisualStyle();
     if (lineEdit_) {
       lineEdit_->setFocus();
@@ -3913,13 +3941,29 @@ void AdSelect::updateInteractionFocusOverlay() {
   triggerInteractionFocus(request);
 }
 
+void AdSelect::bumpJoinedZOrder() {
+  if (!(joinedLeft_ || joinedRight_)) {
+    return;
+  }
+  if (!(hovered_ || hasFocusWithin_ || open_)) {
+    return;
+  }
+  raise();
+}
+
 void AdSelect::updateFocusState() {
   const bool nextFocus = open_ || (lineEdit_ && lineEdit_->hasFocus());
   if (hasFocusWithin_ == nextFocus) {
+    if (nextFocus) {
+      bumpJoinedZOrder();
+    }
     updateInteractionFocusOverlay();
     return;
   }
   hasFocusWithin_ = nextFocus;
+  if (hasFocusWithin_) {
+    bumpJoinedZOrder();
+  }
   updateInteractionFocusOverlay();
   update();
 }

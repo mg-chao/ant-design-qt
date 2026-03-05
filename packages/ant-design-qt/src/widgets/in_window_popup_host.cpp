@@ -106,7 +106,17 @@ class InWindowPopupHost final : public QObject {
   explicit InWindowPopupHost(QWidget* scopeWindow)
       : QObject(scopeWindow), scopeWindow_(scopeWindow) {}
 
-  bool owns(const InWindowPopupOwner* owner) const { return activeOwner_ == owner; }
+  bool owns(const InWindowPopupOwner* owner) const {
+    if (activeOwner_ == owner) {
+      return true;
+    }
+    for (const SuspendedOwnerState& suspended : suspendedOwners_) {
+      if (suspended.owner == owner) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   void activateOwner(InWindowPopupOwner* owner) {
     if (!owner || !scopeWindow_) {
@@ -128,44 +138,30 @@ class InWindowPopupHost final : public QObject {
       return;
     }
 
+    removeSuspendedOwner(owner);
+
     if (activeOwner_ && activeOwner_ != owner) {
-      requestCloseActive(PopupCloseReason::SupersededByAnotherOwner);
-      if (activeOwner_ && activeOwner_ != owner) {
-        clearActiveOwner();
+      if (anchorInsideActiveOwnerPopup(anchorWidget)) {
+        suspendActiveOwner();
+      } else {
+        closeOwnerChain(PopupCloseReason::SupersededByAnotherOwner);
       }
     }
 
-    activeOwner_ = owner;
-    activeOwnerObject_ = ownerObject;
-    activeAnchorWidget_ = anchorWidget;
-
-    ownerDestroyedConnection_ = QObject::connect(ownerObject, &QObject::destroyed, this, [this]() {
-      clearActiveOwner();
-      removeAllWatchers();
-    });
-
-    if (qApp) {
-      qApp->removeEventFilter(this);
-      qApp->installEventFilter(this);
-    }
-    if (scopeWindow_) {
-      scopeWindow_->removeEventFilter(this);
-      scopeWindow_->installEventFilter(this);
-    }
-    refreshFrameRelayoutSubscription();
-
-    refreshAnchorChainWatchers();
-    if (owner->popupIsVisible()) {
-      scheduleRelayout();
-    }
+    adoptActiveOwner(owner, ownerObject, anchorWidget);
   }
 
   void deactivateOwner(InWindowPopupOwner* owner) {
-    if (!owner || activeOwner_ != owner) {
+    if (!owner) {
       return;
     }
-    removeAllWatchers();
-    clearActiveOwner();
+    if (activeOwner_ == owner) {
+      removeAllWatchers();
+      clearActiveOwner();
+      restoreSuspendedOwner();
+      return;
+    }
+    removeSuspendedOwner(owner);
   }
 
  protected:
@@ -196,9 +192,8 @@ class InWindowPopupHost final : public QObject {
         return QObject::eventFilter(watched, event);
       }
       const QRect scopeGlobalRect = widgetGlobalRect(scopeWindow_);
-      if (scopeGlobalRect.isValid() && scopeGlobalRect.contains(interactionGlobalPos.value()) &&
-          !activeOwner_->popupContainsGlobalPos(interactionGlobalPos.value())) {
-        requestCloseActive(PopupCloseReason::OutsidePressInScope);
+      if (scopeGlobalRect.isValid() && scopeGlobalRect.contains(interactionGlobalPos.value())) {
+        requestCloseOwnersOutsidePoint(interactionGlobalPos.value(), PopupCloseReason::OutsidePressInScope);
       }
       return QObject::eventFilter(watched, event);
     }
@@ -255,6 +250,12 @@ class InWindowPopupHost final : public QObject {
     QMetaObject::Connection destroyed;
   };
 
+  struct SuspendedOwnerState {
+    InWindowPopupOwner* owner = nullptr;
+    QPointer<QObject> ownerObject;
+    QPointer<QWidget> anchorWidget;
+  };
+
   bool watchedInAnchorChain(QObject* watched) const {
     for (const QPointer<QWidget>& widget : watchedAnchorChain_) {
       if (widget && widget.data() == watched) {
@@ -295,6 +296,143 @@ class InWindowPopupHost final : public QObject {
     closingActive_ = false;
     if (activeOwner_ == owner && !owner->popupIsVisible()) {
       deactivateOwner(owner);
+    }
+  }
+
+  bool anchorInsideActiveOwnerPopup(const QWidget* candidateAnchor) const {
+    if (!activeOwner_ || !candidateAnchor || !activeOwner_->popupIsVisible()) {
+      return false;
+    }
+    const QRect anchorRect = widgetGlobalRect(candidateAnchor);
+    if (!anchorRect.isValid()) {
+      return false;
+    }
+    return activeOwner_->popupContainsGlobalPos(anchorRect.center());
+  }
+
+  void suspendActiveOwner() {
+    if (!activeOwner_) {
+      return;
+    }
+
+    SuspendedOwnerState state;
+    state.owner = activeOwner_;
+    state.ownerObject = activeOwnerObject_;
+    state.anchorWidget = activeAnchorWidget_;
+    suspendedOwners_.append(state);
+
+    removeAllWatchers();
+    clearActiveOwner();
+  }
+
+  void adoptActiveOwner(InWindowPopupOwner* owner, QObject* ownerObject, QWidget* anchorWidget) {
+    if (!owner || !ownerObject || !anchorWidget) {
+      return;
+    }
+
+    activeOwner_ = owner;
+    activeOwnerObject_ = ownerObject;
+    activeAnchorWidget_ = anchorWidget;
+
+    ownerDestroyedConnection_ = QObject::connect(ownerObject, &QObject::destroyed, this, [this]() {
+      removeAllWatchers();
+      clearActiveOwner();
+      restoreSuspendedOwner();
+    });
+
+    if (qApp) {
+      qApp->removeEventFilter(this);
+      qApp->installEventFilter(this);
+    }
+    if (scopeWindow_) {
+      scopeWindow_->removeEventFilter(this);
+      scopeWindow_->installEventFilter(this);
+    }
+    refreshFrameRelayoutSubscription();
+
+    refreshAnchorChainWatchers();
+    if (owner->popupIsVisible()) {
+      scheduleRelayout();
+    }
+  }
+
+  void requestCloseOwnersOutsidePoint(const QPoint& globalPos, PopupCloseReason reason) {
+    int guard = 0;
+    while (activeOwner_ && activeOwner_->popupIsVisible() &&
+           !activeOwner_->popupContainsGlobalPos(globalPos) && guard < 8) {
+      ++guard;
+      InWindowPopupOwner* previousOwner = activeOwner_;
+      requestCloseActive(reason);
+      if (activeOwner_ == previousOwner) {
+        break;
+      }
+    }
+  }
+
+  void closeSuspendedOwners(PopupCloseReason reason) {
+    const QVector<SuspendedOwnerState> ownersToClose = suspendedOwners_;
+    suspendedOwners_.clear();
+
+    for (const SuspendedOwnerState& state : ownersToClose) {
+      if (!state.owner || !state.ownerObject) {
+        continue;
+      }
+      if (!state.owner->popupIsVisible()) {
+        continue;
+      }
+      state.owner->popupCloseFromHost(reason);
+    }
+  }
+
+  void closeOwnerChain(PopupCloseReason reason) {
+    int guard = 0;
+    while (activeOwner_ && guard < 8) {
+      ++guard;
+      InWindowPopupOwner* previousOwner = activeOwner_;
+      requestCloseActive(reason);
+      if (activeOwner_ != previousOwner) {
+        continue;
+      }
+
+      if (previousOwner->popupIsVisible()) {
+        previousOwner->popupCloseFromHost(reason);
+      }
+      if (activeOwner_ == previousOwner && !previousOwner->popupIsVisible()) {
+        deactivateOwner(previousOwner);
+      }
+      if (activeOwner_ == previousOwner) {
+        removeAllWatchers();
+        clearActiveOwner();
+      }
+    }
+    closeSuspendedOwners(reason);
+  }
+
+  void removeSuspendedOwner(InWindowPopupOwner* owner) {
+    if (!owner || suspendedOwners_.isEmpty()) {
+      return;
+    }
+
+    for (auto it = suspendedOwners_.begin(); it != suspendedOwners_.end();) {
+      if (it->owner == owner || !it->owner || !it->ownerObject || !it->anchorWidget) {
+        it = suspendedOwners_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  void restoreSuspendedOwner() {
+    while (!suspendedOwners_.isEmpty()) {
+      const SuspendedOwnerState state = suspendedOwners_.takeLast();
+      if (!state.owner || !state.ownerObject || !state.anchorWidget) {
+        continue;
+      }
+      if (!state.owner->popupIsVisible()) {
+        continue;
+      }
+      adoptActiveOwner(state.owner, state.ownerObject.data(), state.anchorWidget.data());
+      return;
     }
   }
 
@@ -443,6 +581,7 @@ class InWindowPopupHost final : public QObject {
   InWindowPopupOwner* activeOwner_ = nullptr;
   QPointer<QObject> activeOwnerObject_;
   QPointer<QWidget> activeAnchorWidget_;
+  QVector<SuspendedOwnerState> suspendedOwners_;
   QVector<QPointer<QWidget>> watchedAnchorChain_;
   QHash<QScrollBar*, ScrollBarWatch> watchedScrollBars_;
   QMetaObject::Connection ownerDestroyedConnection_;

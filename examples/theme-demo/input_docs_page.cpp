@@ -674,6 +674,8 @@ QWidget* InputDocsPage::buildSearchInputDemo() {
   auto* layout = new QVBoxLayout(box);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(10);
+  const int compactJoinOverlap =
+      std::max(1, qRound(adqt::theme::ThemeManager::instance().currentMapToken().lineWidth));
 
   auto* info = makeHintLabel("onSearch source/value will appear here.");
 
@@ -700,11 +702,13 @@ QWidget* InputDocsPage::buildSearchInputDemo() {
 
   {
     auto* row = new QHBoxLayout();
+    row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(0);
     auto* addon = makeAddonLabel("https://", AdInput::Size::Middle, false, true);
     auto* search = makeSearch(true, false, QString());
     search->input()->setJoinedLeft(true);
     row->addWidget(addon);
+    row->addSpacing(-compactJoinOverlap);
     row->addWidget(search);
     row->addStretch();
     layout->addLayout(row);
@@ -1036,20 +1040,18 @@ QWidget* InputDocsPage::buildShowCountDemo() {
   auto* box = new QWidget();
   auto* layout = new QVBoxLayout(box);
   layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(12);
+  layout->setSpacing(32);
 
   auto* input = new AdInput();
   input->setShowCount(true);
   input->setMaxLength(20);
-  input->setFixedWidth(320);
+  input->setFixedWidth(420);
 
   auto* textArea1 = new AdInputTextArea();
   textArea1->setShowCount(true);
   textArea1->setMaxLength(100);
   textArea1->setPlaceholder("can resize");
-  textArea1->setAutoSizeEnabled(true);
-  textArea1->setAutoSizeMinRows(2);
-  textArea1->setAutoSizeMaxRows(6);
+  textArea1->setAutoSizeEnabled(false);
   textArea1->setFixedWidth(420);
 
   auto* textArea2 = new AdInputTextArea();
@@ -1057,6 +1059,8 @@ QWidget* InputDocsPage::buildShowCountDemo() {
   textArea2->setMaxLength(100);
   textArea2->setPlaceholder("disable resize");
   textArea2->setAutoSizeEnabled(false);
+  textArea2->setAutoSizeMinRows(4);
+  textArea2->setAutoSizeMaxRows(4);
   textArea2->setFixedWidth(420);
 
   layout->addWidget(input, 0, Qt::AlignLeft);

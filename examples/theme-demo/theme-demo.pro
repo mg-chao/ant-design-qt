@@ -1,4 +1,4 @@
-QT += core gui widgets svg
+QT += core gui widgets svg network
 CONFIG += c++17
 TEMPLATE = app
 TARGET = theme-demo
@@ -7,9 +7,12 @@ INCLUDEPATH += ../../packages/ant-design-qt/src
 INCLUDEPATH += ../../packages/ant-design-icons-qt/src
 
 HEADERS += \
+    alert_docs_page.h \
     color_picker_docs_page.h \
     icon_theme_adapter.h \
+    image_docs_page.h \
     input_docs_page.h \
+    input_number_docs_page.h \
     menu_docs_page.h \
     modal_docs_page.h \
     popconfirm_docs_page.h \
@@ -21,9 +24,12 @@ HEADERS += \
     tooltip_docs_page.h
 
 SOURCES += \
+    alert_docs_page.cpp \
     color_picker_docs_page.cpp \
     icon_theme_adapter.cpp \
+    image_docs_page.cpp \
     input_docs_page.cpp \
+    input_number_docs_page.cpp \
     main.cpp \
     menu_docs_page.cpp \
     modal_docs_page.cpp \

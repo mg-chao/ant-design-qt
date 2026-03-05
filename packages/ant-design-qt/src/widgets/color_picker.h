@@ -10,18 +10,22 @@
 
 #include "popover.h"
 
-class QComboBox;
 class QFrame;
 class QGridLayout;
 class QHBoxLayout;
+class QAbstractButton;
+class QButtonGroup;
 class QLabel;
-class QLineEdit;
-class QPushButton;
+class QMoveEvent;
+class QResizeEvent;
 class QScrollArea;
 class QVBoxLayout;
 
 namespace adqt::widgets {
 
+class AdInput;
+class AdInputNumber;
+class AdSelect;
 class AdSlider;
 class ColorSaturationPanel;
 
@@ -240,6 +244,9 @@ class AdColorPicker final : public QWidget {
 
  protected:
   void changeEvent(QEvent* event) override;
+  void moveEvent(QMoveEvent* event) override;
+  void resizeEvent(QResizeEvent* event) override;
+  bool eventFilter(QObject* watched, QEvent* event) override;
 
  private:
   struct InternalGradientStop {
@@ -247,6 +254,8 @@ class AdColorPicker final : public QWidget {
     int percent = 0;
   };
 
+  static QString modeName(Mode value);
+  static Mode parseModeName(const QString& value, Mode fallback);
   static QString formatName(Format value);
   static Format parseFormatName(const QString& value, Format fallback);
   static AdPopover::Placement toPopoverPlacement(Placement value);
@@ -259,12 +268,16 @@ class AdColorPicker final : public QWidget {
   void rebuildPanelComposition();
   void rebuildPresetsPanel();
   void refreshStyle();
-  void refreshTriggerDisplay();
-  void refreshPanelControlsFromState();
+  void refreshTriggerDisplay(bool deferTextUpdate = false);
+  void refreshPanelControlsFromState(bool minimal = false);
   void refreshChannelVisuals();
   void refreshPreviewSwatch();
   void updateFormatInputText();
-  void updateModeComboOptions();
+  void updateFormatInputVisibility();
+  void updateModeSegmentedOptions();
+  void updateTriggerFocusOverlay();
+  void suppressTriggerUpdatesDuringInteraction();
+  void resumeTriggerUpdatesAfterInteraction();
 
   QColor currentEditableColor() const;
   void setCurrentEditableColor(const QColor& color,
@@ -310,6 +323,8 @@ class AdColorPicker final : public QWidget {
   SemanticStyleResolver semanticStyleResolver_;
 
   bool syncingControls_ = false;
+  bool triggerHovered_ = false;
+  bool triggerUpdatesSuppressed_ = false;
 
   QPointer<AdPopover> popover_;
   QPointer<QWidget> defaultTrigger_;
@@ -324,21 +339,35 @@ class AdColorPicker final : public QWidget {
   QPointer<QLabel> triggerTextLabel_;
 
   QPointer<QWidget> operationRow_;
-  QPointer<QComboBox> modeCombo_;
-  QPointer<QPushButton> clearButton_;
+  QPointer<QWidget> operationGap_;
+  QPointer<QWidget> modeSegmented_;
+  QPointer<QButtonGroup> modeButtonGroup_;
+  QPointer<QAbstractButton> clearButton_;
   QPointer<QWidget> gradientSection_;
+  QPointer<QWidget> gradientGap_;
   QPointer<AdSlider> gradientSlider_;
   QPointer<ColorSaturationPanel> saturationPanel_;
+  QPointer<QWidget> saturationGap_;
   QPointer<QWidget> sliderContainer_;
+  QPointer<QWidget> sliderGap_;
   QPointer<QWidget> sliderGroup_;
   QPointer<QWidget> alphaSection_;
   QPointer<AdSlider> hueSlider_;
   QPointer<AdSlider> alphaSlider_;
   QPointer<QWidget> previewSwatch_;
 
-  QPointer<QComboBox> formatCombo_;
-  QPointer<QLineEdit> formatInput_;
-  QPointer<QLineEdit> alphaInput_;
+  QPointer<AdSelect> formatCombo_;
+  QPointer<QWidget> formatInputHost_;
+  QPointer<QWidget> rgbInputHost_;
+  QPointer<QWidget> hsbInputHost_;
+  QPointer<AdInput> hexInput_;
+  QPointer<AdInputNumber> rgbInputR_;
+  QPointer<AdInputNumber> rgbInputG_;
+  QPointer<AdInputNumber> rgbInputB_;
+  QPointer<AdInputNumber> hsbInputH_;
+  QPointer<AdInputNumber> hsbInputS_;
+  QPointer<AdInputNumber> hsbInputB_;
+  QPointer<AdInputNumber> alphaInput_;
 
   QPointer<QVBoxLayout> presetsLayout_;
 };

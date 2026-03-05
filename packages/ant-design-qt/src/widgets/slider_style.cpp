@@ -111,6 +111,8 @@ SliderVisualStyle resolveSliderVisualStyle(const SliderStyleInput& input) {
   style.handleHoverColor = toColor(map.colorPrimaryBorderHover, QColor("#69b1ff"));
   style.handleActiveColor = toColor(map.colorPrimary, QColor("#1677ff"));
   style.handleActiveOutlineColor = withAlpha(style.handleActiveColor, 0.2);
+  style.handleShadowColor = QColor(0, 0, 0, 0);
+  style.handleActiveShadowColor = QColor(0, 0, 0, 0);
   style.handleColorDisabled = compositeOverBackground(
       toColor(global.colorTextDisabled, QColor(0, 0, 0, 64)),
       toColor(map.colorBgContainer, QColor("#ffffff")));
@@ -168,14 +170,31 @@ SliderVisualStyle resolveSliderVisualStyle(const SliderStyleInput& input) {
     style.metrics.handleLineWidthHover =
         std::max<qreal>(1.0, tokens.handleLineWidthHover.value());
   }
+  if (tokens.focusOutlineSize.has_value()) {
+    style.metrics.focusOutlineSize = std::max<qreal>(0.0, tokens.focusOutlineSize.value());
+  }
   if (tokens.dotSize.has_value()) {
     style.metrics.dotSize = std::max(4, tokens.dotSize.value());
   }
 
-  style.metrics.marginMain = resolveMainAxisMargin(style.metrics);
-  style.metrics.marginCross =
-      std::max(0, qRound((map.controlHeight - style.metrics.controlSize) / 2.0));
-  style.metrics.markGap = std::max(0, qRound(map.controlHeightLG - style.metrics.controlSize));
+  if (tokens.marginMain.has_value()) {
+    style.metrics.marginMain = std::max(0, tokens.marginMain.value());
+  } else {
+    style.metrics.marginMain = resolveMainAxisMargin(style.metrics);
+  }
+
+  if (tokens.marginCross.has_value()) {
+    style.metrics.marginCross = std::max(0, tokens.marginCross.value());
+  } else {
+    style.metrics.marginCross =
+        std::max(0, qRound((map.controlHeight - style.metrics.controlSize) / 2.0));
+  }
+
+  if (tokens.markGap.has_value()) {
+    style.metrics.markGap = std::max(0, tokens.markGap.value());
+  } else {
+    style.metrics.markGap = std::max(0, qRound(map.controlHeightLG - style.metrics.controlSize));
+  }
 
   style.railBg = resolveTokenColor(tokens.railBg, style.railBg);
   style.railHoverBg = resolveTokenColor(tokens.railHoverBg, style.railHoverBg);
@@ -187,6 +206,12 @@ SliderVisualStyle resolveSliderVisualStyle(const SliderStyleInput& input) {
   style.handleActiveOutlineColor = withAlpha(style.handleActiveColor, 0.2);
   style.handleActiveOutlineColor =
       resolveTokenColor(tokens.handleActiveOutlineColor, style.handleActiveOutlineColor);
+  style.handleShadowColor = resolveTokenColor(tokens.handleShadowColor, style.handleShadowColor);
+  style.handleActiveShadowColor =
+      resolveTokenColor(tokens.handleActiveShadowColor, style.handleActiveShadowColor);
+  if (!tokens.handleActiveShadowColor.has_value()) {
+    style.handleActiveShadowColor = style.handleShadowColor;
+  }
   style.handleColorDisabled = resolveTokenColor(tokens.handleColorDisabled, style.handleColorDisabled);
   style.dotBorderColor = resolveTokenColor(tokens.dotBorderColor, style.dotBorderColor);
   style.dotHoverBorderColor = toColor(map.colorFill, style.dotBorderColor);
@@ -239,6 +264,8 @@ SliderVisualStyle resolveSliderVisualStyle(const SliderStyleInput& input) {
     style.handleHoverColor = style.handleColorDisabled;
     style.handleActiveColor = style.handleColorDisabled;
     style.handleActiveOutlineColor = QColor(0, 0, 0, 0);
+    style.handleShadowColor = QColor(0, 0, 0, 0);
+    style.handleActiveShadowColor = QColor(0, 0, 0, 0);
     style.dotBorderColor = style.trackBgDisabled;
     style.dotHoverBorderColor = style.trackBgDisabled;
     style.dotActiveBorderColor = style.trackBgDisabled;

@@ -240,6 +240,7 @@ class AdPopover final : public QWidget, private detail::InWindowPopupOwner {
   void schedulePopupRelayout(bool extendFrameTail);
   void cancelPopupRelayout();
   void refreshGeometryFrameSync();
+  bool shouldSkipQueuedRelayoutSync() const;
   void resetGeometrySyncSnapshot();
   void markAnchorScrollWatchersDirty();
   void refreshAnchorScrollBarWatchers();

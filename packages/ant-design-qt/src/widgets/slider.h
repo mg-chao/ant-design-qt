@@ -80,6 +80,10 @@ class AdSlider final : public QWidget {
     std::optional<int> handleSizeHover;
     std::optional<int> handleLineWidth;
     std::optional<int> handleLineWidthHover;
+    std::optional<int> marginMain;
+    std::optional<int> marginCross;
+    std::optional<int> markGap;
+    std::optional<int> focusOutlineSize;
     std::optional<int> dotSize;
     std::optional<QString> railBg;
     std::optional<QString> railHoverBg;
@@ -88,6 +92,8 @@ class AdSlider final : public QWidget {
     std::optional<QString> handleColor;
     std::optional<QString> handleActiveColor;
     std::optional<QString> handleActiveOutlineColor;
+    std::optional<QString> handleShadowColor;
+    std::optional<QString> handleActiveShadowColor;
     std::optional<QString> handleColorDisabled;
     std::optional<QString> dotBorderColor;
     std::optional<QString> dotActiveBorderColor;
@@ -166,6 +172,7 @@ class AdSlider final : public QWidget {
 
   QList<double> values() const;
   void setValues(const QList<double>& values);
+  int activeHandleIndex() const;
 
   bool draggableTrack() const;
   void setDraggableTrack(bool value);
@@ -230,6 +237,7 @@ class AdSlider final : public QWidget {
   void marksChanged();
   void componentTokensChanged();
   void semanticStylesChanged();
+  void activeHandleIndexChanged(int index);
   void valueChangeCompleted(double value);
   void valuesChangeCompleted(const QList<double>& values);
 
@@ -263,6 +271,7 @@ class AdSlider final : public QWidget {
   QList<double> snapPoints() const;
   double normalizeValue(double value) const;
   void setHandlesInternal(const QList<double>& handles, bool emitValueChangedSignal, bool fromUserAction);
+  void setFocusHandleIndex(int index);
   void emitChangedSignalsForCurrentMode();
   void emitCompletedSignalsForCurrentMode();
   void refreshAfterPropertyChange(bool updateGeometryHint = true);
@@ -273,7 +282,7 @@ class AdSlider final : public QWidget {
   double valueFromPosition(const QPoint& pos, const LayoutInfo& layout) const;
   int positionFromValue(double value, const LayoutInfo& layout) const;
   double clampTrackDelta(double delta) const;
-  void handleRailAction(const QPoint& pos, const LayoutInfo& layout);
+  int handleRailAction(const QPoint& pos, const LayoutInfo& layout);
   bool deleteHandleAt(int index);
   bool addHandleAt(double value, int* insertedIndex = nullptr);
   bool isMarkActive(double markValue) const;

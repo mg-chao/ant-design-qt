@@ -1,65 +1,36 @@
 #include "button.h"
 
 #include "button_style.h"
-#include "detail/button_grouping.h"
+#include "detail/icon_utils.h"
 #include "detail/timing_hub.h"
-#include "antd_icons.h"
 #include "interaction_overlay_manager.h"
 #include "theme/theme.h"
+#include "icons.h"
 
-#include <QDebug>
+#include <QApplication>
 #include <QEvent>
 #include <QFocusEvent>
 #include <QFontMetrics>
+#include <QHideEvent>
 #include <QKeyEvent>
-#include <QMenu>
 #include <QMouseEvent>
+#include <QMoveEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegularExpression>
+#include <QResizeEvent>
+#include <QShowEvent>
 #include <QStyle>
-#include <QStyleOptionButton>
 
 #include <algorithm>
-#include <cmath>
 
 namespace adqt::widgets {
 
 namespace {
 
-namespace outlined_icons = adqt::icons::antd::outlined;
+namespace outlined_icons = adqt::icons::outlined;
 constexpr char kLoadingDelayTaskKey[] = "AdButton.LoadingDelay";
 constexpr char kSpinnerFrameKey[] = "AdButton.SpinnerFrame";
-
-struct CornerRadii {
-  qreal topLeft = 0.0;
-  qreal topRight = 0.0;
-  qreal bottomRight = 0.0;
-  qreal bottomLeft = 0.0;
-};
-
-bool iconRefsEqual(const adqt::icons::IconRef& lhs, const adqt::icons::IconRef& rhs) {
-  return lhs == rhs;
-}
-
-struct ButtonIconRenderState {
-  bool busyIndicatorVisible = false;
-  bool hasTokenIcon = false;
-  bool hasFallbackIcon = false;
-  adqt::icons::IconRef token;
-
-  bool hasVisibleIcon() const { return busyIndicatorVisible || hasTokenIcon || hasFallbackIcon; }
-  bool drawBuiltinSpinner() const { return busyIndicatorVisible && !hasTokenIcon; }
-};
-
-ButtonIconRenderState resolveIconRenderState(const AdButton& button, bool busyIndicatorVisible) {
-  ButtonIconRenderState state;
-  state.busyIndicatorVisible = busyIndicatorVisible;
-  state.token = state.busyIndicatorVisible ? button.busyIconRef() : button.iconRef();
-  state.hasTokenIcon = adqt::icons::isValid(state.token);
-  state.hasFallbackIcon = !state.busyIndicatorVisible && !state.hasTokenIcon && !button.icon().isNull();
-  return state;
-}
 
 QPainterPath roundedRectPath(const QRectF& rect, qreal topLeft, qreal topRight, qreal bottomRight,
                              qreal bottomLeft) {
@@ -111,86 +82,14 @@ bool isKeyboardFocusReason(Qt::FocusReason reason) {
   return reason != Qt::MouseFocusReason && reason != Qt::NoFocusReason;
 }
 
-bool isActivationKey(int key) {
-  return key == Qt::Key_Space || key == Qt::Key_Return || key == Qt::Key_Enter;
-}
-
 QPoint mouseEventPos(const QMouseEvent* event) {
-  return event ? event->position().toPoint() : QPoint();
-}
-
-bool hasVisibleColor(const QColor& color) { return color.isValid() && color.alpha() > 0; }
-
-int mnemonicTextFlags(const QWidget* widget) {
-  int flags = Qt::TextSingleLine | Qt::TextShowMnemonic;
-  if (widget && widget->style() &&
-      widget->style()->styleHint(QStyle::SH_UnderlineShortcut, nullptr, widget) == 0) {
-    flags |= Qt::TextHideMnemonic;
+  if (!event) {
+    return QPoint();
   }
-  return flags;
+  return event->position().toPoint();
 }
 
-QString stripMnemonicMarkers(const QString& text) {
-  QString result;
-  result.reserve(text.size());
-  for (int i = 0; i < text.size(); ++i) {
-    const QChar ch = text.at(i);
-    if (ch != QLatin1Char('&')) {
-      result.append(ch);
-      continue;
-    }
-
-    if (i + 1 < text.size() && text.at(i + 1) == QLatin1Char('&')) {
-      result.append(QLatin1Char('&'));
-      ++i;
-    }
-  }
-  return result;
-}
-
-bool hasMnemonicMarker(const QString& text) {
-  for (int i = 0; i < text.size(); ++i) {
-    if (text.at(i) != QLatin1Char('&')) {
-      continue;
-    }
-    if (i + 1 < text.size() && text.at(i + 1) == QLatin1Char('&')) {
-      ++i;
-      continue;
-    }
-    return true;
-  }
-  return false;
-}
-
-bool shouldInheritCurrentColor(const adqt::icons::IconRef& icon) {
-  if (!adqt::icons::isValid(icon)) {
-    return false;
-  }
-  if (icon.colors.hasPrimary || icon.colors.hasSecondary || icon.colors.hasTertiary) {
-    return false;
-  }
-  const adqt::icons::IconMetadata meta = adqt::icons::describeIcon(icon.id);
-  return meta.model == adqt::icons::IconRenderModel::Monochrome;
-}
-
-QColor parseThemeColor(const QColor& value, const QColor& fallback) {
-  return value.isValid() ? value : fallback;
-}
-
-QColor compositeOn(const QColor& foreground, const QColor& background) {
-  if (!foreground.isValid()) {
-    return background;
-  }
-  const qreal fgAlpha = std::clamp(static_cast<qreal>(foreground.alphaF()), qreal(0.0), qreal(1.0));
-  QColor mixed;
-  mixed.setRedF(foreground.redF() * fgAlpha + background.redF() * (1.0 - fgAlpha));
-  mixed.setGreenF(foreground.greenF() * fgAlpha + background.greenF() * (1.0 - fgAlpha));
-  mixed.setBlueF(foreground.blueF() * fgAlpha + background.blueF() * (1.0 - fgAlpha));
-  mixed.setAlpha(255);
-  return mixed;
-}
-
-int resolveIconSide(const QAbstractButton* button, const QFontMetrics& fm, const QFont& contentFont) {
+int resolveIconSide(const QPushButton* button, const QFontMetrics& fm, const QFont& contentFont) {
   int iconSide = contentFont.pixelSize();
   if (iconSide <= 0) {
     const qreal pointSize = contentFont.pointSizeF();
@@ -211,34 +110,26 @@ int resolveIconSide(const QAbstractButton* button, const QFontMetrics& fm, const
   const int requestedSide = std::max(requestedIconSize.width(), requestedIconSize.height());
   int defaultStyleSide = -1;
   if (button->style()) {
-    defaultStyleSide = button->style()->pixelMetric(QStyle::PM_ButtonIconSize, nullptr,
-                                                    const_cast<QAbstractButton*>(button));
+    defaultStyleSide = button->style()->pixelMetric(QStyle::PM_ButtonIconSize, nullptr, button);
   }
   if (defaultStyleSide > 0 && requestedSide == defaultStyleSide) {
     return iconSide;
   }
+
   return requestedSide;
 }
 
-int measureTextWidth(const QFontMetrics& fm, const QString& text, int flags = 0) {
+int measureTextWidth(const QFontMetrics& fm, const QString& text) {
   if (text.isEmpty()) {
     return 0;
   }
-  int width = 0;
-  if (flags != 0) {
-    const QSize measured = fm.size(flags, text);
-    if (measured.width() > 0) {
-      width = std::max(width, measured.width());
-    }
-  }
-  const bool mnemonicAware = (flags & Qt::TextShowMnemonic) || (flags & Qt::TextHideMnemonic);
-  const QString displayText = mnemonicAware ? stripMnemonicMarkers(text) : text;
-  const int advance = fm.horizontalAdvance(displayText);
+  // CSS inline layout uses glyph advance widths for line breaking and intrinsic width.
+  // Prefer horizontalAdvance to match antd/browser width behavior.
+  const int advance = fm.horizontalAdvance(text);
   if (advance > 0) {
-    width = std::max(width, advance);
+    return advance;
   }
-  width = std::max(width, fm.boundingRect(displayText).width());
-  return width;
+  return fm.boundingRect(text).width();
 }
 
 int resolveContentPixelSize(const QFontMetrics& fm, const QFont& contentFont) {
@@ -256,22 +147,23 @@ int resolveContentPixelSize(const QFontMetrics& fm, const QFont& contentFont) {
 }
 
 int twoCnLetterSpacingPx(const QFontMetrics& fm, const QFont& contentFont) {
+  // antd uses letter-spacing: 0.34em for two Chinese characters.
   return std::max(1, qRound(resolveContentPixelSize(fm, contentFont) * 0.34));
 }
 
 int measureDisplayTextWidth(const QFontMetrics& fm,
                             const QFont& contentFont,
                             const QString& text,
-                            bool twoCnAutoSpacing,
-                            int textFlags) {
+                            bool twoCnAutoSpacing) {
   if (text.isEmpty()) {
     return 0;
   }
   if (!twoCnAutoSpacing || !isTwoChineseCharacters(text)) {
-    return measureTextWidth(fm, text, textFlags);
+    return measureTextWidth(fm, text);
   }
-  const int first = measureTextWidth(fm, QString(text.at(0)), textFlags);
-  const int second = measureTextWidth(fm, QString(text.at(1)), textFlags);
+
+  const int first = fm.horizontalAdvance(QString(text.at(0)));
+  const int second = fm.horizontalAdvance(QString(text.at(1)));
   return std::max(0, first) + std::max(0, second) + twoCnLetterSpacingPx(fm, contentFont);
 }
 
@@ -280,75 +172,6 @@ qreal snapToDevicePixel(qreal value, qreal dpr) {
     return value;
   }
   return qRound(value * dpr) / dpr;
-}
-
-void drawCenteredPixmap(QPainter& painter,
-                        const QRect& iconRect,
-                        const QPixmap& pixmap,
-                        qreal pixmapDpr,
-                        qreal rotationDegrees = 0.0) {
-  if (pixmap.isNull()) {
-    return;
-  }
-
-  const QRectF iconRectF(iconRect);
-  const QPointF iconCenter = iconRectF.center();
-  const QSizeF drawSize = pixmap.deviceIndependentSize();
-
-  if (std::abs(rotationDegrees) > 0.001) {
-    painter.save();
-    painter.translate(iconCenter);
-    painter.rotate(rotationDegrees);
-    painter.drawPixmap(QPointF(-drawSize.width() / 2.0, -drawSize.height() / 2.0), pixmap);
-    painter.restore();
-    return;
-  }
-
-  QPointF drawTopLeft(iconCenter.x() - drawSize.width() / 2.0, iconCenter.y() - drawSize.height() / 2.0);
-  drawTopLeft.setX(snapToDevicePixel(drawTopLeft.x(), pixmapDpr));
-  drawTopLeft.setY(snapToDevicePixel(drawTopLeft.y(), pixmapDpr));
-  painter.drawPixmap(drawTopLeft, pixmap);
-}
-
-void drawRotatingTokenIcon(QPainter& painter,
-                           const QRect& iconRect,
-                           const adqt::icons::IconRef& token,
-                           qreal rotationDegrees) {
-  if (!adqt::icons::isValid(token) || iconRect.isEmpty()) {
-    return;
-  }
-
-  const QRectF iconRectF(iconRect);
-  const QPointF iconCenter = iconRectF.center();
-  painter.save();
-  painter.translate(iconCenter);
-  painter.rotate(rotationDegrees);
-  adqt::icons::paintIcon(&painter, token,
-                         QRectF(-iconRectF.width() / 2.0, -iconRectF.height() / 2.0,
-                                iconRectF.width(), iconRectF.height()),
-                         QIcon::Normal, QIcon::Off);
-  painter.restore();
-}
-
-void drawMenuIndicator(QPainter& painter, const QRect& indicatorRect, const QColor& color) {
-  if (indicatorRect.isEmpty()) {
-    return;
-  }
-
-  const qreal left = indicatorRect.left() + indicatorRect.width() * 0.2;
-  const qreal centerX = indicatorRect.center().x();
-  const qreal right = indicatorRect.right() - indicatorRect.width() * 0.2;
-  const qreal top = indicatorRect.top() + indicatorRect.height() * 0.35;
-  const qreal bottom = indicatorRect.bottom() - indicatorRect.height() * 0.25;
-
-  QPen pen(color, std::clamp(static_cast<qreal>(indicatorRect.height()) * 0.16, 1.0, 1.8),
-           Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-  painter.save();
-  painter.setPen(pen);
-  painter.setBrush(Qt::NoBrush);
-  painter.drawLine(QPointF(left, top), QPointF(centerX, bottom));
-  painter.drawLine(QPointF(centerX, bottom), QPointF(right, top));
-  painter.restore();
 }
 
 QRectF joinedBorderRect(const QRect& bounds, qreal borderWidth, bool joinedLeft, bool joinedRight) {
@@ -376,171 +199,49 @@ int sharedSpinnerAngle() {
   return static_cast<int>((phaseMs * 360) / cycleMs);
 }
 
-QRectF centeredSquareRect(const QRectF& rect) {
-  const qreal side = std::max<qreal>(0.0, std::min(rect.width(), rect.height()));
-  return QRectF(rect.center().x() - side / 2.0, rect.center().y() - side / 2.0, side, side);
-}
-
-QRectF resolveShapeRect(const QRectF& rect, AdButton::Shape shape) {
-  if (shape == AdButton::Shape::Circle) {
-    return centeredSquareRect(rect);
-  }
-  return rect;
-}
-
-qreal shapeRadius(AdButton::Shape shape, const QRectF& rect, int borderRadius) {
-  switch (shape) {
-    case AdButton::Shape::Rectangle:
-      return 0.0;
-    case AdButton::Shape::Pill:
-      return rect.height() / 2.0;
-    case AdButton::Shape::Circle:
-      return std::min(rect.width(), rect.height()) / 2.0;
-    case AdButton::Shape::Rounded:
-    default:
-      return static_cast<qreal>(borderRadius);
-  }
-}
-
-bool stateHasVisibleBorder(const detail::ButtonStateStyle& state, int borderWidth) {
-  return borderWidth > 0 && state.border.alpha() > 0;
-}
-
-bool styleHasVisibleBorder(const detail::ButtonVisualStyle& style) {
-  return stateHasVisibleBorder(style.normal, style.metrics.borderWidth) ||
-         stateHasVisibleBorder(style.hover, style.metrics.borderWidth) ||
-         stateHasVisibleBorder(style.active, style.metrics.borderWidth) ||
-         stateHasVisibleBorder(style.checked, style.metrics.borderWidth) ||
-         stateHasVisibleBorder(style.disabled, style.metrics.borderWidth);
-}
-
-int resolveHorizontalFrameWidth(const detail::ButtonVisualStyle& style,
-                                AdButton::Shape shape,
-                                bool joinedLeft,
-                                bool joinedRight,
-                                int horizontalPadding) {
-  if (shape == AdButton::Shape::Circle) {
-    return horizontalPadding * 2 + style.metrics.borderWidth * 2;
+bool isValidWaveColor(const QColor& color) {
+  if (!color.isValid() || color.alpha() <= 0) {
+    return false;
   }
 
-  constexpr int kProbeWidth = 512;
-  const QRect probeRect(0, 0, kProbeWidth, std::max(1, style.metrics.height));
-  const bool hasVisibleBorder = styleHasVisibleBorder(style);
-  const QRectF rawBorderRect =
-      joinedBorderRect(probeRect, style.metrics.borderWidth, joinedLeft, joinedRight);
-  const QRectF rawShapeRect = hasVisibleBorder ? rawBorderRect : QRectF(probeRect);
-  const QRectF shapeRect = resolveShapeRect(rawShapeRect, shape);
-  const QRectF rawContentRect = shapeRect.adjusted(horizontalPadding + style.metrics.borderWidth,
-                                                   style.metrics.borderWidth,
-                                                   -(horizontalPadding + style.metrics.borderWidth),
-                                                   -style.metrics.borderWidth);
-  const QRect contentRect = rawContentRect.toAlignedRect();
-  return std::max(0, probeRect.width() - contentRect.width());
-}
-
-CornerRadii resolveCorners(AdButton::Shape shape,
-                           const QRectF& rect,
-                           int borderRadius,
-                           bool joinedLeft,
-                           bool joinedRight) {
-  const qreal radius = shapeRadius(shape, rect, borderRadius);
-  CornerRadii corners{radius, radius, radius, radius};
-
-  if (joinedLeft) {
-    corners.topLeft = 0.0;
-    corners.bottomLeft = 0.0;
-  }
-  if (joinedRight) {
-    corners.topRight = 0.0;
-    corners.bottomRight = 0.0;
-  }
-  return corners;
-}
-
-struct InteractionOutline {
-  QRectF shapeRect;
-  CornerRadii corners;
-};
-
-class DisabledCursorOverlay final : public QWidget {
- public:
-  explicit DisabledCursorOverlay(QWidget* parent = nullptr) : QWidget(parent) {
-    setObjectName(QStringLiteral("ad-button-disabled-cursor-overlay"));
-    setAttribute(Qt::WA_NoSystemBackground, true);
-    setAttribute(Qt::WA_TranslucentBackground, true);
-    setAutoFillBackground(false);
-    setFocusPolicy(Qt::NoFocus);
+  // Align with antd wave util semantics:
+  // reject opaque white, but allow non-opaque colors.
+  if (color.red() == 255 && color.green() == 255 && color.blue() == 255 &&
+      color.alpha() == 255) {
+    return false;
   }
 
- protected:
-  void paintEvent(QPaintEvent* event) override { Q_UNUSED(event) }
-};
-
-InteractionOutline resolveInteractionOutline(const QRect& bounds,
-                                             const detail::ButtonVisualStyle& style,
-                                             const detail::ButtonStateStyle& state,
-                                             AdButton::Shape shape,
-                                             bool joinedLeft,
-                                             bool joinedRight) {
-  InteractionOutline outline;
-  const bool hasVisibleBorder = stateHasVisibleBorder(state, style.metrics.borderWidth);
-  const QRectF rawBorderRect =
-      joinedBorderRect(bounds, style.metrics.borderWidth, joinedLeft, joinedRight);
-  const QRectF rawShapeRect = hasVisibleBorder ? rawBorderRect : QRectF(bounds);
-  outline.shapeRect = resolveShapeRect(rawShapeRect, shape);
-  if (!outline.shapeRect.isEmpty()) {
-    outline.corners =
-        resolveCorners(shape, outline.shapeRect, style.metrics.borderRadius, joinedLeft, joinedRight);
-  }
-  return outline;
+  return true;
 }
 
 }  // namespace
 
 struct AdButton::ContentLayout {
-  bool hasText = false;
-  bool hasIcon = false;
-  QString text;
   QRect iconRect;
   QRect textRect;
+  QString text;
+  bool hasIcon = false;
+  bool hasText = false;
 };
 
-struct AdButton::Private {
-  ButtonStyle buttonStyle = ButtonStyle::Outline;
-  AccentRole accentRole = AccentRole::Neutral;
-  Shape shape = Shape::Rounded;
-  SizeClass sizeClass = SizeClass::Medium;
-  IconPosition iconPosition = IconPosition::Leading;
-  detail::SegmentPosition segmentPosition = detail::SegmentPosition::Standalone;
-
-  bool busy = false;
-  int busyDelayMs = -1;
-  bool busyIndicatorVisible = false;
-  bool hovered = false;
-  bool focusVisible = false;
-  bool busyDefaultSuspended = false;
-  bool suspendedDefault = false;
-  bool suspendedAutoDefault = false;
-  bool explicitCursorOverride = false;
-  bool autoCursorManaged = false;
-  bool applyingAutoCursor = false;
-  mutable bool circleTextWarningIssued = false;
-  QWidget* disabledCursorOverlay = nullptr;
-
-  adqt::icons::IconRef iconRef;
-  adqt::icons::IconRef busyIconRef;
-  bool spinnerSubscribed = false;
-};
-
-AdButton::AdButton(QWidget* parent) : QPushButton(parent), d_(std::make_unique<Private>()) {
+AdButton::AdButton(QWidget* parent) : QPushButton(parent), baseSizePolicy_(sizePolicy()) {
   setAttribute(Qt::WA_Hover, true);
-  setFocusPolicy(Qt::StrongFocus);
+  setAutoDefault(false);
+  setDefault(false);
 
-  connect(this, &QAbstractButton::toggled, this, [this]() {
-    bumpSegmentZOrder();
-    updateInteractionFocusOverlay();
-    update();
-  });
+  QSizePolicy policy = sizePolicy();
+  policy.setHorizontalPolicy(QSizePolicy::Fixed);
+  setSizePolicy(policy);
+  baseSizePolicy_ = policy;
+
+  connect(&adqt::theme::ThemeManager::instance(), &adqt::theme::ThemeManager::themeChanged, this,
+          [this]() {
+            if (loading_) {
+              updateLoadingVisualState();
+              return;
+            }
+            refreshAfterPropertyChange();
+          });
 
   refreshAfterPropertyChange();
 }
@@ -548,222 +249,339 @@ AdButton::AdButton(QWidget* parent) : QPushButton(parent), d_(std::make_unique<P
 AdButton::AdButton(const QString& text, QWidget* parent) : AdButton(parent) { setText(text); }
 
 AdButton::~AdButton() {
-  resetDisabledCursorOverlay();
   stopInteractionWaveForOwner(this);
   stopInteractionFocusForOwner(this);
   detail::cancelTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey));
   detail::clearFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey));
-  d_->spinnerSubscribed = false;
+  spinnerSubscribed_ = false;
 }
 
-AdButton::ButtonStyle AdButton::buttonStyle() const { return d_->buttonStyle; }
+AdButton::Type AdButton::type() const { return type_; }
 
-void AdButton::setButtonStyle(ButtonStyle value) {
-  if (d_->buttonStyle == value) {
+void AdButton::setType(Type value) {
+  if (type_ == value) {
     return;
   }
-  d_->buttonStyle = value;
+  type_ = value;
   refreshAfterPropertyChange();
-  emit buttonStyleChanged(d_->buttonStyle);
+  emit typeChanged(type_);
 }
 
-AdButton::AccentRole AdButton::accentRole() const { return d_->accentRole; }
+AdButton::Color AdButton::color() const { return color_; }
 
-void AdButton::setAccentRole(AccentRole value) {
-  if (d_->accentRole == value) {
+void AdButton::setColor(Color value) {
+  if (color_ == value && colorExplicit_) {
     return;
   }
-  d_->accentRole = value;
+  color_ = value;
+  colorExplicit_ = true;
   refreshAfterPropertyChange();
-  emit accentRoleChanged(d_->accentRole);
+  emit colorChanged(color_);
 }
 
-AdButton::Shape AdButton::shape() const { return d_->shape; }
+AdButton::Variant AdButton::variant() const { return variant_; }
+
+void AdButton::setVariant(Variant value) {
+  if (variant_ == value && variantExplicit_) {
+    return;
+  }
+  variant_ = value;
+  variantExplicit_ = true;
+  refreshAfterPropertyChange();
+  emit variantChanged(variant_);
+}
+
+AdButton::Shape AdButton::shape() const { return shape_; }
 
 void AdButton::setShape(Shape value) {
-  if (d_->shape == value) {
+  if (shape_ == value) {
     return;
   }
-  d_->shape = value;
+  shape_ = value;
   refreshAfterPropertyChange();
-  emit shapeChanged(d_->shape);
+  emit shapeChanged(shape_);
 }
 
-AdButton::SizeClass AdButton::sizeClass() const { return d_->sizeClass; }
+bool AdButton::joinedLeft() const { return joinedLeft_; }
 
-void AdButton::setSizeClass(SizeClass value) {
-  if (d_->sizeClass == value) {
+void AdButton::setJoinedLeft(bool value) {
+  if (joinedLeft_ == value) {
     return;
   }
-  d_->sizeClass = value;
-  refreshAfterPropertyChange();
-  emit sizeClassChanged(d_->sizeClass);
+  joinedLeft_ = value;
+  updateInteractionFocusOverlay();
+  update();
 }
 
-bool AdButton::busy() const { return d_->busy; }
+bool AdButton::joinedRight() const { return joinedRight_; }
 
-void AdButton::setBusy(bool value) {
-  if (d_->busy == value) {
+void AdButton::setJoinedRight(bool value) {
+  if (joinedRight_ == value) {
     return;
   }
-  d_->busy = value;
-  updateBusyVisualState();
+  joinedRight_ = value;
+  updateInteractionFocusOverlay();
+  update();
+}
+
+bool AdButton::leadingSeparatorVisible() const { return leadingSeparatorVisible_; }
+
+void AdButton::setLeadingSeparatorVisible(bool value) {
+  if (leadingSeparatorVisible_ == value) {
+    return;
+  }
+  leadingSeparatorVisible_ = value;
+  update();
+}
+
+QColor AdButton::leadingSeparatorColor() const { return leadingSeparatorColor_; }
+
+void AdButton::setLeadingSeparatorColor(const QColor& value) {
+  if (leadingSeparatorColor_ == value) {
+    return;
+  }
+  leadingSeparatorColor_ = value;
+  update();
+}
+
+int AdButton::leadingSeparatorWidth() const { return leadingSeparatorWidth_; }
+
+void AdButton::setLeadingSeparatorWidth(int value) {
+  const int normalized = std::max(1, value);
+  if (leadingSeparatorWidth_ == normalized) {
+    return;
+  }
+  leadingSeparatorWidth_ = normalized;
+  update();
+}
+
+AdButton::Size AdButton::size() const { return size_; }
+
+void AdButton::setSize(Size value) {
+  if (size_ == value && sizeExplicit_) {
+    return;
+  }
+  size_ = value;
+  sizeExplicit_ = true;
+  refreshAfterPropertyChange();
+  emit sizeChanged(size_);
+}
+
+bool AdButton::danger() const { return danger_; }
+
+void AdButton::setDanger(bool value) {
+  if (danger_ == value) {
+    return;
+  }
+  danger_ = value;
+  refreshAfterPropertyChange();
+  emit dangerChanged(danger_);
+}
+
+bool AdButton::ghost() const { return ghost_; }
+
+void AdButton::setGhost(bool value) {
+  if (ghost_ == value) {
+    return;
+  }
+  ghost_ = value;
+  refreshAfterPropertyChange();
+  emit ghostChanged(ghost_);
+}
+
+bool AdButton::block() const { return block_; }
+
+void AdButton::setBlock(bool value) {
+  if (block_ == value) {
+    return;
+  }
+  block_ = value;
+  applyBlockSizePolicy();
+  refreshAfterPropertyChange();
+  emit blockChanged(block_);
+}
+
+bool AdButton::loading() const { return loading_; }
+
+void AdButton::setLoading(bool value) {
+  if (loading_ == value) {
+    return;
+  }
+  loading_ = value;
+  updateLoadingVisualState();
   updateCursorForRole();
-  emit busyChanged(d_->busy);
+  emit loadingChanged(loading_);
 }
 
-int AdButton::busyDelayMs() const { return d_->busyDelayMs; }
+int AdButton::loadingDelay() const { return loadingDelay_; }
 
-void AdButton::setBusyDelayMs(int value) {
+void AdButton::setLoadingDelay(int value) {
   const int normalized = std::max(-1, value);
-  if (d_->busyDelayMs == normalized) {
+  if (loadingDelay_ == normalized) {
     return;
   }
-  d_->busyDelayMs = normalized;
-  updateBusyVisualState();
-  emit busyDelayMsChanged(d_->busyDelayMs);
+  loadingDelay_ = normalized;
+  updateLoadingVisualState();
+  emit loadingDelayChanged(loadingDelay_);
 }
 
-AdButton::IconPosition AdButton::iconPosition() const { return d_->iconPosition; }
+AdButton::IconPlacement AdButton::iconPlacement() const { return iconPlacement_; }
 
-void AdButton::setIconPosition(IconPosition value) {
-  if (d_->iconPosition == value) {
+void AdButton::setIconPlacement(IconPlacement value) {
+  if (iconPlacement_ == value) {
     return;
   }
-  d_->iconPosition = value;
+  iconPlacement_ = value;
   refreshAfterPropertyChange(false);
-  emit iconPositionChanged(d_->iconPosition);
+  emit iconPlacementChanged(iconPlacement_);
 }
 
-adqt::icons::IconRef AdButton::iconRef() const { return d_->iconRef; }
+bool AdButton::autoInsertSpace() const { return autoInsertSpace_; }
 
-void AdButton::setIconRef(const adqt::icons::IconRef& value) {
-  if (iconRefsEqual(d_->iconRef, value)) {
+void AdButton::setAutoInsertSpace(bool value) {
+  if (autoInsertSpace_ == value) {
     return;
   }
-  d_->iconRef = value;
+  autoInsertSpace_ = value;
   refreshAfterPropertyChange();
-  emit iconRefChanged(d_->iconRef);
+  emit autoInsertSpaceChanged(autoInsertSpace_);
 }
 
-adqt::icons::IconRef AdButton::busyIconRef() const { return d_->busyIconRef; }
+adqt::icons::IconToken AdButton::iconToken() const { return iconToken_; }
 
-void AdButton::setBusyIconRef(const adqt::icons::IconRef& value) {
-  if (iconRefsEqual(d_->busyIconRef, value)) {
+void AdButton::setIconToken(const adqt::icons::IconToken& value) {
+  if (iconToken_ == value) {
     return;
   }
-  d_->busyIconRef = value;
+  iconToken_ = value;
+  refreshAfterPropertyChange(false);
+  emit iconTokenChanged(iconToken_);
+}
+
+adqt::icons::IconToken AdButton::loadingIconToken() const { return loadingIconToken_; }
+
+void AdButton::setLoadingIconToken(const adqt::icons::IconToken& value) {
+  if (loadingIconToken_ == value) {
+    return;
+  }
+  loadingIconToken_ = value;
   updateSpinnerState();
-  refreshAfterPropertyChange();
-  emit busyIconRefChanged(d_->busyIconRef);
+  refreshAfterPropertyChange(false);
+  emit loadingIconTokenChanged(loadingIconToken_);
 }
 
-bool AdButton::event(QEvent* event) {
-  if (event) {
-    if (interactionBlocked() &&
-        (event->type() == QEvent::Shortcut || event->type() == QEvent::ShortcutOverride)) {
-      event->accept();
-      return true;
-    }
+bool AdButton::isLoadingVisible() const { return loadingVisible_; }
 
-    if (event->type() == QEvent::CursorChange && !d_->applyingAutoCursor) {
-      d_->autoCursorManaged = false;
-      d_->explicitCursorOverride = testAttribute(Qt::WA_SetCursor);
-      if (d_->explicitCursorOverride) {
-        syncDisabledCursorOverlay();
-      } else {
-        updateCursorForRole();
-      }
-    } else if (event->type() == QEvent::ToolTipChange) {
-      syncAccessibleState();
-    } else if (event->type() == QEvent::ActionAdded || event->type() == QEvent::ActionRemoved) {
-      updateGeometry();
-      updateInteractionFocusOverlay();
-      update();
-    } else if (event->type() == QEvent::ParentAboutToChange) {
-      resetDisabledCursorOverlay();
-    } else if (event->type() == QEvent::ParentChange) {
-      syncDisabledCursorOverlay();
-    } else if (event->type() == QEvent::ZOrderChange) {
-      updateDisabledCursorOverlayGeometry();
-    }
+void AdButton::resetSizeOverride() {
+  if (!sizeExplicit_) {
+    return;
   }
-  return QPushButton::event(event);
+  sizeExplicit_ = false;
+  refreshAfterPropertyChange();
 }
 
 void AdButton::paintEvent(QPaintEvent* event) {
   Q_UNUSED(event)
 
-  QStyleOptionButton option;
-  initStyleOption(&option);
+  detail::ButtonStyleInput input;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
+  input.baseFont = font();
 
-  const detail::ButtonVisualStyle style = resolvedStyle();
-  detail::ButtonStateStyle state = currentStateStyle(style);
-  const QString textToRender = option.text;
-  const Shape visualShape = effectiveShape(textToRender);
-  const bool hasMenuIndicator = option.features.testFlag(QStyleOptionButton::HasMenu);
-  const bool defaultButton = option.features.testFlag(QStyleOptionButton::DefaultButton);
+  const detail::ButtonVisualStyle style = detail::resolveButtonVisualStyle(input);
 
-  if (style.role.buttonStyle == ButtonStyle::Tonal && (joinsLeftEdge() || joinsRightEdge()) && state.background.isValid() &&
-      state.background.alpha() < 255) {
-    const auto map = adqt::theme::ThemeManager::instance().resolveTheme(this);
-    const QColor containerBg = parseThemeColor(map.colorBgContainer, QColor("#ffffff"));
-    state.background = compositeOn(state.background, containerBg);
+  const bool enabled = isEnabled();
+  const bool pressed = isDown();
+  const bool hovered = hovered_ && enabled;
+
+  detail::ButtonStateStyle state = style.normal;
+  if (!enabled) {
+    state = style.disabled;
+  } else if (pressed) {
+    state = style.active;
+  } else if (hovered) {
+    state = style.hover;
+  }
+
+  qreal radius = static_cast<qreal>(style.metrics.borderRadius);
+  if (shape_ == Shape::Square) {
+    radius = 0.0;
+  } else if (shape_ == Shape::Round || shape_ == Shape::Circle) {
+    radius = style.metrics.height / 2.0;
+  }
+
+  qreal topLeft = radius;
+  qreal topRight = radius;
+  qreal bottomRight = radius;
+  qreal bottomLeft = radius;
+
+  switch (groupPosition_) {
+    case GroupPosition::First:
+      topRight = 0.0;
+      bottomRight = 0.0;
+      break;
+    case GroupPosition::Middle:
+      topLeft = 0.0;
+      topRight = 0.0;
+      bottomRight = 0.0;
+      bottomLeft = 0.0;
+      break;
+    case GroupPosition::Last:
+      topLeft = 0.0;
+      bottomLeft = 0.0;
+      break;
+    case GroupPosition::Only:
+    case GroupPosition::None:
+    default:
+      break;
+  }
+  if (joinedLeft_) {
+    topLeft = 0.0;
+    bottomLeft = 0.0;
+  }
+  if (joinedRight_) {
+    topRight = 0.0;
+    bottomRight = 0.0;
   }
 
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, true);
-  const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : devicePixelRatioF();
 
   const bool hasVisibleBorder = style.metrics.borderWidth > 0 && state.border.alpha() > 0;
-  const QRectF rawBorderRect = joinedBorderRect(rect(), style.metrics.borderWidth, joinsLeftEdge(), joinsRightEdge());
-  const QRectF rawShapeRect = hasVisibleBorder ? rawBorderRect : QRectF(rect());
-  const QRectF shapeRect = resolveShapeRect(rawShapeRect, visualShape);
-  if (shapeRect.isEmpty()) {
-    return;
-  }
-  const CornerRadii corners =
-      resolveCorners(visualShape, shapeRect, style.metrics.borderRadius, joinsLeftEdge(), joinsRightEdge());
-
+  const QRectF borderRect =
+      joinedBorderRect(rect(), style.metrics.borderWidth, joinedLeft_, joinedRight_);
+  const QRectF shapeRect = hasVisibleBorder ? borderRect : QRectF(rect());
   QRectF fillRect = shapeRect;
-  if (visualShape != Shape::Circle && hasVisibleBorder && (joinsLeftEdge() || joinsRightEdge())) {
+  if (hasVisibleBorder && (joinedLeft_ || joinedRight_ || groupPosition_ != GroupPosition::None)) {
+    // Joined controls share an edge; fill the whole rect to avoid anti-aliased seams.
     fillRect = QRectF(rect());
   }
-  const QPainterPath fillPath = roundedRectPath(fillRect, corners.topLeft, corners.topRight,
-                                                corners.bottomRight, corners.bottomLeft);
+  const QPainterPath fillPath = roundedRectPath(fillRect, topLeft, topRight, bottomRight, bottomLeft);
 
-  if (isEnabled() && state.shadow.alpha() > 0 && !interactionBlocked()) {
+  if (enabled && state.shadow.alpha() > 0 && !interactionBlocked()) {
     const qreal shadowOffsetY = std::max<qreal>(0.0, style.metrics.shadowOffsetY);
-    const QPainterPath shadowPath = roundedRectPath(shapeRect.translated(0.0, shadowOffsetY), corners.topLeft,
-                                                    corners.topRight, corners.bottomRight,
-                                                    corners.bottomLeft);
+    QPainterPath shadowPath = roundedRectPath(shapeRect.translated(0.0, shadowOffsetY), topLeft,
+                                              topRight, bottomRight, bottomLeft);
     painter.fillPath(shadowPath, state.shadow);
   }
 
   painter.fillPath(fillPath, state.background);
 
-  if (visualShape != Shape::Circle && !hasVisibleBorder && (joinsLeftEdge() || joinsRightEdge())) {
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing, false);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(state.background);
-    const int joinedEdgeClearWidth = std::max(1, qCeil(1.0 / std::max<qreal>(1.0, dpr)));
-    if (joinsLeftEdge()) {
-      painter.drawRect(QRect(0, 0, joinedEdgeClearWidth, height()));
-    }
-    if (joinsRightEdge()) {
-      painter.drawRect(QRect(std::max(0, width() - joinedEdgeClearWidth), 0, joinedEdgeClearWidth, height()));
-    }
-    painter.restore();
-  }
-
   if (hasVisibleBorder) {
     const QPainterPath borderPath =
-        roundedRectPath(shapeRect, corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft);
+        roundedRectPath(borderRect, topLeft, topRight, bottomRight, bottomLeft);
     QPen borderPen(state.border, style.metrics.borderWidth, state.borderStyle, Qt::SquareCap,
                    Qt::MiterJoin);
     if (state.borderStyle == Qt::DashLine) {
       borderPen.setStyle(Qt::CustomDashLine);
+
+      // Match CSS dashed border rhythm more closely than Qt's default DashLine.
       const qreal penWidth = std::max<qreal>(1.0, borderPen.widthF());
       borderPen.setDashPattern({3.0 / penWidth, 2.0 / penWidth});
       borderPen.setCapStyle(Qt::FlatCap);
@@ -774,66 +592,46 @@ void AdButton::paintEvent(QPaintEvent* event) {
     painter.drawPath(borderPath);
   }
 
-  if (defaultButton && isEnabled() && style.metrics.defaultOutline.isValid() &&
-      style.metrics.defaultOutline.alpha() > 0 && style.metrics.defaultOutlineWidth > 0.0) {
-    const qreal outlineOffset = std::max<qreal>(0.0, style.metrics.defaultOutlineOffset);
-    const QRectF outlineRect =
-        shapeRect.adjusted(-outlineOffset, -outlineOffset, outlineOffset, outlineOffset);
-    const QPainterPath outlinePath =
-        roundedRectPath(outlineRect, corners.topLeft > 0.0 ? corners.topLeft + outlineOffset : 0.0,
-                        corners.topRight > 0.0 ? corners.topRight + outlineOffset : 0.0,
-                        corners.bottomRight > 0.0 ? corners.bottomRight + outlineOffset : 0.0,
-                        corners.bottomLeft > 0.0 ? corners.bottomLeft + outlineOffset : 0.0);
-    painter.save();
-    painter.setPen(QPen(style.metrics.defaultOutline, style.metrics.defaultOutlineWidth,
-                        Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawPath(outlinePath);
-    painter.restore();
+  if (leadingSeparatorVisible_) {
+    QColor separatorColor = leadingSeparatorColor_;
+    if (!separatorColor.isValid() || separatorColor.alpha() <= 0) {
+      separatorColor = state.border;
+    }
+    if (separatorColor.isValid() && separatorColor.alpha() > 0) {
+      painter.save();
+      painter.setRenderHint(QPainter::Antialiasing, false);
+      painter.setPen(Qt::NoPen);
+      painter.setBrush(separatorColor);
+      painter.drawRect(QRect(0, 0, std::max(1, leadingSeparatorWidth_), height()));
+      painter.restore();
+    }
   }
 
   painter.setFont(style.metrics.font);
   QFontMetrics fm(style.metrics.font);
-  const bool twoCnAutoSpacing = shouldApplyTwoCjkSpacing(textToRender);
-  const int textFlags = mnemonicTextFlags(this);
-  const ButtonIconRenderState iconState = resolveIconRenderState(*this, d_->busyIndicatorVisible);
-  const bool hasIcon = iconState.hasVisibleIcon();
+
+  const QString textToRender = renderText();
+  const bool twoCnAutoSpacing = shouldApplyTwoCnSpacing(textToRender);
+  adqt::icons::IconToken iconToRender = iconToken_;
+  if (loadingVisible_) {
+    iconToRender =
+        adqt::icons::isValid(loadingIconToken_) ? loadingIconToken_ : outlined_icons::Loading();
+  }
+  const bool hasIcon = adqt::icons::isValid(iconToRender);
   const bool iconOnly = hasIcon && textToRender.isEmpty();
 
   int iconSide = resolveIconSide(this, fm, style.metrics.font);
-  if (visualShape == Shape::Circle || iconOnly) {
-    iconSide = std::min(iconSide, std::max(8, qRound(shapeRect.height()) - 8));
+
+  if ((shape_ == Shape::Circle || iconOnly) && groupPosition_ == GroupPosition::None) {
+    iconSide = std::min(iconSide, std::max(8, height() - 8));
   }
 
-  const int horizontalPadding =
-      (iconOnly || visualShape == Shape::Circle) ? 0 : style.metrics.horizontalPadding;
-  const QRectF rawContentRect = shapeRect.adjusted(horizontalPadding + style.metrics.borderWidth,
-                                                   style.metrics.borderWidth,
-                                                   -(horizontalPadding + style.metrics.borderWidth),
-                                                   -style.metrics.borderWidth);
-  QRect contentRect = rawContentRect.toAlignedRect();
-  QRect menuIndicatorRect;
-  if (hasMenuIndicator) {
-    const int reserve = style.metrics.menuIndicatorSize + style.metrics.menuIndicatorGap;
-    if (layoutDirection() == Qt::LeftToRight) {
-      contentRect.adjust(0, 0, -reserve, 0);
-      menuIndicatorRect = QRect(std::max(contentRect.right() + 1 + style.metrics.menuIndicatorGap,
-                                         rawContentRect.toAlignedRect().left()),
-                                rawContentRect.toAlignedRect().top() +
-                                    (rawContentRect.toAlignedRect().height() -
-                                     style.metrics.menuIndicatorSize) /
-                                        2,
-                                style.metrics.menuIndicatorSize, style.metrics.menuIndicatorSize);
-    } else {
-      contentRect.adjust(reserve, 0, 0, 0);
-      menuIndicatorRect = QRect(rawContentRect.toAlignedRect().left(),
-                                rawContentRect.toAlignedRect().top() +
-                                    (rawContentRect.toAlignedRect().height() -
-                                     style.metrics.menuIndicatorSize) /
-                                        2,
-                                style.metrics.menuIndicatorSize, style.metrics.menuIndicatorSize);
-    }
-  }
+  const int horizontalPadding = (iconOnly || shape_ == Shape::Circle) ? 0 : style.metrics.horizontalPadding;
+
+  QRect contentRect = rect().adjusted(horizontalPadding + style.metrics.borderWidth,
+                                      style.metrics.borderWidth,
+                                      -(horizontalPadding + style.metrics.borderWidth),
+                                      -style.metrics.borderWidth);
   if (contentRect.width() < 0 || contentRect.height() < 0) {
     return;
   }
@@ -841,42 +639,47 @@ void AdButton::paintEvent(QPaintEvent* event) {
   const QSize layoutIconSize = hasIcon ? QSize(iconSide, iconSide) : QSize();
   const ContentLayout layout = computeContentLayout(contentRect, layoutIconSize, textToRender, fm,
                                                     style.metrics.iconGap, style.metrics.font,
-                                                    twoCnAutoSpacing, textFlags);
+                                                    twoCnAutoSpacing);
 
   QColor contentColor = state.text;
-  if (iconState.busyIndicatorVisible) {
+  if (loadingVisible_) {
     contentColor.setAlphaF(contentColor.alphaF() * 0.72);
   }
+
   painter.setPen(contentColor);
 
   if (layout.hasIcon) {
-    if (iconState.drawBuiltinSpinner()) {
+    const bool drawBuiltinLoadingSpinner = loadingVisible_ && !adqt::icons::isValid(loadingIconToken_);
+    if (drawBuiltinLoadingSpinner) {
       drawSpinner(painter, layout.iconRect, contentColor);
-    } else if (iconState.hasTokenIcon) {
-      adqt::icons::IconRef iconToRender = iconState.token;
-      if (shouldInheritCurrentColor(iconToRender)) {
-        iconToRender.colors.primary = contentColor;
-        iconToRender.colors.hasPrimary = true;
-      }
-      if (iconState.busyIndicatorVisible) {
-        drawRotatingTokenIcon(painter, layout.iconRect, iconToRender,
-                              static_cast<qreal>(sharedSpinnerAngle()));
-      } else {
-        const qreal pixmapDpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
-        const QPixmap pixmap = adqt::icons::renderIconPixmap(iconToRender, layout.iconRect.size(), pixmapDpr,
-                                                             QIcon::Normal, QIcon::Off);
-        if (!pixmap.isNull()) {
-          drawCenteredPixmap(painter, layout.iconRect, pixmap, pixmapDpr);
-        }
-      }
-    } else if (iconState.hasFallbackIcon) {
-      const QIcon::Mode iconMode = !isEnabled() ? QIcon::Disabled
-                                                : (isDown() ? QIcon::Selected
-                                                            : (d_->hovered ? QIcon::Active : QIcon::Normal));
-      const QIcon::State iconState = isChecked() ? QIcon::On : QIcon::Off;
-      const QPixmap pixmap = QAbstractButton::icon().pixmap(layout.iconRect.size(), iconMode, iconState);
+    } else {
+      iconToRender = detail::iconWithInheritedColor(iconToRender, contentColor);
+      const QIcon::Mode mode = enabled ? QIcon::Normal : QIcon::Disabled;
+      const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
+      const QPixmap pixmap =
+          adqt::icons::renderIconPixmap(iconToRender, layout.iconRect.size(), dpr, mode, QIcon::Off);
       if (!pixmap.isNull()) {
-        drawCenteredPixmap(painter, layout.iconRect, pixmap, pixmap.devicePixelRatio());
+        const QRectF iconRectF(layout.iconRect);
+        const QPointF iconCenter = iconRectF.center();
+        const QSizeF drawSize = pixmap.deviceIndependentSize();
+        QPointF drawTopLeft(iconCenter.x() - drawSize.width() / 2.0,
+                            iconCenter.y() - drawSize.height() / 2.0);
+        if (loadingVisible_) {
+          painter.save();
+          painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+          painter.translate(iconCenter);
+          painter.rotate(static_cast<qreal>(sharedSpinnerAngle()));
+          painter.translate(-iconCenter);
+          painter.drawPixmap(drawTopLeft, pixmap);
+          painter.restore();
+        } else {
+          drawTopLeft.setX(snapToDevicePixel(drawTopLeft.x(), dpr));
+          drawTopLeft.setY(snapToDevicePixel(drawTopLeft.y(), dpr));
+          painter.drawPixmap(drawTopLeft, pixmap);
+        }
+      } else if (loadingVisible_) {
+        // Fallback when loading icon resource is unavailable.
+        drawSpinner(painter, layout.iconRect, contentColor);
       }
     }
   }
@@ -884,64 +687,62 @@ void AdButton::paintEvent(QPaintEvent* event) {
   if (layout.hasText) {
     if (twoCnAutoSpacing && isTwoChineseCharacters(layout.text)) {
       const int spacingPx = twoCnLetterSpacingPx(fm, style.metrics.font);
-      const int firstWidth = measureTextWidth(fm, QString(layout.text.at(0)), textFlags);
+      const int firstWidth = measureTextWidth(fm, QString(layout.text.at(0)));
       const int baseline = layout.textRect.top() + fm.ascent();
+
       painter.drawText(layout.textRect.left(), baseline, QString(layout.text.at(0)));
       painter.drawText(layout.textRect.left() + firstWidth + spacingPx, baseline,
                        QString(layout.text.at(1)));
     } else {
-      painter.drawText(layout.textRect, Qt::AlignLeft | Qt::AlignVCenter | textFlags, layout.text);
+      painter.drawText(layout.textRect, Qt::AlignLeft | Qt::AlignVCenter, layout.text);
     }
-  }
-
-  if (hasMenuIndicator) {
-    drawMenuIndicator(painter, menuIndicatorRect, contentColor);
   }
 }
 
 QSize AdButton::sizeHint() const {
-  QStyleOptionButton option;
-  initStyleOption(&option);
+  detail::ButtonStyleInput input;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
+  input.baseFont = font();
 
-  const detail::ButtonVisualStyle style = resolvedStyle();
-
+  const detail::ButtonVisualStyle style = detail::resolveButtonVisualStyle(input);
   QFontMetrics fm(style.metrics.font);
-  const QString textToMeasure = option.text;
-  const Shape visualShape = effectiveShape(textToMeasure);
-  const bool hasMenuIndicator = option.features.testFlag(QStyleOptionButton::HasMenu);
-  const bool twoCnAutoSpacing = shouldApplyTwoCjkSpacing(textToMeasure);
-  const int textFlags = mnemonicTextFlags(this);
-  const ButtonIconRenderState iconState = resolveIconRenderState(*this, d_->busyIndicatorVisible);
-  const bool hasIcon = iconState.hasVisibleIcon();
+
+  const QString textToMeasure = renderText();
+  const bool twoCnAutoSpacing = shouldApplyTwoCnSpacing(textToMeasure);
+  const bool hasIcon = loadingVisible_ || hasUserIcon();
   const bool iconOnly = hasIcon && textToMeasure.isEmpty();
-  int iconSide = resolveIconSide(this, fm, style.metrics.font);
-  if (visualShape == Shape::Circle || iconOnly) {
-    iconSide = std::min(iconSide, std::max(8, style.metrics.height - 8));
-  }
+
+  const int iconSide = resolveIconSide(this, fm, style.metrics.font);
+
   const int textWidth = textToMeasure.isEmpty()
                             ? 0
                             : measureDisplayTextWidth(fm, style.metrics.font, textToMeasure,
-                                                      twoCnAutoSpacing, textFlags);
-  const int horizontalPadding =
-      (iconOnly || visualShape == Shape::Circle) ? 0 : style.metrics.horizontalPadding;
-  const int horizontalFrameWidth =
-      resolveHorizontalFrameWidth(style, visualShape, joinsLeftEdge(), joinsRightEdge(), horizontalPadding);
+                                                      twoCnAutoSpacing);
+  const int horizontalPadding = (iconOnly || shape_ == Shape::Circle) ? 0 : style.metrics.horizontalPadding;
 
-  int width = horizontalFrameWidth + textWidth;
+  int width = horizontalPadding * 2 + style.metrics.borderWidth * 2 + textWidth;
   if (hasIcon) {
     width += iconSide;
   }
   if (hasIcon && !textToMeasure.isEmpty()) {
     width += style.metrics.iconGap;
   }
-  if (hasMenuIndicator) {
-    width += style.metrics.menuIndicatorSize + style.metrics.menuIndicatorGap;
+
+  int height = style.metrics.height;
+
+  if (iconOnly) {
+    width = height;
+  } else if (shape_ == Shape::Circle) {
+    width = std::max(width, height);
   }
 
-  const int height = style.metrics.height;
-  if (iconOnly || visualShape == Shape::Circle) {
-    width = height;
-  }
   return QSize(width, height);
 }
 
@@ -959,18 +760,11 @@ void AdButton::changeEvent(QEvent* event) {
         stopInteractionWaveForOwner(this);
         stopInteractionFocusForOwner(this);
       }
-      syncAccessibleState();
       updateCursorForRole();
-      syncDisabledCursorOverlay();
       updateInteractionFocusOverlay();
       update();
       break;
-    case QEvent::PaletteChange:
-    case QEvent::ApplicationPaletteChange:
     case QEvent::FontChange:
-    case QEvent::ApplicationFontChange:
-    case QEvent::LayoutDirectionChange:
-    case QEvent::StyleChange:
       refreshAfterPropertyChange();
       break;
     default:
@@ -980,15 +774,14 @@ void AdButton::changeEvent(QEvent* event) {
 
 void AdButton::enterEvent(QEnterEvent* event) {
   QPushButton::enterEvent(event);
-  d_->hovered = true;
-  updateCursorForRole();
-  bumpSegmentZOrder();
+  hovered_ = true;
+  bumpGroupZOrder();
   update();
 }
 
 void AdButton::leaveEvent(QEvent* event) {
   QPushButton::leaveEvent(event);
-  d_->hovered = false;
+  hovered_ = false;
   update();
 }
 
@@ -997,10 +790,10 @@ void AdButton::mousePressEvent(QMouseEvent* event) {
     event->ignore();
     return;
   }
-  d_->focusVisible = false;
+  focusVisible_ = false;
   updateInteractionFocusOverlay();
   QPushButton::mousePressEvent(event);
-  bumpSegmentZOrder();
+  bumpGroupZOrder();
 }
 
 void AdButton::mouseReleaseEvent(QMouseEvent* event) {
@@ -1008,16 +801,19 @@ void AdButton::mouseReleaseEvent(QMouseEvent* event) {
     event->ignore();
     return;
   }
-  const bool shouldTriggerWave =
-      event && event->button() == Qt::LeftButton && isDown() && hitButton(mouseEventPos(event));
+
+  const bool shouldStartWave =
+      event && event->button() == Qt::LeftButton && rect().contains(mouseEventPos(event));
   QPushButton::mouseReleaseEvent(event);
-  if (shouldTriggerWave && isEnabled() && !interactionBlocked()) {
+  if (shouldStartWave && isEnabled() && !interactionBlocked()) {
     triggerInteractionWaveOverlay();
   }
 }
 
 void AdButton::keyPressEvent(QKeyEvent* event) {
-  if (interactionBlocked() && event && isActivationKey(event->key())) {
+  if (interactionBlocked() &&
+      (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return ||
+       event->key() == Qt::Key_Enter)) {
     event->ignore();
     return;
   }
@@ -1025,160 +821,102 @@ void AdButton::keyPressEvent(QKeyEvent* event) {
 }
 
 void AdButton::keyReleaseEvent(QKeyEvent* event) {
-  const bool activationKey = event && isActivationKey(event->key());
-  if (interactionBlocked() && activationKey) {
+  if (interactionBlocked() &&
+      (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return ||
+       event->key() == Qt::Key_Enter)) {
     event->ignore();
     return;
   }
   QPushButton::keyReleaseEvent(event);
-  if (activationKey && event && !event->isAutoRepeat() && isEnabled() && !interactionBlocked()) {
+  if (!event->isAutoRepeat() &&
+      (event->key() == Qt::Key_Space || event->key() == Qt::Key_Return ||
+       event->key() == Qt::Key_Enter) &&
+      isEnabled() && !interactionBlocked()) {
     triggerInteractionWaveOverlay();
   }
 }
 
-bool AdButton::hitButton(const QPoint& pos) const {
-  const Shape visualShape = effectiveShape(renderText());
-  if (visualShape != Shape::Circle) {
-    return QPushButton::hitButton(pos);
-  }
-
-  const detail::ButtonVisualStyle style = resolvedStyle();
-  const detail::ButtonStateStyle state = currentStateStyle(style);
-  const bool hasVisibleBorder = style.metrics.borderWidth > 0 && state.border.alpha() > 0;
-  const QRectF rawBorderRect = joinedBorderRect(rect(), style.metrics.borderWidth, joinsLeftEdge(), joinsRightEdge());
-  const QRectF shapeRect =
-      resolveShapeRect(hasVisibleBorder ? rawBorderRect : QRectF(rect()), visualShape);
-  const QRectF circleRect = centeredSquareRect(shapeRect);
-  if (circleRect.isEmpty()) {
-    return false;
-  }
-
-  const QPointF delta = QPointF(pos) - circleRect.center();
-  const qreal radius = circleRect.width() / 2.0;
-  return delta.x() * delta.x() + delta.y() * delta.y() <= radius * radius;
-}
-
 void AdButton::focusInEvent(QFocusEvent* event) {
   QPushButton::focusInEvent(event);
-  d_->focusVisible = event && isKeyboardFocusReason(event->reason());
+  focusVisible_ = event && isKeyboardFocusReason(event->reason());
   updateInteractionFocusOverlay();
   update();
 }
 
 void AdButton::focusOutEvent(QFocusEvent* event) {
   QPushButton::focusOutEvent(event);
-  d_->focusVisible = false;
+  focusVisible_ = false;
   updateInteractionFocusOverlay();
   update();
 }
 
 void AdButton::moveEvent(QMoveEvent* event) {
   QPushButton::moveEvent(event);
-  updateDisabledCursorOverlayGeometry();
   updateInteractionFocusOverlay();
 }
 
 void AdButton::resizeEvent(QResizeEvent* event) {
   QPushButton::resizeEvent(event);
-  updateDisabledCursorOverlayGeometry();
   updateInteractionFocusOverlay();
 }
 
 void AdButton::showEvent(QShowEvent* event) {
   QPushButton::showEvent(event);
-  updateSpinnerState();
-  updateCursorForRole();
-  syncDisabledCursorOverlay();
   updateInteractionFocusOverlay();
 }
 
 void AdButton::hideEvent(QHideEvent* event) {
   QPushButton::hideEvent(event);
-  updateSpinnerState();
-  syncDisabledCursorOverlay();
-  stopInteractionFocusForOwner(this);
-  stopInteractionWaveForOwner(this);
+  updateInteractionFocusOverlay();
 }
 
-bool AdButton::interactionBlocked() const { return !isEnabled() || d_->busy; }
+bool AdButton::interactionBlocked() const { return loadingVisible_; }
 
-bool AdButton::hasUserIconRef() const {
-  return adqt::icons::isValid(d_->iconRef) || hasBaseIcon();
-}
+bool AdButton::hasUserIcon() const { return adqt::icons::isValid(iconToken_); }
 
-bool AdButton::hasBaseIcon() const { return !QPushButton::icon().isNull(); }
-
-bool AdButton::shouldApplyTwoCjkSpacing(const QString& sourceText) const {
-  if (sourceText.isEmpty()) {
-    return false;
-  }
-  if (hasMnemonicMarker(sourceText)) {
+bool AdButton::shouldApplyTwoCnSpacing(const QString& sourceText) const {
+  if (!autoInsertSpace_ || sourceText.isEmpty()) {
     return false;
   }
 
-  const detail::ResolvedRole role = detail::resolveRole(buildStyleInput());
-  if (role.unbordered || hasUserIconRef() || d_->busyIndicatorVisible) {
-    return false;
-  }
-  return isTwoChineseCharacters(stripMnemonicMarkers(sourceText));
-}
-
-AdButton::Shape AdButton::effectiveShape(const QString& displayText) const {
-  if (d_->shape != Shape::Circle) {
-    return d_->shape;
-  }
-  if (displayText.isEmpty() && QPushButton::menu() == nullptr) {
-    return Shape::Circle;
-  }
-
-#ifdef QT_DEBUG
-  if (!displayText.isEmpty() && !d_->circleTextWarningIssued) {
-    d_->circleTextWarningIssued = true;
-    qWarning().nospace() << "AdButton: Shape::Circle only supports icon-only usage; falling back to "
-                         << "Shape::Pill for button text \"" << displayText << "\".";
-  }
-#endif
-  return Shape::Pill;
-}
-
-QString AdButton::renderText() const { return QAbstractButton::text(); }
-
-detail::ButtonStyleInput AdButton::buildStyleInput() const {
   detail::ButtonStyleInput input;
-  input.buttonStyle = d_->buttonStyle;
-  input.accentRole = d_->accentRole;
-  input.sizeClass = d_->sizeClass;
-  input.flat = isFlat();
-  input.defaultButton = isDefault();
-  input.hasMenu = QPushButton::menu() != nullptr;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
   input.baseFont = font();
-  return input;
+
+  const detail::ResolvedRole role = detail::resolveRole(input);
+  if (role.unbordered || hasUserIcon()) {
+    return false;
+  }
+
+  return isTwoChineseCharacters(sourceText);
 }
 
-detail::ButtonVisualStyle AdButton::resolvedStyle() const {
-  const adqt::theme::ResolvedTheme resolvedTheme = adqt::theme::ThemeManager::instance().resolve(this);
-  return detail::resolveButtonVisualStyle(buildStyleInput(), resolvedTheme);
-}
-
-detail::ButtonStateStyle AdButton::currentStateStyle(const detail::ButtonVisualStyle& style) const {
-  if (!isEnabled()) {
-    return style.disabled;
-  }
-  if (isDown()) {
-    return style.active;
-  }
-  if (isChecked()) {
-    return style.checked;
-  }
-  if (d_->hovered) {
-    return style.hover;
-  }
-  return style.normal;
+QString AdButton::renderText() const {
+  return text();
 }
 
 void AdButton::refreshAfterPropertyChange(bool updateGeometryHint) {
+  detail::ButtonStyleInput input;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
+  input.baseFont = font();
+
+  const detail::ButtonVisualStyle style = detail::resolveButtonVisualStyle(input);
+  setMinimumHeight(style.metrics.height);
   updateSpinnerState();
-  syncAccessibleState();
   updateCursorForRole();
 
   if (updateGeometryHint) {
@@ -1188,173 +926,144 @@ void AdButton::refreshAfterPropertyChange(bool updateGeometryHint) {
   update();
 }
 
-void AdButton::updateBusyVisualState() {
+void AdButton::updateLoadingVisualState() {
   detail::cancelTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey));
 
-  if (!d_->busy) {
-    d_->busyIndicatorVisible = false;
-  } else if (d_->busyDelayMs < 0 || detail::resolveLoadingDelayMs(d_->busyDelayMs) <= 0) {
-    d_->busyIndicatorVisible = true;
+  if (!loading_) {
+    loadingVisible_ = false;
+  } else if (detail::resolveLoadingDelayMs(loadingDelay_) <= 0) {
+    loadingVisible_ = true;
   } else {
-    d_->busyIndicatorVisible = false;
-    const int delayMs = detail::resolveLoadingDelayMs(d_->busyDelayMs);
+    loadingVisible_ = false;
+    const int delayMs = detail::resolveLoadingDelayMs(loadingDelay_);
     detail::scheduleTimingTask(this, QString::fromLatin1(kLoadingDelayTaskKey), delayMs, [this]() {
-      if (!d_->busy) {
+      if (!loading_) {
         return;
       }
-      d_->busyIndicatorVisible = true;
+      loadingVisible_ = true;
       updateSpinnerState();
       refreshAfterPropertyChange();
     });
   }
 
+  updateSpinnerState();
   if (interactionBlocked()) {
-    setDown(false);
     stopInteractionWaveForOwner(this);
   }
-
-  syncBusyDefaultSuspension();
-  updateSpinnerState();
-  updateCursorForRole();
-  updateInteractionFocusOverlay();
   refreshAfterPropertyChange();
 }
 
-void AdButton::syncBusyDefaultSuspension() {
-  if (!d_->busy) {
-    if (!d_->busyDefaultSuspended) {
-      return;
-    }
-
-    const bool restoreAutoDefault = d_->suspendedAutoDefault;
-    const bool restoreDefault = d_->suspendedDefault;
-    d_->busyDefaultSuspended = false;
-    d_->suspendedAutoDefault = false;
-    d_->suspendedDefault = false;
-
-    if (QPushButton::autoDefault() != restoreAutoDefault) {
-      QPushButton::setAutoDefault(restoreAutoDefault);
-    }
-    if (QPushButton::isDefault() != restoreDefault) {
-      QPushButton::setDefault(restoreDefault);
-    }
-    return;
-  }
-
-  if (!d_->busyDefaultSuspended) {
-    d_->suspendedAutoDefault = QPushButton::autoDefault();
-    d_->suspendedDefault = QPushButton::isDefault();
-    d_->busyDefaultSuspended = d_->suspendedAutoDefault || d_->suspendedDefault;
-  } else {
-    d_->suspendedAutoDefault = d_->suspendedAutoDefault || QPushButton::autoDefault();
-    d_->suspendedDefault = d_->suspendedDefault || QPushButton::isDefault();
-  }
-
-  if (QPushButton::autoDefault()) {
-    QPushButton::setAutoDefault(false);
-  }
-  if (QPushButton::isDefault()) {
-    QPushButton::setDefault(false);
-  }
-}
-
 void AdButton::updateSpinnerState() {
-  const bool spinning = d_->busyIndicatorVisible && isVisible();
-  if (spinning && !d_->spinnerSubscribed) {
+  const bool spinning = loadingVisible_;
+  if (spinning && !spinnerSubscribed_) {
     detail::setFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey), true,
                                  [this](qint64, qint64) {
-                                   if (!d_->busyIndicatorVisible || !isVisible()) {
+                                   if (!loadingVisible_ || !isVisible()) {
                                      return;
                                    }
                                    update();
                                  });
-    d_->spinnerSubscribed = true;
-  } else if (!spinning && d_->spinnerSubscribed) {
+    spinnerSubscribed_ = true;
+  } else if (!spinning && spinnerSubscribed_) {
     detail::clearFrameSubscription(this, QString::fromLatin1(kSpinnerFrameKey));
-    d_->spinnerSubscribed = false;
+    spinnerSubscribed_ = false;
   }
 }
 
-void AdButton::bumpSegmentZOrder() {
-  if (joinsLeftEdge() || joinsRightEdge() || isChecked()) {
+void AdButton::applyBlockSizePolicy() {
+  if (block_) {
+    QSizePolicy policy = sizePolicy();
+    policy.setHorizontalPolicy(QSizePolicy::Expanding);
+    setSizePolicy(policy);
+  } else {
+    setSizePolicy(baseSizePolicy_);
+  }
+}
+
+void AdButton::bumpGroupZOrder() {
+  if (groupPosition_ != GroupPosition::None || joinedLeft_ || joinedRight_) {
     raise();
   }
-  updateDisabledCursorOverlayGeometry();
-}
-
-std::optional<Qt::CursorShape> AdButton::automaticCursorShape() const {
-  if (!isEnabled()) {
-    return Qt::ForbiddenCursor;
-  }
-  if (d_->busy) {
-    return Qt::ArrowCursor;
-  }
-  return Qt::PointingHandCursor;
-}
-
-void AdButton::syncDisabledCursorOverlay() {
-  const bool needsOverlay = !isEnabled() && isVisible();
-  QWidget* container = parentWidget();
-  if (!needsOverlay || !container) {
-    if (d_->disabledCursorOverlay) {
-      d_->disabledCursorOverlay->hide();
-    }
-    return;
-  }
-
-  if (!d_->disabledCursorOverlay || d_->disabledCursorOverlay->parentWidget() != container) {
-    resetDisabledCursorOverlay();
-    d_->disabledCursorOverlay = new DisabledCursorOverlay(container);
-  }
-
-  d_->disabledCursorOverlay->setCursor(cursor());
-  d_->disabledCursorOverlay->show();
-  updateDisabledCursorOverlayGeometry();
-}
-
-void AdButton::updateDisabledCursorOverlayGeometry() {
-  if (!d_->disabledCursorOverlay) {
-    return;
-  }
-
-  QWidget* container = d_->disabledCursorOverlay->parentWidget();
-  if (!container || isEnabled() || !isVisible() || size().isEmpty()) {
-    d_->disabledCursorOverlay->hide();
-    return;
-  }
-
-  d_->disabledCursorOverlay->setGeometry(QRect(mapTo(container, QPoint(0, 0)), size()));
-  d_->disabledCursorOverlay->raise();
-}
-
-void AdButton::resetDisabledCursorOverlay() {
-  if (!d_->disabledCursorOverlay) {
-    return;
-  }
-  d_->disabledCursorOverlay->deleteLater();
-  d_->disabledCursorOverlay = nullptr;
 }
 
 void AdButton::updateCursorForRole() {
-  applyAutomaticCursor(automaticCursorShape());
-  syncDisabledCursorOverlay();
+  if (!isEnabled() || interactionBlocked()) {
+    unsetCursor();
+    return;
+  }
+  setCursor(Qt::PointingHandCursor);
 }
 
 void AdButton::updateInteractionFocusOverlay() {
-  if (!(hasFocus() && isEnabled() && d_->focusVisible && isVisible())) {
+  if (!(hasFocus() && isEnabled() && focusVisible_ && isVisible())) {
     stopInteractionFocusForOwner(this);
     return;
   }
 
-  const detail::ButtonVisualStyle style = resolvedStyle();
-  const detail::ButtonStateStyle state = currentStateStyle(style);
-  const Shape visualShape = effectiveShape(renderText());
-  const InteractionOutline outline =
-      resolveInteractionOutline(rect(), style, state, visualShape, joinsLeftEdge(), joinsRightEdge());
-  if (outline.shapeRect.isEmpty()) {
-    stopInteractionFocusForOwner(this);
-    return;
+  detail::ButtonStyleInput input;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
+  input.baseFont = font();
+
+  const detail::ButtonVisualStyle style = detail::resolveButtonVisualStyle(input);
+  detail::ButtonStateStyle state = style.normal;
+  if (isDown()) {
+    state = style.active;
+  } else if (hovered_) {
+    state = style.hover;
   }
+
+  qreal radius = static_cast<qreal>(style.metrics.borderRadius);
+  if (shape_ == Shape::Square) {
+    radius = 0.0;
+  } else if (shape_ == Shape::Round || shape_ == Shape::Circle) {
+    radius = style.metrics.height / 2.0;
+  }
+
+  qreal topLeft = radius;
+  qreal topRight = radius;
+  qreal bottomRight = radius;
+  qreal bottomLeft = radius;
+
+  switch (groupPosition_) {
+    case GroupPosition::First:
+      topRight = 0.0;
+      bottomRight = 0.0;
+      break;
+    case GroupPosition::Middle:
+      topLeft = 0.0;
+      topRight = 0.0;
+      bottomRight = 0.0;
+      bottomLeft = 0.0;
+      break;
+    case GroupPosition::Last:
+      topLeft = 0.0;
+      bottomLeft = 0.0;
+      break;
+    case GroupPosition::Only:
+    case GroupPosition::None:
+    default:
+      break;
+  }
+  if (joinedLeft_) {
+    topLeft = 0.0;
+    bottomLeft = 0.0;
+  }
+  if (joinedRight_) {
+    topRight = 0.0;
+    bottomRight = 0.0;
+  }
+
+  const bool hasVisibleBorder = style.metrics.borderWidth > 0 && state.border.alpha() > 0;
+  const QRectF borderRect =
+      joinedBorderRect(rect(), style.metrics.borderWidth, joinedLeft_, joinedRight_);
+  const QRectF shapeRect = hasVisibleBorder ? borderRect : QRectF(rect());
 
   QWidget* hostWindow = window();
   if (!hostWindow) {
@@ -1372,11 +1081,11 @@ void AdButton::updateInteractionFocusOverlay() {
   const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
   InteractionFocusRequest request;
   request.owner = this;
-  request.baseRectInWindow = outline.shapeRect.translated(origin.x(), origin.y());
-  request.topLeft = outline.corners.topLeft;
-  request.topRight = outline.corners.topRight;
-  request.bottomRight = outline.corners.bottomRight;
-  request.bottomLeft = outline.corners.bottomLeft;
+  request.baseRectInWindow = shapeRect.translated(origin.x(), origin.y());
+  request.topLeft = topLeft;
+  request.topRight = topRight;
+  request.bottomRight = bottomRight;
+  request.bottomLeft = bottomLeft;
   request.color = focusColor;
   request.strokeWidth = focusWidth;
   request.offset = std::max<qreal>(0.0, style.metrics.focusOutlineOffset);
@@ -1384,127 +1093,143 @@ void AdButton::updateInteractionFocusOverlay() {
 }
 
 void AdButton::triggerInteractionWaveOverlay() {
-  if (!isVisible() || interactionBlocked()) {
+  if (!isEnabled() || interactionBlocked()) {
+    return;
+  }
+  if (type_ == Type::Text) {
     return;
   }
 
+  detail::ButtonStyleInput input;
+  input.type = type_;
+  input.color = color_;
+  input.variant = variant_;
+  input.size = effectiveSize();
+  input.colorExplicit = colorExplicit_;
+  input.variantExplicit = variantExplicit_;
+  input.danger = danger_;
+  input.ghost = ghost_;
+  input.baseFont = font();
+
+  const detail::ButtonVisualStyle style = detail::resolveButtonVisualStyle(input);
+  detail::ButtonStateStyle state = style.normal;
+  if (isDown()) {
+    state = style.active;
+  } else if (hovered_) {
+    state = style.hover;
+  }
+
+  qreal radius = static_cast<qreal>(style.metrics.borderRadius);
+  if (shape_ == Shape::Square) {
+    radius = 0.0;
+  } else if (shape_ == Shape::Round || shape_ == Shape::Circle) {
+    radius = style.metrics.height / 2.0;
+  }
+
+  qreal waveTopLeft = radius;
+  qreal waveTopRight = radius;
+  qreal waveBottomRight = radius;
+  qreal waveBottomLeft = radius;
+
+  switch (groupPosition_) {
+    case GroupPosition::First:
+      waveTopRight = 0.0;
+      waveBottomRight = 0.0;
+      break;
+    case GroupPosition::Middle:
+      waveTopLeft = 0.0;
+      waveTopRight = 0.0;
+      waveBottomRight = 0.0;
+      waveBottomLeft = 0.0;
+      break;
+    case GroupPosition::Last:
+      waveTopLeft = 0.0;
+      waveBottomLeft = 0.0;
+      break;
+    case GroupPosition::Only:
+    case GroupPosition::None:
+    default:
+      break;
+  }
+  if (joinedLeft_) {
+    waveTopLeft = 0.0;
+    waveBottomLeft = 0.0;
+  }
+  if (joinedRight_) {
+    waveTopRight = 0.0;
+    waveBottomRight = 0.0;
+  }
+
+  const QRectF buttonRect =
+      joinedBorderRect(rect(), style.metrics.borderWidth, joinedLeft_, joinedRight_);
+  QRectF waveBaseRectInWindow = buttonRect;
   QWidget* hostWindow = window();
-  if (!hostWindow) {
-    return;
-  }
-
-  const detail::ButtonVisualStyle style = resolvedStyle();
-  if (style.role.unbordered) {
-    return;
-  }
-
-  const detail::ButtonStateStyle state = currentStateStyle(style);
-  const Shape visualShape = effectiveShape(renderText());
-  const InteractionOutline outline =
-      resolveInteractionOutline(rect(), style, state, visualShape, joinsLeftEdge(), joinsRightEdge());
-  if (outline.shapeRect.isEmpty()) {
-    return;
+  if (hostWindow) {
+    const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
+    waveBaseRectInWindow = buttonRect.translated(origin.x(), origin.y());
   }
 
   QColor waveColor;
-  if (style.role.unbordered) {
-    if (hasVisibleColor(state.text)) {
-      waveColor = state.text;
-    } else if (hasVisibleColor(state.background)) {
-      waveColor = state.background;
-    } else {
-      waveColor = state.border;
-    }
-  } else if (stateHasVisibleBorder(state, style.metrics.borderWidth)) {
+  if (isValidWaveColor(state.border)) {
     waveColor = state.border;
-  } else if (hasVisibleColor(state.background)) {
+  } else if (isValidWaveColor(state.background)) {
     waveColor = state.background;
   } else {
-    waveColor = state.text;
-  }
-
-  if (!hasVisibleColor(waveColor)) {
     return;
   }
 
-  if (waveColor.alpha() < 255) {
-    const auto themeMap = adqt::theme::ThemeManager::instance().resolveTheme(this);
-    const QColor containerBg = parseThemeColor(themeMap.colorBgContainer, QColor("#ffffff"));
-    waveColor = compositeOn(waveColor, containerBg);
-  }
-
-  const QPoint origin = mapTo(hostWindow, QPoint(0, 0));
   InteractionWaveRequest request;
   request.owner = this;
-  request.baseRectInWindow = outline.shapeRect.translated(origin.x(), origin.y());
-  request.topLeft = outline.corners.topLeft;
-  request.topRight = outline.corners.topRight;
-  request.bottomRight = outline.corners.bottomRight;
-  request.bottomLeft = outline.corners.bottomLeft;
+  request.baseRectInWindow = waveBaseRectInWindow;
+  request.topLeft = waveTopLeft;
+  request.topRight = waveTopRight;
+  request.bottomRight = waveBottomRight;
+  request.bottomLeft = waveBottomLeft;
   request.color = waveColor;
   triggerInteractionWave(request);
 }
 
-void AdButton::syncAccessibleState() {
-  // Intentionally left blank: accessibility metadata should be set explicitly by callers
-  // instead of being inferred from text or tooltips.
+AdButton::Size AdButton::effectiveSize() const {
+  if (usesExplicitSize()) {
+    return size_;
+  }
+  if (hasGroupSizeContext_) {
+    return groupSizeContext_;
+  }
+  return size_;
 }
 
-void AdButton::applyAutomaticCursor(std::optional<Qt::CursorShape> cursorShape) {
-  if (d_->explicitCursorOverride) {
+bool AdButton::usesExplicitSize() const { return sizeExplicit_; }
+
+void AdButton::setGroupPosition(GroupPosition position) {
+  if (groupPosition_ == position) {
     return;
   }
-
-  if (cursorShape.has_value()) {
-    if (!d_->autoCursorManaged || !testAttribute(Qt::WA_SetCursor) ||
-        cursor().shape() != cursorShape.value()) {
-      d_->applyingAutoCursor = true;
-      QPushButton::setCursor(QCursor(cursorShape.value()));
-      d_->applyingAutoCursor = false;
-    }
-    d_->autoCursorManaged = true;
-    return;
-  }
-
-  if (d_->autoCursorManaged || testAttribute(Qt::WA_SetCursor)) {
-    d_->applyingAutoCursor = true;
-    QPushButton::unsetCursor();
-    d_->applyingAutoCursor = false;
-  }
-  d_->autoCursorManaged = false;
-}
-
-detail::SegmentPosition AdButton::segmentPosition() const { return d_->segmentPosition; }
-
-void AdButton::setSegmentPosition(detail::SegmentPosition value) {
-  if (d_->segmentPosition == value) {
-    return;
-  }
-  d_->segmentPosition = value;
-  updateGeometry();
-  bumpSegmentZOrder();
+  groupPosition_ = position;
   updateInteractionFocusOverlay();
   update();
 }
 
-bool AdButton::joinsLeftEdge() const {
-  return d_->segmentPosition == detail::SegmentPosition::Middle ||
-         d_->segmentPosition == detail::SegmentPosition::Trailing;
+void AdButton::setGroupSizeContext(Size size, bool enabled) {
+  const bool changed = hasGroupSizeContext_ != enabled || groupSizeContext_ != size;
+  hasGroupSizeContext_ = enabled;
+  groupSizeContext_ = size;
+  if (!changed) {
+    return;
+  }
+  if (!usesExplicitSize()) {
+    refreshAfterPropertyChange();
+  } else {
+    update();
+  }
 }
 
-bool AdButton::joinsRightEdge() const {
-  return d_->segmentPosition == detail::SegmentPosition::Leading ||
-         d_->segmentPosition == detail::SegmentPosition::Middle;
-}
-
-AdButton::ContentLayout AdButton::computeContentLayout(const QRect& contentRect,
-                                                       const QSize& iconSize,
+AdButton::ContentLayout AdButton::computeContentLayout(const QRect& contentRect, const QSize& iconSize,
                                                        const QString& displayText,
                                                        const QFontMetrics& fm,
                                                        int iconGap,
                                                        const QFont& contentFont,
-                                                       bool twoCnAutoSpacing,
-                                                       int textFlags) const {
+                                                       bool twoCnAutoSpacing) const {
   ContentLayout layout;
   layout.hasText = !displayText.isEmpty();
   layout.hasIcon = iconSize.isValid() && !iconSize.isEmpty();
@@ -1514,15 +1239,18 @@ AdButton::ContentLayout AdButton::computeContentLayout(const QRect& contentRect,
       std::max(0, contentRect.width() - (layout.hasIcon ? iconSize.width() + gap : 0));
   if (layout.hasText) {
     const int fullTextWidth =
-        measureDisplayTextWidth(fm, contentFont, displayText, twoCnAutoSpacing, textFlags);
-    layout.text = fullTextWidth <= availableTextWidth
-                      ? displayText
-                      : fm.elidedText(displayText, Qt::ElideRight, availableTextWidth, textFlags);
+        measureDisplayTextWidth(fm, contentFont, displayText, twoCnAutoSpacing);
+    if (fullTextWidth <= availableTextWidth) {
+      layout.text = displayText;
+    } else {
+      layout.text = fm.elidedText(displayText, Qt::ElideRight, availableTextWidth);
+    }
   }
   layout.hasText = !layout.text.isEmpty();
 
   const int textWidth = layout.hasText
-                            ? measureDisplayTextWidth(fm, contentFont, layout.text, twoCnAutoSpacing, textFlags)
+                            ? measureDisplayTextWidth(fm, contentFont, layout.text,
+                                                      twoCnAutoSpacing)
                             : 0;
   const int textHeight = layout.hasText ? fm.height() : 0;
 
@@ -1546,19 +1274,16 @@ AdButton::ContentLayout AdButton::computeContentLayout(const QRect& contentRect,
     return layout;
   }
 
-  const bool iconFirst = layoutDirection() == Qt::LeftToRight
-                             ? d_->iconPosition == IconPosition::Leading
-                             : d_->iconPosition == IconPosition::Trailing;
-
   if (layout.hasIcon && layout.hasText) {
     const int iconY = contentRect.top() + (contentRect.height() - iconSize.height()) / 2;
     const int textY = contentRect.top() + (contentRect.height() - textHeight) / 2;
-    if (iconFirst) {
+    if (iconPlacement_ == IconPlacement::Start) {
       layout.iconRect = QRect(startX, iconY, iconSize.width(), iconSize.height());
       layout.textRect = QRect(layout.iconRect.right() + 1 + gap, textY, textWidth, textHeight);
     } else {
       layout.textRect = QRect(startX, textY, textWidth, textHeight);
-      layout.iconRect = QRect(layout.textRect.right() + 1 + gap, iconY, iconSize.width(), iconSize.height());
+      layout.iconRect =
+          QRect(layout.textRect.right() + 1 + gap, iconY, iconSize.width(), iconSize.height());
     }
     return layout;
   }
@@ -1589,23 +1314,5 @@ void AdButton::drawSpinner(QPainter& painter, const QRect& iconRect, const QColo
   painter.setBrush(Qt::NoBrush);
   painter.drawArc(spinnerRect, (90 - sharedSpinnerAngle()) * 16, -270 * 16);
 }
-
-namespace detail {
-
-void setButtonSegmentPosition(AdButton* button, SegmentPosition value) {
-  if (!button) {
-    return;
-  }
-  button->setSegmentPosition(value);
-}
-
-SegmentPosition buttonSegmentPosition(const AdButton* button) {
-  if (!button) {
-    return SegmentPosition::Standalone;
-  }
-  return button->segmentPosition();
-}
-
-}  // namespace detail
 
 }  // namespace adqt::widgets

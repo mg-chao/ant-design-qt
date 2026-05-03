@@ -1,31 +1,16 @@
 #include "alert.h"
 
 #include "alert_style.h"
-#include "antd_icons.h"
+#include "icons.h"
 #include "theme/theme.h"
 
-#include <QAccessible>
-#include <QAccessibleWidget>
-#include <QAbstractAnimation>
-#include <QCloseEvent>
-#include <QEnterEvent>
 #include <QEvent>
-#include <QFocusEvent>
 #include <QGraphicsOpacityEffect>
-#include <QGridLayout>
-#include <QHideEvent>
+#include <QHBoxLayout>
 #include <QLabel>
-#include <QMouseEvent>
-#include <QObject>
-#include <QPaintEvent>
-#include <QPainter>
-#include <QPainterPath>
-#include <QPalette>
+#include <QLayout>
 #include <QParallelAnimationGroup>
-#include <QPen>
 #include <QPropertyAnimation>
-#include <QShowEvent>
-#include <QSpacerItem>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -35,1474 +20,716 @@ namespace adqt::widgets {
 
 namespace {
 
-QPainterPath roundedRectPath(const QRectF& rect,
-                             qreal topLeft,
-                             qreal topRight,
-                             qreal bottomRight,
-                             qreal bottomLeft) {
-  const qreal width = std::max(rect.width(), 0.0);
-  const qreal height = std::max(rect.height(), 0.0);
-  const qreal maxRadius = std::min(width, height) / 2.0;
-
-  topLeft = std::clamp(topLeft, 0.0, maxRadius);
-  topRight = std::clamp(topRight, 0.0, maxRadius);
-  bottomRight = std::clamp(bottomRight, 0.0, maxRadius);
-  bottomLeft = std::clamp(bottomLeft, 0.0, maxRadius);
-
-  const qreal left = rect.left();
-  const qreal top = rect.top();
-  const qreal right = left + rect.width();
-  const qreal bottom = top + rect.height();
-
-  QPainterPath path;
-  path.moveTo(left + topLeft, top);
-  path.lineTo(right - topRight, top);
-  if (topRight > 0.0) {
-    path.quadTo(right, top, right, top + topRight);
-  }
-  path.lineTo(right, bottom - bottomRight);
-  if (bottomRight > 0.0) {
-    path.quadTo(right, bottom, right - bottomRight, bottom);
-  }
-  path.lineTo(left + bottomLeft, bottom);
-  if (bottomLeft > 0.0) {
-    path.quadTo(left, bottom, left, bottom - bottomLeft);
-  }
-  path.lineTo(left, top + topLeft);
-  if (topLeft > 0.0) {
-    path.quadTo(left, top, left + topLeft, top);
-  }
-  path.closeSubpath();
-  return path;
+QString toRgba(const QColor& color) {
+  return QStringLiteral("rgba(%1, %2, %3, %4)")
+      .arg(color.red())
+      .arg(color.green())
+      .arg(color.blue())
+      .arg(color.alpha());
 }
 
-void notifyAccessibilityEvent(QWidget* widget, QAccessible::Event eventType) {
-  if (!widget) {
-    return;
+adqt::icons::IconToken defaultTypeIcon(AdAlert::Type type) {
+  adqt::icons::IconToken token;
+  switch (type) {
+    case AdAlert::Type::Success:
+      token = adqt::icons::filled::CheckCircle();
+      break;
+    case AdAlert::Type::Info:
+      token = adqt::icons::filled::InfoCircle();
+      break;
+    case AdAlert::Type::Warning:
+      token = adqt::icons::filled::ExclamationCircle();
+      break;
+    case AdAlert::Type::Error:
+      token = adqt::icons::filled::CloseCircle();
+      break;
   }
-  QAccessibleEvent event(widget, eventType);
-  QAccessible::updateAccessibility(&event);
+  return token;
 }
 
-QString firstNonEmptyString(const std::initializer_list<QString>& values) {
-  for (const QString& value : values) {
-    const QString trimmed = value.trimmed();
-    if (!trimmed.isEmpty()) {
-      return trimmed;
-    }
+void mergeSemanticSlot(AdAlert::SemanticSlotStyle* target, const AdAlert::SemanticSlotStyle& source) {
+  if (source.textColor.has_value()) {
+    target->textColor = source.textColor;
   }
-  return {};
-}
-
-QString accessibleInterfaceText(const QWidget* widget, QAccessible::Text textType) {
-  if (!widget) {
-    return {};
+  if (source.backgroundColor.has_value()) {
+    target->backgroundColor = source.backgroundColor;
   }
-  if (QAccessibleInterface* accessible = QAccessible::queryAccessibleInterface(const_cast<QWidget*>(widget))) {
-    return accessible->text(textType).trimmed();
+  if (source.borderColor.has_value()) {
+    target->borderColor = source.borderColor;
   }
-  return {};
-}
-
-QString semanticTextFromWidget(const QWidget* widget, bool preferDescription) {
-  if (!widget) {
-    return {};
-  }
-  if (preferDescription) {
-    return firstNonEmptyString({
-        widget->accessibleDescription(),
-        accessibleInterfaceText(widget, QAccessible::Description),
-        widget->accessibleName(),
-        accessibleInterfaceText(widget, QAccessible::Name),
-    });
-  }
-  return firstNonEmptyString({
-      widget->accessibleName(),
-      accessibleInterfaceText(widget, QAccessible::Name),
-      widget->accessibleDescription(),
-      accessibleInterfaceText(widget, QAccessible::Description),
-  });
-}
-
-QString resolvedAccessibleName(const AdAlert* alert) {
-  if (!alert) {
-    return {};
-  }
-  return firstNonEmptyString({
-      alert->QWidget::accessibleName(),
-      semanticTextFromWidget(alert->textWidget(), false),
-      alert->text(),
-  });
-}
-
-QString resolvedAccessibleDescription(const AdAlert* alert) {
-  if (!alert) {
-    return {};
-  }
-  return firstNonEmptyString({
-      alert->QWidget::accessibleDescription(),
-      semanticTextFromWidget(alert->informativeWidget(), true),
-      alert->informativeText(),
-  });
-}
-
-QAccessible::AnnouncementPoliteness announcementPolitenessForSeverity(AdAlert::Severity severity) {
-  switch (severity) {
-    case AdAlert::Severity::Success:
-    case AdAlert::Severity::Info:
-      return QAccessible::AnnouncementPoliteness::Polite;
-    case AdAlert::Severity::Warning:
-    case AdAlert::Severity::Error:
-      return QAccessible::AnnouncementPoliteness::Assertive;
-  }
-  return QAccessible::AnnouncementPoliteness::Polite;
-}
-
-void notifyAccessibilityAnnouncement(QWidget* widget,
-                                     const QString& message,
-                                     QAccessible::AnnouncementPoliteness politeness) {
-  if (!widget || message.trimmed().isEmpty()) {
-    return;
-  }
-  QAccessibleAnnouncementEvent event(widget, message.trimmed());
-  event.setPoliteness(politeness);
-  QAccessible::updateAccessibility(&event);
-}
-
-adqt::icons::IconRef defaultSeverityIcon(AdAlert::Severity severity) {
-  switch (severity) {
-    case AdAlert::Severity::Success:
-      return adqt::icons::antd::filled::CheckCircle();
-    case AdAlert::Severity::Info:
-      return adqt::icons::antd::filled::InfoCircle();
-    case AdAlert::Severity::Warning:
-      return adqt::icons::antd::filled::ExclamationCircle();
-    case AdAlert::Severity::Error:
-      return adqt::icons::antd::filled::CloseCircle();
-  }
-  return adqt::icons::antd::filled::InfoCircle();
-}
-
-bool usesCustomPalette(const QWidget* widget) {
-  if (!widget || !widget->testAttribute(Qt::WA_SetPalette)) {
-    return false;
-  }
-  const adqt::theme::ResolvedTheme resolved = adqt::theme::ThemeManager::instance().resolve(widget);
-  return widget->palette() != resolved.palette;
-}
-
-class AlertCloseButton final : public QToolButton {
- public:
-  explicit AlertCloseButton(QWidget* parent = nullptr) : QToolButton(parent) {
-    setAttribute(Qt::WA_Hover, true);
-  }
-
-  void setVisuals(const adqt::icons::IconRef& iconRef,
-                  const QColor& normalIconColor,
-                  const QColor& hoverIconColor,
-                  const QColor& hoverBackground,
-                  const QColor& pressedBackground,
-                  const QColor& focusOutline,
-                  int focusOutlineWidth,
-                  const QSize& iconSize) {
-    iconRef_ = iconRef;
-    normalIconColor_ = normalIconColor;
-    hoverIconColor_ = hoverIconColor;
-    hoverBackground_ = hoverBackground;
-    pressedBackground_ = pressedBackground;
-    focusOutline_ = focusOutline;
-    focusOutlineWidth_ = std::max(0, focusOutlineWidth);
-    iconSize_ = iconSize;
-    update();
-  }
-
- protected:
-  void changeEvent(QEvent* event) override {
-    QToolButton::changeEvent(event);
-    if (event && event->type() == QEvent::EnabledChange) {
-      update();
-    }
-  }
-
-  void enterEvent(QEnterEvent* event) override {
-    QToolButton::enterEvent(event);
-    update();
-  }
-
-  void leaveEvent(QEvent* event) override {
-    QToolButton::leaveEvent(event);
-    update();
-  }
-
-  void focusInEvent(QFocusEvent* event) override {
-    QToolButton::focusInEvent(event);
-    update();
-  }
-
-  void focusOutEvent(QFocusEvent* event) override {
-    QToolButton::focusOutEvent(event);
-    update();
-  }
-
-  void mousePressEvent(QMouseEvent* event) override {
-    QToolButton::mousePressEvent(event);
-    update();
-  }
-
-  void mouseReleaseEvent(QMouseEvent* event) override {
-    QToolButton::mouseReleaseEvent(event);
-    update();
-  }
-
-  void paintEvent(QPaintEvent* event) override {
-    Q_UNUSED(event)
-
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    const QRectF bounds = rect();
-    const qreal radius = std::max<qreal>(0.0, std::min(width(), height()) / 2.0);
-    QColor background = QColor(Qt::transparent);
-    if (isEnabled()) {
-      if (isDown()) {
-        background = pressedBackground_.isValid() ? pressedBackground_ : hoverBackground_;
-      } else if (underMouse() || hasFocus()) {
-        background = hoverBackground_;
-      }
-    }
-
-    if (background.alpha() > 0) {
-      painter.fillPath(roundedRectPath(bounds, radius, radius, radius, radius), background);
-    }
-
-    if (isEnabled() && hasFocus() && focusOutlineWidth_ > 0 && focusOutline_.isValid()) {
-      const qreal inset = focusOutlineWidth_ / 2.0;
-      const QRectF outlineRect = bounds.adjusted(inset, inset, -inset, -inset);
-      const qreal outlineRadius = std::max<qreal>(0.0, radius - inset);
-      painter.strokePath(
-          roundedRectPath(outlineRect, outlineRadius, outlineRadius, outlineRadius, outlineRadius),
-          QPen(focusOutline_, focusOutlineWidth_, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
-    }
-
-    adqt::icons::IconRef token = iconRef_;
-    const QColor iconColor = isEnabled() && (underMouse() || hasFocus() || isDown()) &&
-                                     hoverIconColor_.isValid()
-                                 ? hoverIconColor_
-                                 : normalIconColor_;
-    if (!token.colors.hasPrimary) {
-      token.colors.primary = iconColor;
-      token.colors.hasPrimary = true;
-    }
-    const qreal dpr = std::max(1.0, devicePixelRatioF());
-    const QPixmap pixmap = adqt::icons::renderIconPixmap(token, iconSize_, dpr);
-    const QRect iconRect((width() - iconSize_.width()) / 2,
-                         (height() - iconSize_.height()) / 2,
-                         iconSize_.width(),
-                         iconSize_.height());
-    painter.drawPixmap(iconRect, pixmap);
-  }
-
- private:
-  adqt::icons::IconRef iconRef_;
-  QColor normalIconColor_;
-  QColor hoverIconColor_;
-  QColor hoverBackground_;
-  QColor pressedBackground_;
-  QColor focusOutline_;
-  int focusOutlineWidth_ = 0;
-  QSize iconSize_;
-};
-
-class AdAlertAccessible final : public QAccessibleWidget {
- public:
-  explicit AdAlertAccessible(AdAlert* alert) : QAccessibleWidget(alert, QAccessible::AlertMessage) {}
-
-  QString text(QAccessible::Text t) const override {
-    const auto* alert = qobject_cast<AdAlert*>(object());
-    if (!alert) {
-      return QAccessibleWidget::text(t);
-    }
-
-    switch (t) {
-      case QAccessible::Name:
-        return resolvedAccessibleName(alert);
-      case QAccessible::Description:
-        return resolvedAccessibleDescription(alert);
-      default:
-        return QAccessibleWidget::text(t);
-    }
-  }
-};
-
-QAccessibleInterface* alertAccessibleFactory(const QString& className, QObject* object) {
-  Q_UNUSED(className)
-  if (auto* alert = qobject_cast<AdAlert*>(object)) {
-    return new AdAlertAccessible(alert);
-  }
-  return nullptr;
-}
-
-void ensureAlertAccessibleFactoryInstalled() {
-  static const bool installed = []() {
-    QAccessible::installFactory(alertAccessibleFactory);
-    return true;
-  }();
-  Q_UNUSED(installed)
 }
 
 }  // namespace
 
-class AdAlertPrivate {
-  Q_DECLARE_PUBLIC(AdAlert)
-
- public:
-  enum class HostedSlot {
-    Leading,
-    Text,
-    Informative,
-    Actions,
-  };
-
-  enum class CloseState {
-    Idle,
-    Requested,
-    Animating,
-    Finalizing,
-  };
-
-  struct DerivedState {
-    AdAlert::Severity severity = AdAlert::Severity::Info;
-    bool hasText = false;
-    bool hasInformativeText = false;
-    bool hasActions = false;
-    bool iconVisible = false;
-  };
-
-  struct SectionSlot {
-    QPointer<QWidget> widget;
-    QPointer<QWidget> host;
-    QPointer<QVBoxLayout> layout;
-    QMetaObject::Connection destroyedConnection;
-  };
-
-  explicit AdAlertPrivate(AdAlert* q);
-
-  void ensureUi();
-  DerivedState deriveState() const;
-  detail::AlertVisualStyle resolveVisualStyle(const DerivedState& state) const;
-  const DerivedState& resolvedState() const;
-  const detail::AlertVisualStyle& resolvedVisualStyle() const;
-  bool hasTextContent() const;
-  bool hasInformativeTextContent() const;
-  bool closeAnimationEnabled(const detail::AlertVisualStyle& style) const;
-  QPalette::ColorGroup effectivePaletteGroup() const;
-  bool hasPaletteOverrideInHierarchy() const;
-  void invalidateResolvedCache();
-  void ensureResolvedCache() const;
-  void refresh();
-  void syncContent(const DerivedState& state);
-  void applyVisualStyle(const DerivedState& state, const detail::AlertVisualStyle& style);
-  void syncAccessibleState();
-  QString effectiveAccessibleName() const;
-  QString effectiveAccessibleDescription() const;
-  QString announcementText() const;
-  void announceVisibleContent() const;
-  void updateCloseButtonIcon(const detail::AlertVisualStyle& style);
-  SectionSlot& section(HostedSlot slot);
-  const SectionSlot& section(HostedSlot slot) const;
-  void emitHostedWidgetChanged(HostedSlot slot, QWidget* value);
-  void clearSectionConnection(SectionSlot& section);
-  QWidget* releaseHostedWidget(HostedSlot slot);
-  void clearHostedWidgetReferences(QWidget* widget, HostedSlot exceptSlot);
-  void setHostedWidget(HostedSlot slot, QWidget* widget);
-  QWidget* takeHostedWidget(HostedSlot slot);
-  void deleteHostedWidgetLater(QWidget* widget);
-  void bindHostedWidgetDestroyed(HostedSlot slot, QWidget* widget);
-  void hostedWidgetDestroyed(HostedSlot slot, QObject* destroyed);
-  void startCloseAnimation(int durationMs, const QEasingCurve& easing);
-  void completeAnimatedClose();
-  void resetCloseAnimationState();
-  static void syncSingleChildLayout(QVBoxLayout* layout, QWidget* host, QWidget* child);
-
-  AdAlert* const q_ptr;
-  AdAlert::Severity severity = AdAlert::Severity::Info;
-  AdAlert::DisplayMode displayMode = AdAlert::DisplayMode::Inline;
-  AdAlert::IconMode iconMode = AdAlert::IconMode::Auto;
-  bool closable = false;
-  bool animated = true;
-  QString text;
-  QString informativeText;
-
-  QPointer<QGridLayout> rootLayout;
-  SectionSlot leadingSection;
-  QPointer<QLabel> iconLabel;
-  QSpacerItem* leadingSpacerItem = nullptr;
-  QPointer<QWidget> contentHost;
-  QPointer<QVBoxLayout> contentLayout;
-  SectionSlot textSection;
-  QPointer<QLabel> textLabel;
-  SectionSlot informativeSection;
-  QPointer<QLabel> informativeLabel;
-  QSpacerItem* actionsSpacerItem = nullptr;
-  SectionSlot actionsSection;
-  QSpacerItem* dismissSpacerItem = nullptr;
-  QPointer<AlertCloseButton> closeButton;
-
-  QPointer<QGraphicsOpacityEffect> opacityEffect;
-  QPointer<QParallelAnimationGroup> closeAnimation;
-  QPointer<QPropertyAnimation> heightAnimation;
-  QPointer<QPropertyAnimation> opacityAnimation;
-  CloseState closeState = CloseState::Idle;
-  AdAlert::CloseReason pendingCloseReason = AdAlert::CloseReason::Programmatic;
-  int savedMaximumHeight = QWIDGETSIZE_MAX;
-  bool suppressAccessibleEvents = false;
-  QString lastAccessibleName;
-  QString lastAccessibleDescription;
-  mutable bool resolvedCacheValid = false;
-  mutable DerivedState cachedState;
-  mutable detail::AlertVisualStyle cachedStyle;
-};
-
-AdAlertPrivate::AdAlertPrivate(AdAlert* q) : q_ptr(q) {}
-
-void AdAlertPrivate::ensureUi() {
-  if (rootLayout) {
-    return;
-  }
-
-  Q_Q(AdAlert);
-
-  auto* layout = new QGridLayout(q);
-  layout->setContentsMargins(12, 8, 12, 8);
-  layout->setHorizontalSpacing(0);
-  layout->setVerticalSpacing(0);
-  layout->setColumnStretch(2, 1);
-
-  auto* leadingHost = new QWidget(q);
-  leadingHost->setVisible(false);
-  leadingHost->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-  auto* leadingLayout = new QVBoxLayout(leadingHost);
-  leadingLayout->setContentsMargins(0, 0, 0, 0);
-  leadingLayout->setSpacing(0);
-  auto* icon = new QLabel(leadingHost);
-  icon->setObjectName(QStringLiteral("ad-alert-icon"));
-  icon->setVisible(false);
-  icon->setAlignment(Qt::AlignCenter);
-
-  auto* content = new QWidget(q);
-  content->setVisible(false);
-  content->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-  auto* contentLayoutValue = new QVBoxLayout(content);
-  contentLayoutValue->setContentsMargins(0, 0, 0, 0);
-  contentLayoutValue->setSpacing(4);
-
-  auto* textHost = new QWidget(content);
-  textHost->setVisible(false);
-  auto* textLayoutValue = new QVBoxLayout(textHost);
-  textLayoutValue->setContentsMargins(0, 0, 0, 0);
-  textLayoutValue->setSpacing(0);
-  auto* textValue = new QLabel(textHost);
-  textValue->setObjectName(QStringLiteral("ad-alert-text"));
-  textValue->setWordWrap(true);
-  textValue->setTextFormat(Qt::PlainText);
-  textValue->setTextInteractionFlags(Qt::NoTextInteraction);
-
-  auto* informativeHost = new QWidget(content);
-  informativeHost->setVisible(false);
-  auto* informativeLayoutValue = new QVBoxLayout(informativeHost);
-  informativeLayoutValue->setContentsMargins(0, 0, 0, 0);
-  informativeLayoutValue->setSpacing(0);
-  auto* informativeValue = new QLabel(informativeHost);
-  informativeValue->setObjectName(QStringLiteral("ad-alert-informative-text"));
-  informativeValue->setWordWrap(true);
-  informativeValue->setTextFormat(Qt::PlainText);
-  informativeValue->setTextInteractionFlags(Qt::NoTextInteraction);
-
-  contentLayoutValue->addWidget(textHost);
-  contentLayoutValue->addWidget(informativeHost);
-
-  auto* actionsHost = new QWidget(q);
-  actionsHost->setVisible(false);
-  actionsHost->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-  auto* actionsLayoutValue = new QVBoxLayout(actionsHost);
-  actionsLayoutValue->setContentsMargins(0, 0, 0, 0);
-  actionsLayoutValue->setSpacing(0);
-
-  auto* close = new AlertCloseButton(q);
-  close->setObjectName(QStringLiteral("ad-alert-close"));
-  close->setCursor(Qt::PointingHandCursor);
-  close->setFocusPolicy(Qt::TabFocus);
-  close->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-  close->setVisible(false);
-  close->setToolTip(q->tr("Close"));
-  close->setAccessibleName(q->tr("Close alert"));
-
-  leadingSpacerItem = new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
-  actionsSpacerItem = new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
-  dismissSpacerItem = new QSpacerItem(0, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
-
-  layout->addWidget(leadingHost, 0, 0, Qt::AlignVCenter);
-  layout->addItem(leadingSpacerItem, 0, 1);
-  layout->addWidget(content, 0, 2, Qt::AlignVCenter);
-  layout->addItem(actionsSpacerItem, 0, 3);
-  layout->addWidget(actionsHost, 0, 4, Qt::AlignVCenter);
-  layout->addItem(dismissSpacerItem, 0, 5);
-  layout->addWidget(close, 0, 6, Qt::AlignVCenter);
-
-  QObject::connect(close, &QToolButton::clicked, q, [this]() {
-    pendingCloseReason = AdAlert::CloseReason::CloseButton;
-    const bool closeStarted = q_ptr->close();
-    if (!closeStarted && closeState == CloseState::Idle) {
-      pendingCloseReason = AdAlert::CloseReason::Programmatic;
-    }
-  });
-
-  rootLayout = layout;
-  leadingSection.host = leadingHost;
-  leadingSection.layout = leadingLayout;
-  iconLabel = icon;
-  contentHost = content;
-  contentLayout = contentLayoutValue;
-  textSection.host = textHost;
-  textSection.layout = textLayoutValue;
-  textLabel = textValue;
-  informativeSection.host = informativeHost;
-  informativeSection.layout = informativeLayoutValue;
-  informativeLabel = informativeValue;
-  actionsSection.host = actionsHost;
-  actionsSection.layout = actionsLayoutValue;
-  closeButton = close;
-}
-
-AdAlertPrivate::DerivedState AdAlertPrivate::deriveState() const {
-  DerivedState state;
-  state.severity = severity;
-  state.hasText = hasTextContent();
-  state.hasInformativeText = hasInformativeTextContent();
-  state.hasActions = actionsSection.widget != nullptr;
-  switch (iconMode) {
-    case AdAlert::IconMode::Auto:
-      state.iconVisible = displayMode == AdAlert::DisplayMode::Banner;
-      break;
-    case AdAlert::IconMode::Visible:
-      state.iconVisible = true;
-      break;
-    case AdAlert::IconMode::Hidden:
-      state.iconVisible = false;
-      break;
-  }
-  return state;
-}
-
-detail::AlertVisualStyle AdAlertPrivate::resolveVisualStyle(const DerivedState& state) const {
-  Q_Q(const AdAlert);
-
-  detail::AlertStyleInput input;
-  input.severity = state.severity;
-  input.displayMode = displayMode;
-  input.enabled = q->isEnabled();
-  input.hasPaletteOverride = hasPaletteOverrideInHierarchy();
-  input.paletteGroup = effectivePaletteGroup();
-  input.baseFont = q->font();
-  input.palette = q->palette();
-
-  const adqt::theme::ResolvedTheme resolvedTheme = adqt::theme::ThemeManager::instance().resolve(q);
-  return detail::resolveAlertVisualStyle(input, resolvedTheme);
-}
-
-const AdAlertPrivate::DerivedState& AdAlertPrivate::resolvedState() const {
-  ensureResolvedCache();
-  return cachedState;
-}
-
-const detail::AlertVisualStyle& AdAlertPrivate::resolvedVisualStyle() const {
-  ensureResolvedCache();
-  return cachedStyle;
-}
-
-bool AdAlertPrivate::hasTextContent() const {
-  return textSection.widget || !text.trimmed().isEmpty();
-}
-
-bool AdAlertPrivate::hasInformativeTextContent() const {
-  return informativeSection.widget || !informativeText.trimmed().isEmpty();
-}
-
-bool AdAlertPrivate::closeAnimationEnabled(const detail::AlertVisualStyle& style) const {
-  Q_Q(const AdAlert);
-  return animated && style.metrics.closeAnimationMs > 0 && q->isVisible();
-}
-
-QPalette::ColorGroup AdAlertPrivate::effectivePaletteGroup() const {
-  Q_Q(const AdAlert);
-
-  if (!q->isEnabled()) {
-    return QPalette::Disabled;
-  }
-  const QPalette::ColorGroup group = q->palette().currentColorGroup();
-  return group == QPalette::Disabled ? QPalette::Active : group;
-}
-
-bool AdAlertPrivate::hasPaletteOverrideInHierarchy() const {
-  Q_Q(const AdAlert);
-
-  for (const QWidget* current = q; current; current = current->parentWidget()) {
-    if (usesCustomPalette(current)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-void AdAlertPrivate::invalidateResolvedCache() {
-  resolvedCacheValid = false;
-}
-
-void AdAlertPrivate::ensureResolvedCache() const {
-  if (resolvedCacheValid) {
-    return;
-  }
-  cachedState = deriveState();
-  cachedStyle = resolveVisualStyle(cachedState);
-  resolvedCacheValid = true;
-}
-
-void AdAlertPrivate::refresh() {
-  ensureUi();
-  const DerivedState& state = resolvedState();
-  const detail::AlertVisualStyle& style = resolvedVisualStyle();
-  syncContent(state);
-  applyVisualStyle(state, style);
-  syncAccessibleState();
-  q_ptr->updateGeometry();
-  q_ptr->update();
-}
-
-void AdAlertPrivate::syncContent(const DerivedState& state) {
-  ensureUi();
-
-  Q_Q(AdAlert);
-
-  if (textLabel) {
-    textLabel->setText(text);
-  }
-  if (informativeLabel) {
-    informativeLabel->setText(informativeText);
-  }
-
-  QWidget* leadingContent = leadingSection.widget.data();
-  if (!leadingContent && state.iconVisible) {
-    leadingContent = iconLabel;
-  }
-  syncSingleChildLayout(leadingSection.layout, leadingSection.host, leadingContent);
-
-  QWidget* titleContent = textSection.widget.data();
-  if (!titleContent && state.hasText) {
-    titleContent = textLabel;
-  }
-  syncSingleChildLayout(textSection.layout, textSection.host, titleContent);
-
-  QWidget* descriptionContent = informativeSection.widget.data();
-  if (!descriptionContent && state.hasInformativeText) {
-    descriptionContent = informativeLabel;
-  }
-  syncSingleChildLayout(informativeSection.layout, informativeSection.host, descriptionContent);
-
-  syncSingleChildLayout(actionsSection.layout, actionsSection.host, actionsSection.widget);
-
-  if (leadingSection.host) {
-    leadingSection.host->setVisible(leadingContent != nullptr);
-  }
-  if (textSection.host) {
-    textSection.host->setVisible(titleContent != nullptr);
-  }
-  if (informativeSection.host) {
-    informativeSection.host->setVisible(descriptionContent != nullptr);
-  }
-  if (contentHost) {
-    contentHost->setVisible(titleContent != nullptr || descriptionContent != nullptr);
-  }
-  if (actionsSection.host) {
-    actionsSection.host->setVisible(actionsSection.widget != nullptr);
-  }
-  if (closeButton) {
-    closeButton->setVisible(closable);
-    closeButton->setEnabled(closable && q->isEnabled() && closeState == CloseState::Idle);
-    closeButton->setToolTip(q->tr("Close"));
-    closeButton->setAccessibleName(q->tr("Close alert"));
-  }
-}
-
-void AdAlertPrivate::applyVisualStyle(const DerivedState& state, const detail::AlertVisualStyle& style) {
-  ensureUi();
-
-  const int paddingInline =
-      state.hasInformativeText ? style.metrics.paddingWithInformativeTextInline : style.metrics.paddingInline;
-  const int paddingBlock =
-      state.hasInformativeText ? style.metrics.paddingWithInformativeTextBlock : style.metrics.paddingBlock;
-
-  if (rootLayout) {
-    rootLayout->setContentsMargins(paddingInline, paddingBlock, paddingInline, paddingBlock);
-  }
-  if (contentLayout) {
-    contentLayout->setSpacing(style.metrics.textInformativeTextGap);
-  }
-
-  const bool leadingVisible = leadingSection.host && leadingSection.host->isVisible();
-  const bool contentVisible = contentHost && contentHost->isVisible();
-  const bool actionsVisible = actionsSection.host && actionsSection.host->isVisible();
-  const bool dismissVisible = closeButton && closeButton->isVisible();
-
-  if (leadingSpacerItem) {
-    const int width = leadingVisible && (contentVisible || actionsVisible || dismissVisible)
-                          ? (state.hasInformativeText ? style.metrics.gapLeadingContentWithInformativeText
-                                                      : style.metrics.gapLeadingContent)
-                          : 0;
-    leadingSpacerItem->changeSize(width, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
-  }
-  if (actionsSpacerItem) {
-    const int width = contentVisible && actionsVisible ? style.metrics.gapContentActions : 0;
-    actionsSpacerItem->changeSize(width, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
-  }
-  if (dismissSpacerItem) {
-    const bool showGap = dismissVisible && (actionsVisible || contentVisible);
-    const int width = showGap ? style.metrics.gapActionsDismiss : 0;
-    dismissSpacerItem->changeSize(width, 0, QSizePolicy::Fixed, QSizePolicy::Minimum);
-  }
-  if (rootLayout) {
-    rootLayout->invalidate();
-  }
-
-  const Qt::Alignment verticalAlignment = state.hasInformativeText ? Qt::AlignTop : Qt::AlignVCenter;
-  if (rootLayout) {
-    rootLayout->setAlignment(leadingSection.host, verticalAlignment);
-    rootLayout->setAlignment(contentHost, verticalAlignment);
-    rootLayout->setAlignment(actionsSection.host, verticalAlignment);
-    rootLayout->setAlignment(closeButton, verticalAlignment);
-  }
-
-  if (textLabel) {
-    textLabel->setFont(state.hasInformativeText ? style.metrics.textWithInformativeTextFont
-                                                : style.metrics.textFont);
-    QPalette palette = textLabel->palette();
-    palette.setColor(QPalette::WindowText, style.textColor);
-    textLabel->setPalette(palette);
-  }
-  if (informativeLabel) {
-    informativeLabel->setFont(style.metrics.informativeTextFont);
-    QPalette palette = informativeLabel->palette();
-    palette.setColor(QPalette::WindowText, style.informativeTextColor);
-    informativeLabel->setPalette(palette);
-  }
-
-  if (iconLabel) {
-    if (state.iconVisible) {
-      adqt::icons::IconRef icon = defaultSeverityIcon(state.severity);
-      if (!icon.colors.hasPrimary) {
-        icon.colors.primary = style.iconColor;
-        icon.colors.hasPrimary = true;
-      }
-      const int iconSize = state.hasInformativeText ? style.metrics.iconSizeWithInformativeText
-                                                    : style.metrics.iconSize;
-      iconLabel->setFixedSize(iconSize, iconSize);
-      iconLabel->setPixmap(adqt::icons::renderIconPixmap(
-          icon, QSize(iconSize, iconSize), std::max(1.0, q_ptr->devicePixelRatioF())));
-    } else {
-      iconLabel->clear();
-      iconLabel->setFixedSize(0, 0);
-    }
-  }
-
-  if (closeButton) {
-    closeButton->setFixedSize(style.metrics.closeButtonSize, style.metrics.closeButtonSize);
-  }
-  updateCloseButtonIcon(style);
-}
-
-void AdAlertPrivate::syncAccessibleState() {
-  const QString resolvedName = effectiveAccessibleName();
-  const QString resolvedDescription = effectiveAccessibleDescription();
-  const QString previousName = lastAccessibleName;
-  const QString previousDescription = lastAccessibleDescription;
-
-  lastAccessibleName = resolvedName;
-  lastAccessibleDescription = resolvedDescription;
-
-  if (!q_ptr->isVisible() || suppressAccessibleEvents) {
-    return;
-  }
-
-  if (resolvedName != previousName) {
-    notifyAccessibilityEvent(q_ptr, QAccessible::NameChanged);
-  }
-  if (resolvedDescription != previousDescription) {
-    notifyAccessibilityEvent(q_ptr, QAccessible::DescriptionChanged);
-  }
-  if (resolvedName != previousName || resolvedDescription != previousDescription) {
-    announceVisibleContent();
-  }
-}
-
-QString AdAlertPrivate::effectiveAccessibleName() const {
-  return resolvedAccessibleName(q_ptr);
-}
-
-QString AdAlertPrivate::effectiveAccessibleDescription() const {
-  return resolvedAccessibleDescription(q_ptr);
-}
-
-QString AdAlertPrivate::announcementText() const {
-  const QString name = effectiveAccessibleName();
-  const QString description = effectiveAccessibleDescription();
-  if (!name.isEmpty() && !description.isEmpty()) {
-    return QStringLiteral("%1 %2").arg(name, description);
-  }
-  if (!name.isEmpty()) {
-    return name;
-  }
-  return description;
-}
-
-void AdAlertPrivate::announceVisibleContent() const {
-  notifyAccessibilityAnnouncement(q_ptr, announcementText(), announcementPolitenessForSeverity(severity));
-}
-
-void AdAlertPrivate::updateCloseButtonIcon(const detail::AlertVisualStyle& style) {
-  if (!closeButton) {
-    return;
-  }
-
-  closeButton->setVisuals(adqt::icons::antd::outlined::Close(),
-                          style.closeIconColor,
-                          style.closeIconHoverColor,
-                          style.closeButtonHoverBackground,
-                          style.closeButtonPressedBackground,
-                          style.closeButtonFocusOutlineColor,
-                          style.metrics.closeButtonFocusOutlineWidth,
-                          QSize(style.metrics.closeIconSize, style.metrics.closeIconSize));
-}
-
-AdAlertPrivate::SectionSlot& AdAlertPrivate::section(HostedSlot slot) {
-  switch (slot) {
-    case HostedSlot::Leading:
-      return leadingSection;
-    case HostedSlot::Text:
-      return textSection;
-    case HostedSlot::Informative:
-      return informativeSection;
-    case HostedSlot::Actions:
-      return actionsSection;
-  }
-  return leadingSection;
-}
-
-const AdAlertPrivate::SectionSlot& AdAlertPrivate::section(HostedSlot slot) const {
-  switch (slot) {
-    case HostedSlot::Leading:
-      return leadingSection;
-    case HostedSlot::Text:
-      return textSection;
-    case HostedSlot::Informative:
-      return informativeSection;
-    case HostedSlot::Actions:
-      return actionsSection;
-  }
-  return leadingSection;
-}
-
-void AdAlertPrivate::emitHostedWidgetChanged(HostedSlot slot, QWidget* value) {
-  Q_Q(AdAlert);
-
-  switch (slot) {
-    case HostedSlot::Leading:
-      emit q->leadingWidgetChanged(value);
-      break;
-    case HostedSlot::Text:
-      emit q->textWidgetChanged(value);
-      break;
-    case HostedSlot::Informative:
-      emit q->informativeWidgetChanged(value);
-      break;
-    case HostedSlot::Actions:
-      emit q->actionsWidgetChanged(value);
-      break;
-  }
-}
-
-void AdAlertPrivate::clearSectionConnection(SectionSlot& slot) {
-  if (slot.destroyedConnection) {
-    QObject::disconnect(slot.destroyedConnection);
-    slot.destroyedConnection = QMetaObject::Connection();
-  }
-}
-
-QWidget* AdAlertPrivate::releaseHostedWidget(HostedSlot slot) {
-  SectionSlot& slotState = section(slot);
-  QWidget* widget = slotState.widget.data();
-  clearSectionConnection(slotState);
-  if (!widget) {
-    slotState.widget.clear();
-    return nullptr;
-  }
-
-  if (slotState.layout) {
-    slotState.layout->removeWidget(widget);
-  }
-  widget->hide();
-  if (widget->parentWidget()) {
-    widget->setParent(nullptr);
-  }
-  slotState.widget.clear();
-  return widget;
-}
-
-void AdAlertPrivate::clearHostedWidgetReferences(QWidget* widget, HostedSlot exceptSlot) {
-  if (!widget) {
-    return;
-  }
-
-  constexpr HostedSlot kSlots[] = {
-      HostedSlot::Leading,
-      HostedSlot::Text,
-      HostedSlot::Informative,
-      HostedSlot::Actions,
-  };
-  for (HostedSlot slot : kSlots) {
-    if (slot == exceptSlot) {
-      continue;
-    }
-    SectionSlot& slotState = section(slot);
-    if (slotState.widget != widget) {
-      continue;
-    }
-    releaseHostedWidget(slot);
-    emitHostedWidgetChanged(slot, nullptr);
-  }
-}
-
-void AdAlertPrivate::setHostedWidget(HostedSlot slot, QWidget* widget) {
-  SectionSlot& slotState = section(slot);
-  if (slotState.widget == widget) {
-    return;
-  }
-
-  if (widget) {
-    clearHostedWidgetReferences(widget, slot);
-  }
-
-  QWidget* previous = releaseHostedWidget(slot);
-  slotState.widget = widget;
-  if (widget) {
-    widget->hide();
-    if (widget->parentWidget()) {
-      widget->setParent(nullptr);
-    }
-    bindHostedWidgetDestroyed(slot, widget);
-  }
-
-  emitHostedWidgetChanged(slot, slotState.widget);
-  if (previous) {
-    deleteHostedWidgetLater(previous);
-  }
-  invalidateResolvedCache();
-  refresh();
-}
-
-QWidget* AdAlertPrivate::takeHostedWidget(HostedSlot slot) {
-  QWidget* widget = releaseHostedWidget(slot);
-  if (!widget) {
-    return nullptr;
-  }
-  emitHostedWidgetChanged(slot, nullptr);
-  invalidateResolvedCache();
-  refresh();
-  return widget;
-}
-
-void AdAlertPrivate::deleteHostedWidgetLater(QWidget* widget) {
-  if (!widget) {
-    return;
-  }
-  widget->deleteLater();
-}
-
-void AdAlertPrivate::bindHostedWidgetDestroyed(HostedSlot slot, QWidget* widget) {
-  SectionSlot& slotState = section(slot);
-  clearSectionConnection(slotState);
-  if (!widget) {
-    return;
-  }
-
-  Q_Q(AdAlert);
-  slotState.destroyedConnection = QObject::connect(widget, &QObject::destroyed, q, [this, slot](QObject* destroyed) {
-    hostedWidgetDestroyed(slot, destroyed);
-  });
-}
-
-void AdAlertPrivate::hostedWidgetDestroyed(HostedSlot slot, QObject* destroyed) {
-  SectionSlot& slotState = section(slot);
-  if (slotState.widget && slotState.widget != destroyed) {
-    return;
-  }
-
-  clearSectionConnection(slotState);
-  if (QWidget* widget = qobject_cast<QWidget*>(destroyed)) {
-    if (slotState.layout) {
-      slotState.layout->removeWidget(widget);
-    }
-  }
-  slotState.widget.clear();
-  emitHostedWidgetChanged(slot, nullptr);
-  invalidateResolvedCache();
-  refresh();
-}
-
-void AdAlertPrivate::startCloseAnimation(int durationMs, const QEasingCurve& easing) {
-  Q_Q(AdAlert);
-
-  if (!opacityEffect) {
-    opacityEffect = new QGraphicsOpacityEffect(q);
-    opacityEffect->setOpacity(1.0);
-    q->setGraphicsEffect(opacityEffect);
-  }
-  if (!closeAnimation) {
-    closeAnimation = new QParallelAnimationGroup(q);
-    heightAnimation = new QPropertyAnimation(q, "maximumHeight", closeAnimation);
-    opacityAnimation = new QPropertyAnimation(opacityEffect, "opacity", closeAnimation);
-    QObject::connect(closeAnimation, &QParallelAnimationGroup::finished, q, [this]() { completeAnimatedClose(); });
-  }
-
-  if (!closeAnimation || !heightAnimation || !opacityAnimation || !opacityEffect) {
-    closeState = CloseState::Finalizing;
-    q->close();
-    return;
-  }
-
-  savedMaximumHeight = q->maximumHeight();
-
-  int startHeight = q->height();
-  if (startHeight <= 0) {
-    startHeight = q->sizeHint().height();
-  }
-  startHeight = std::max(1, startHeight);
-
-  opacityEffect->setOpacity(1.0);
-  q->setMaximumHeight(startHeight);
-  closeAnimation->stop();
-  closeState = CloseState::Animating;
-
-  heightAnimation->setDuration(durationMs);
-  heightAnimation->setStartValue(startHeight);
-  heightAnimation->setEndValue(0);
-  heightAnimation->setEasingCurve(easing);
-
-  opacityAnimation->setTargetObject(opacityEffect);
-  opacityAnimation->setDuration(durationMs);
-  opacityAnimation->setStartValue(1.0);
-  opacityAnimation->setEndValue(0.0);
-  opacityAnimation->setEasingCurve(easing);
-
-  closeAnimation->start();
-}
-
-void AdAlertPrivate::completeAnimatedClose() {
-  if (closeAnimation && closeAnimation->state() == QAbstractAnimation::Running) {
-    closeAnimation->stop();
-  }
-  closeState = CloseState::Finalizing;
-  q_ptr->close();
-}
-
-void AdAlertPrivate::resetCloseAnimationState() {
-  q_ptr->setMaximumHeight(savedMaximumHeight > 0 ? savedMaximumHeight : QWIDGETSIZE_MAX);
-  savedMaximumHeight = QWIDGETSIZE_MAX;
-  if (opacityEffect) {
-    opacityEffect->setOpacity(1.0);
-  }
-}
-
-void AdAlertPrivate::syncSingleChildLayout(QVBoxLayout* layout, QWidget* host, QWidget* child) {
-  if (!layout || !host) {
-    return;
-  }
-
-  for (int index = layout->count() - 1; index >= 0; --index) {
-    QWidget* current = layout->itemAt(index) ? layout->itemAt(index)->widget() : nullptr;
-    if (!current) {
-      continue;
-    }
-    if (current == child) {
-      continue;
-    }
-    layout->removeWidget(current);
-    current->hide();
-  }
-
-  if (!child) {
-    return;
-  }
-
-  if (child->parentWidget() != host) {
-    child->setParent(host);
-  }
-  if (layout->indexOf(child) < 0) {
-    layout->addWidget(child);
-  }
-  child->show();
-}
-
-AdAlert::AdAlert(QWidget* parent) : QFrame(parent), d_ptr(new AdAlertPrivate(this)) {
-  ensureAlertAccessibleFactoryInstalled();
+AdAlert::AdAlert(QWidget* parent) : QWidget(parent) {
   setObjectName(QStringLiteral("ad-alert"));
-  setAttribute(Qt::WA_Hover, true);
-  setFrameStyle(QFrame::NoFrame);
+  setAttribute(Qt::WA_StyledBackground, true);
   setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
-  Q_D(AdAlert);
-  d->ensureUi();
-  d->refresh();
+  ensureLayout();
+  refreshContent();
+  applyVisualStyle();
+  refreshOpenState();
+
+  connect(&adqt::theme::ThemeManager::instance(), &adqt::theme::ThemeManager::themeChanged, this,
+          [this]() {
+            applyVisualStyle();
+            refreshContent();
+          });
 }
 
 AdAlert::~AdAlert() {
-  Q_D(AdAlert);
-  if (d->closeAnimation) {
-    d->closeAnimation->stop();
+  if (closeAnimation_) {
+    closeAnimation_->stop();
   }
-  d->clearSectionConnection(d->leadingSection);
-  d->clearSectionConnection(d->textSection);
-  d->clearSectionConnection(d->informativeSection);
-  d->clearSectionConnection(d->actionsSection);
 }
 
-AdAlert::Severity AdAlert::severity() const {
-  Q_D(const AdAlert);
-  return d->severity;
+AdAlert::Type AdAlert::type() const {
+  const DerivedState state = deriveState();
+  return state.type;
 }
 
-void AdAlert::setSeverity(Severity value) {
-  Q_D(AdAlert);
-  if (d->severity == value) {
+void AdAlert::setType(Type value) {
+  if (typeExplicit_ && typeValue_ == value) {
     return;
   }
-  d->severity = value;
-  emit severityChanged(d->severity);
-  d->invalidateResolvedCache();
-  d->refresh();
+  const Type before = type();
+  typeExplicit_ = true;
+  typeValue_ = value;
+  if (type() != before) {
+    emit typeChanged(type());
+  }
+  applyVisualStyle();
+  refreshContent();
 }
 
-AdAlert::DisplayMode AdAlert::displayMode() const {
-  Q_D(const AdAlert);
-  return d->displayMode;
-}
+bool AdAlert::banner() const { return banner_; }
 
-void AdAlert::setDisplayMode(DisplayMode value) {
-  Q_D(AdAlert);
-  if (d->displayMode == value) {
+void AdAlert::setBanner(bool value) {
+  if (banner_ == value) {
     return;
   }
-  d->displayMode = value;
-  emit displayModeChanged(d->displayMode);
-  d->invalidateResolvedCache();
-  d->refresh();
+  const Type beforeType = type();
+  const bool beforeShowIcon = showIcon();
+  banner_ = value;
+  emit bannerChanged(banner_);
+  if (type() != beforeType) {
+    emit typeChanged(type());
+  }
+  if (showIcon() != beforeShowIcon) {
+    emit showIconChanged(showIcon());
+  }
+  applyVisualStyle();
+  refreshContent();
 }
 
-AdAlert::IconMode AdAlert::iconMode() const {
-  Q_D(const AdAlert);
-  return d->iconMode;
-}
+bool AdAlert::showIcon() const { return deriveState().showIcon; }
 
-void AdAlert::setIconMode(IconMode value) {
-  Q_D(AdAlert);
-  if (d->iconMode == value) {
+void AdAlert::setShowIcon(bool value) {
+  if (showIconExplicit_ && showIconValue_ == value) {
     return;
   }
-  d->iconMode = value;
-  emit iconModeChanged(d->iconMode);
-  d->invalidateResolvedCache();
-  d->refresh();
+  const bool before = showIcon();
+  showIconExplicit_ = true;
+  showIconValue_ = value;
+  if (showIcon() != before) {
+    emit showIconChanged(showIcon());
+  }
+  applyVisualStyle();
+  refreshContent();
 }
 
-bool AdAlert::closable() const {
-  Q_D(const AdAlert);
-  return d->closable;
-}
+bool AdAlert::closable() const { return closable_; }
 
 void AdAlert::setClosable(bool value) {
-  Q_D(AdAlert);
-  if (d->closable == value) {
+  if (closable_ == value) {
     return;
   }
-  d->closable = value;
-  emit closableChanged(d->closable);
-  d->invalidateResolvedCache();
-  d->refresh();
+  closable_ = value;
+  emit closableChanged(closable_);
+  applyVisualStyle();
+  refreshContent();
 }
 
-bool AdAlert::animated() const {
-  Q_D(const AdAlert);
-  return d->animated;
-}
+bool AdAlert::open() const { return open_; }
 
-void AdAlert::setAnimated(bool value) {
-  Q_D(AdAlert);
-  if (d->animated == value) {
+void AdAlert::setOpen(bool value) {
+  if (open_ == value) {
     return;
   }
-  d->animated = value;
-  emit animatedChanged(d->animated);
+  open_ = value;
+  emit openChanged(open_);
+  refreshOpenState();
 }
 
-QString AdAlert::text() const {
-  Q_D(const AdAlert);
-  return d->text;
-}
+QString AdAlert::titleText() const { return titleText_; }
 
-void AdAlert::setText(const QString& value) {
-  Q_D(AdAlert);
-  if (d->text == value) {
+void AdAlert::setTitleText(const QString& value) {
+  if (titleText_ == value) {
     return;
   }
-  d->text = value;
-  emit textChanged(d->text);
-  d->invalidateResolvedCache();
-  d->refresh();
+  titleText_ = value;
+  emit titleTextChanged(titleText_);
+  refreshContent();
 }
 
-QString AdAlert::informativeText() const {
-  Q_D(const AdAlert);
-  return d->informativeText;
-}
+QString AdAlert::descriptionText() const { return descriptionText_; }
 
-void AdAlert::setInformativeText(const QString& value) {
-  Q_D(AdAlert);
-  if (d->informativeText == value) {
+void AdAlert::setDescriptionText(const QString& value) {
+  if (descriptionText_ == value) {
     return;
   }
-  d->informativeText = value;
-  emit informativeTextChanged(d->informativeText);
-  d->invalidateResolvedCache();
-  d->refresh();
+  descriptionText_ = value;
+  emit descriptionTextChanged(descriptionText_);
+  refreshContent();
 }
 
-QWidget* AdAlert::leadingWidget() const {
-  Q_D(const AdAlert);
-  return d->leadingSection.widget.data();
+adqt::icons::IconToken AdAlert::iconToken() const { return iconToken_; }
+
+void AdAlert::setIconToken(const adqt::icons::IconToken& value) {
+  if (iconToken_ == value) {
+    return;
+  }
+  iconToken_ = value;
+  emit iconTokenChanged(iconToken_);
+  applyVisualStyle();
+  refreshContent();
 }
 
-void AdAlert::setLeadingWidget(QWidget* widget) {
-  Q_D(AdAlert);
-  d->setHostedWidget(AdAlertPrivate::HostedSlot::Leading, widget);
+adqt::icons::IconToken AdAlert::closeIconToken() const { return closeIconToken_; }
+
+void AdAlert::setCloseIconToken(const adqt::icons::IconToken& value) {
+  if (closeIconToken_ == value) {
+    return;
+  }
+  closeIconToken_ = value;
+  emit closeIconTokenChanged(closeIconToken_);
+  updateCloseButtonIcon();
 }
 
-QWidget* AdAlert::takeLeadingWidget() {
-  Q_D(AdAlert);
-  return d->takeHostedWidget(AdAlertPrivate::HostedSlot::Leading);
+QWidget* AdAlert::titleWidget() const { return titleWidget_; }
+
+void AdAlert::setTitleWidget(QWidget* widget) {
+  if (titleWidget_ == widget) {
+    return;
+  }
+  if (titleWidget_) {
+    titleWidget_->hide();
+    titleWidget_->setParent(nullptr);
+  }
+  titleWidget_ = widget;
+  if (titleWidget_) {
+    titleWidget_->hide();
+    if (titleWidget_->parentWidget()) {
+      titleWidget_->setParent(nullptr);
+    }
+  }
+  emit titleWidgetChanged(titleWidget_);
+  refreshContent();
 }
 
-QWidget* AdAlert::textWidget() const {
-  Q_D(const AdAlert);
-  return d->textSection.widget.data();
+QWidget* AdAlert::descriptionWidget() const { return descriptionWidget_; }
+
+void AdAlert::setDescriptionWidget(QWidget* widget) {
+  if (descriptionWidget_ == widget) {
+    return;
+  }
+  if (descriptionWidget_) {
+    descriptionWidget_->hide();
+    descriptionWidget_->setParent(nullptr);
+  }
+  descriptionWidget_ = widget;
+  if (descriptionWidget_) {
+    descriptionWidget_->hide();
+    if (descriptionWidget_->parentWidget()) {
+      descriptionWidget_->setParent(nullptr);
+    }
+  }
+  emit descriptionWidgetChanged(descriptionWidget_);
+  refreshContent();
 }
 
-void AdAlert::setTextWidget(QWidget* widget) {
-  Q_D(AdAlert);
-  d->setHostedWidget(AdAlertPrivate::HostedSlot::Text, widget);
+QWidget* AdAlert::actionWidget() const { return actionWidget_; }
+
+void AdAlert::setActionWidget(QWidget* widget) {
+  if (actionWidget_ == widget) {
+    return;
+  }
+  if (actionWidget_) {
+    actionWidget_->hide();
+    actionWidget_->setParent(nullptr);
+  }
+  actionWidget_ = widget;
+  if (actionWidget_) {
+    actionWidget_->hide();
+    if (actionWidget_->parentWidget()) {
+      actionWidget_->setParent(nullptr);
+    }
+  }
+  emit actionWidgetChanged(actionWidget_);
+  refreshContent();
 }
 
-QWidget* AdAlert::takeTextWidget() {
-  Q_D(AdAlert);
-  return d->takeHostedWidget(AdAlertPrivate::HostedSlot::Text);
+AdAlert::ComponentTokens AdAlert::componentTokens() const { return componentTokens_; }
+
+void AdAlert::setComponentTokens(const ComponentTokens& tokens) {
+  componentTokens_ = tokens;
+  emit componentTokensChanged();
+  applyVisualStyle();
+  refreshContent();
 }
 
-QWidget* AdAlert::informativeWidget() const {
-  Q_D(const AdAlert);
-  return d->informativeSection.widget.data();
+void AdAlert::resetComponentTokens() {
+  componentTokens_ = ComponentTokens{};
+  emit componentTokensChanged();
+  applyVisualStyle();
+  refreshContent();
 }
 
-void AdAlert::setInformativeWidget(QWidget* widget) {
-  Q_D(AdAlert);
-  d->setHostedWidget(AdAlertPrivate::HostedSlot::Informative, widget);
+AdAlert::SemanticStyles AdAlert::semanticStyles() const { return semanticStyles_; }
+
+void AdAlert::setSemanticStyles(const SemanticStyles& styles) {
+  semanticStyles_ = styles;
+  emit semanticStylesChanged();
+  applyVisualStyle();
 }
 
-QWidget* AdAlert::takeInformativeWidget() {
-  Q_D(AdAlert);
-  return d->takeHostedWidget(AdAlertPrivate::HostedSlot::Informative);
+void AdAlert::setSemanticStyleResolver(SemanticStyleResolver resolver) {
+  semanticStyleResolver_ = std::move(resolver);
+  emit semanticStylesChanged();
+  applyVisualStyle();
 }
 
-QWidget* AdAlert::actionsWidget() const {
-  Q_D(const AdAlert);
-  return d->actionsSection.widget.data();
-}
-
-void AdAlert::setActionsWidget(QWidget* widget) {
-  Q_D(AdAlert);
-  d->setHostedWidget(AdAlertPrivate::HostedSlot::Actions, widget);
-}
-
-QWidget* AdAlert::takeActionsWidget() {
-  Q_D(AdAlert);
-  return d->takeHostedWidget(AdAlertPrivate::HostedSlot::Actions);
+bool AdAlert::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == closeButton_ && event) {
+    if (event->type() == QEvent::Enter) {
+      closeButtonHovered_ = true;
+      updateCloseButtonIcon();
+    } else if (event->type() == QEvent::Leave) {
+      closeButtonHovered_ = false;
+      updateCloseButtonIcon();
+    }
+  }
+  return QWidget::eventFilter(watched, event);
 }
 
 void AdAlert::changeEvent(QEvent* event) {
-  QFrame::changeEvent(event);
+  QWidget::changeEvent(event);
   if (!event) {
     return;
   }
-
-  switch (event->type()) {
-    case QEvent::EnabledChange:
-    case QEvent::FontChange:
-    case QEvent::ApplicationFontChange:
-    case QEvent::PaletteChange:
-    case QEvent::ApplicationPaletteChange:
-    case QEvent::StyleChange:
-    case QEvent::LayoutDirectionChange:
-    case QEvent::LanguageChange: {
-      Q_D(AdAlert);
-      d->invalidateResolvedCache();
-      d->refresh();
-      break;
-    }
-    default:
-      break;
+  if (event->type() == QEvent::EnabledChange || event->type() == QEvent::FontChange) {
+    applyVisualStyle();
   }
 }
 
-void AdAlert::closeEvent(QCloseEvent* event) {
-  Q_D(AdAlert);
-  if (!event) {
-    return;
-  }
-
-  auto finalizeClose = [&]() {
-    const CloseReason reason = d->pendingCloseReason;
-    d->closeState = AdAlertPrivate::CloseState::Finalizing;
-
-    this->QFrame::closeEvent(event);
-    if (!event->isAccepted()) {
-      d->closeState = AdAlertPrivate::CloseState::Idle;
-      d->pendingCloseReason = CloseReason::Programmatic;
-      d->resetCloseAnimationState();
-      d->invalidateResolvedCache();
-      d->refresh();
-      return;
-    }
-
-    d->resetCloseAnimationState();
-    d->invalidateResolvedCache();
-
-    if (d->closeState == AdAlertPrivate::CloseState::Idle) {
-      return;
-    }
-
-    if (!isVisible()) {
-      d->closeState = AdAlertPrivate::CloseState::Idle;
-      d->pendingCloseReason = CloseReason::Programmatic;
-      emit closed(reason);
-      return;
-    }
-
-    d->closeState = AdAlertPrivate::CloseState::Finalizing;
-  };
-
-  if (d->closeState == AdAlertPrivate::CloseState::Finalizing) {
-    finalizeClose();
-    return;
-  }
-
-  if (d->closeState != AdAlertPrivate::CloseState::Idle) {
-    event->ignore();
-    return;
-  }
-
-  d->closeState = AdAlertPrivate::CloseState::Requested;
-  emit closeRequested(d->pendingCloseReason);
-
-  const detail::AlertVisualStyle& style = d->resolvedVisualStyle();
-  if (!d->closeAnimationEnabled(style)) {
-    finalizeClose();
-    return;
-  }
-
-  event->ignore();
-  d->startCloseAnimation(style.metrics.closeAnimationMs, style.metrics.closeAnimationEasing);
+AdAlert::DerivedState AdAlert::deriveState() const {
+  DerivedState state;
+  state.type = typeExplicit_ ? typeValue_ : (banner_ ? Type::Warning : Type::Info);
+  state.showIcon = showIconExplicit_ ? showIconValue_ : banner_;
+  state.hasDescription = descriptionWidget_ || !descriptionText_.trimmed().isEmpty();
+  return state;
 }
 
-void AdAlert::hideEvent(QHideEvent* event) {
-  QFrame::hideEvent(event);
+AdAlert::SemanticStyles AdAlert::resolvedSemanticStyles() const {
+  SemanticStyles merged = semanticStyles_;
+  if (!semanticStyleResolver_) {
+    return merged;
+  }
 
-  Q_D(AdAlert);
-  if (d->closeState == AdAlertPrivate::CloseState::Animating) {
-    if (d->closeAnimation && d->closeAnimation->state() == QAbstractAnimation::Running) {
-      d->closeAnimation->stop();
+  const DerivedState state = deriveState();
+  StyleContext context;
+  context.type = state.type;
+  context.banner = banner_;
+  context.showIcon = state.showIcon;
+  context.closable = closable_;
+  context.hasDescription = state.hasDescription;
+  context.open = open_;
+
+  const SemanticStyles resolved = semanticStyleResolver_(context);
+  mergeSemanticSlot(&merged.root, resolved.root);
+  mergeSemanticSlot(&merged.icon, resolved.icon);
+  mergeSemanticSlot(&merged.section, resolved.section);
+  mergeSemanticSlot(&merged.title, resolved.title);
+  mergeSemanticSlot(&merged.description, resolved.description);
+  mergeSemanticSlot(&merged.actions, resolved.actions);
+  mergeSemanticSlot(&merged.close, resolved.close);
+  return merged;
+}
+
+adqt::icons::IconToken AdAlert::resolvedIconToken() const {
+  if (adqt::icons::isValid(iconToken_)) {
+    return iconToken_;
+  }
+  return defaultTypeIcon(type());
+}
+
+adqt::icons::IconToken AdAlert::resolvedCloseIconToken() const {
+  if (adqt::icons::isValid(closeIconToken_)) {
+    return closeIconToken_;
+  }
+  return adqt::icons::outlined::Close();
+}
+
+void AdAlert::ensureLayout() {
+  if (rootLayout_) {
+    return;
+  }
+
+  auto* layout = new QHBoxLayout(this);
+  layout->setContentsMargins(12, 8, 12, 8);
+  layout->setSpacing(8);
+
+  auto* iconLabel = new QLabel(this);
+  iconLabel->setVisible(false);
+  iconLabel->setAlignment(Qt::AlignCenter);
+
+  auto* sectionHost = new QWidget(this);
+  sectionHost->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  auto* sectionLayout = new QVBoxLayout(sectionHost);
+  sectionLayout->setContentsMargins(0, 0, 0, 0);
+  sectionLayout->setSpacing(4);
+
+  auto* titleHost = new QWidget(sectionHost);
+  auto* titleLayout = new QVBoxLayout(titleHost);
+  titleLayout->setContentsMargins(0, 0, 0, 0);
+  titleLayout->setSpacing(0);
+  auto* titleLabel = new QLabel(titleHost);
+  titleLabel->setWordWrap(true);
+  titleLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+  auto* descriptionHost = new QWidget(sectionHost);
+  auto* descriptionLayout = new QVBoxLayout(descriptionHost);
+  descriptionLayout->setContentsMargins(0, 0, 0, 0);
+  descriptionLayout->setSpacing(0);
+  auto* descriptionLabel = new QLabel(descriptionHost);
+  descriptionLabel->setWordWrap(true);
+  descriptionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+  sectionLayout->addWidget(titleHost);
+  sectionLayout->addWidget(descriptionHost);
+
+  auto* actionHost = new QWidget(this);
+  actionHost->setVisible(false);
+  auto* actionLayout = new QVBoxLayout(actionHost);
+  actionLayout->setContentsMargins(0, 0, 0, 0);
+  actionLayout->setSpacing(0);
+
+  auto* closeButton = new QToolButton(this);
+  closeButton->setAutoRaise(true);
+  closeButton->setCursor(Qt::PointingHandCursor);
+  closeButton->setVisible(false);
+  closeButton->installEventFilter(this);
+
+  layout->addWidget(iconLabel, 0, Qt::AlignVCenter);
+  layout->addWidget(sectionHost, 1, Qt::AlignVCenter);
+  layout->addWidget(actionHost, 0, Qt::AlignVCenter);
+  layout->addWidget(closeButton, 0, Qt::AlignVCenter);
+
+  opacityEffect_ = new QGraphicsOpacityEffect(this);
+  opacityEffect_->setOpacity(1.0);
+  setGraphicsEffect(opacityEffect_);
+
+  closeAnimation_ = new QParallelAnimationGroup(this);
+  heightAnimation_ = new QPropertyAnimation(this, "maximumHeight", closeAnimation_);
+  opacityAnimation_ = new QPropertyAnimation(opacityEffect_, "opacity", closeAnimation_);
+  connect(closeAnimation_, &QParallelAnimationGroup::finished, this, [this]() {
+    finishCloseAnimation(true);
+  });
+
+  connect(closeButton, &QToolButton::clicked, this, [this]() {
+    emit closeRequested();
+    setOpen(false);
+  });
+
+  rootLayout_ = layout;
+  iconLabel_ = iconLabel;
+  sectionHost_ = sectionHost;
+  sectionLayout_ = sectionLayout;
+  titleHost_ = titleHost;
+  titleLayout_ = titleLayout;
+  titleLabel_ = titleLabel;
+  descriptionHost_ = descriptionHost;
+  descriptionLayout_ = descriptionLayout;
+  descriptionLabel_ = descriptionLabel;
+  actionHost_ = actionHost;
+  actionLayout_ = actionLayout;
+  closeButton_ = closeButton;
+}
+
+void AdAlert::refreshContent() {
+  ensureLayout();
+
+  const DerivedState state = deriveState();
+  const bool hasTitleContent = titleWidget_ || !titleText_.trimmed().isEmpty();
+  const bool hasDescriptionContent = descriptionWidget_ || !descriptionText_.trimmed().isEmpty();
+
+  clearLayout(titleLayout_);
+  clearLayout(descriptionLayout_);
+  clearLayout(actionLayout_);
+
+  if (titleWidget_) {
+    if (titleWidget_->parentWidget() != titleHost_) {
+      titleWidget_->setParent(titleHost_);
     }
-    d->closeState = AdAlertPrivate::CloseState::Idle;
-    d->pendingCloseReason = CloseReason::Programmatic;
-    d->resetCloseAnimationState();
-    d->invalidateResolvedCache();
+    titleLayout_->addWidget(titleWidget_);
+    titleWidget_->show();
+  } else if (hasTitleContent && titleLabel_) {
+    titleLabel_->setText(titleText_);
+    titleLayout_->addWidget(titleLabel_);
+    titleLabel_->show();
+  }
+
+  if (descriptionWidget_) {
+    if (descriptionWidget_->parentWidget() != descriptionHost_) {
+      descriptionWidget_->setParent(descriptionHost_);
+    }
+    descriptionLayout_->addWidget(descriptionWidget_);
+    descriptionWidget_->show();
+  } else if (hasDescriptionContent && descriptionLabel_) {
+    descriptionLabel_->setText(descriptionText_);
+    descriptionLayout_->addWidget(descriptionLabel_);
+    descriptionLabel_->show();
+  }
+
+  if (actionWidget_) {
+    if (actionWidget_->parentWidget() != actionHost_) {
+      actionWidget_->setParent(actionHost_);
+    }
+    actionLayout_->addWidget(actionWidget_);
+    actionWidget_->show();
+    actionHost_->setVisible(true);
+  } else {
+    actionHost_->setVisible(false);
+  }
+
+  if (titleHost_) {
+    titleHost_->setVisible(hasTitleContent);
+  }
+  if (descriptionHost_) {
+    descriptionHost_->setVisible(hasDescriptionContent);
+  }
+
+  if (iconLabel_) {
+    iconLabel_->setVisible(state.showIcon);
+  }
+  if (closeButton_) {
+    closeButton_->setVisible(closable_);
+  }
+
+  applyVisualStyle();
+}
+
+void AdAlert::applyVisualStyle() {
+  ensureLayout();
+
+  detail::AlertStyleInput styleInput;
+  const DerivedState state = deriveState();
+  styleInput.type = state.type;
+  styleInput.banner = banner_;
+  styleInput.showIcon = state.showIcon;
+  styleInput.closable = closable_;
+  styleInput.hasDescription = state.hasDescription;
+  styleInput.open = open_;
+  styleInput.baseFont = font();
+  styleInput.componentTokens = componentTokens_;
+  styleInput.semanticStyles = resolvedSemanticStyles();
+  const detail::AlertVisualStyle style = detail::resolveAlertVisualStyle(styleInput);
+
+  const int horizontalPadding =
+      state.hasDescription ? style.metrics.withDescriptionPadding : style.metrics.defaultPaddingHorizontal;
+  const int verticalPadding =
+      state.hasDescription ? style.metrics.withDescriptionPadding : style.metrics.defaultPaddingVertical;
+  if (rootLayout_) {
+    rootLayout_->setContentsMargins(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding);
+    rootLayout_->setSpacing(state.hasDescription ? style.metrics.actionGap : style.metrics.iconGap);
+    rootLayout_->setAlignment(iconLabel_, state.hasDescription ? Qt::AlignTop : Qt::AlignVCenter);
+    rootLayout_->setAlignment(sectionHost_, state.hasDescription ? Qt::AlignTop : Qt::AlignVCenter);
+    rootLayout_->setAlignment(actionHost_, state.hasDescription ? Qt::AlignTop : Qt::AlignVCenter);
+    rootLayout_->setAlignment(closeButton_, state.hasDescription ? Qt::AlignTop : Qt::AlignVCenter);
+  }
+  if (sectionLayout_) {
+    sectionLayout_->setSpacing(style.metrics.titleDescriptionGap);
+  }
+
+  if (titleLabel_) {
+    titleLabel_->setFont(state.hasDescription ? style.metrics.titleWithDescriptionFont : style.metrics.titleFont);
+    QPalette palette = titleLabel_->palette();
+    palette.setColor(QPalette::WindowText, style.titleColor);
+    titleLabel_->setPalette(palette);
+  }
+  if (descriptionLabel_) {
+    descriptionLabel_->setFont(style.metrics.descriptionFont);
+    QPalette palette = descriptionLabel_->palette();
+    palette.setColor(QPalette::WindowText, style.descriptionColor);
+    descriptionLabel_->setPalette(palette);
+  }
+
+  if (actionHost_) {
+    actionHost_->setStyleSheet(QStringLiteral("color: %1;").arg(toRgba(style.actionTextColor)));
+  }
+
+  setStyleSheet(QStringLiteral(
+                    "QWidget#ad-alert {"
+                    "  background-color: %1;"
+                    "  border-width: %2px;"
+                    "  border-style: solid;"
+                    "  border-color: %3;"
+                    "  border-radius: %4px;"
+                    "} ")
+                    .arg(toRgba(style.background))
+                    .arg(style.metrics.borderWidth)
+                    .arg(toRgba(style.border))
+                    .arg(style.metrics.borderRadius));
+
+  if (iconLabel_ && state.showIcon) {
+    adqt::icons::IconToken icon = resolvedIconToken();
+    if (!icon.style.hasPrimary) {
+      icon.style.primary = style.iconColor;
+      icon.style.hasPrimary = true;
+    }
+    const int iconSize = state.hasDescription ? style.metrics.withDescriptionIconSize : style.metrics.iconSize;
+    iconLabel_->setFixedSize(iconSize, iconSize);
+    iconLabel_->setPixmap(
+        adqt::icons::renderIconPixmap(icon, QSize(iconSize, iconSize), std::max(1.0, devicePixelRatioF())));
+  }
+
+  if (closeButton_) {
+    closeButton_->setFixedSize(style.metrics.closeButtonSize, style.metrics.closeButtonSize);
+    closeButton_->setIconSize(QSize(style.metrics.closeIconSize, style.metrics.closeIconSize));
+    closeButton_->setStyleSheet(
+        QStringLiteral("QToolButton {"
+                       "  border: none;"
+                       "  background: transparent;"
+                       "  padding: 0px;"
+                       "}"));
+  }
+
+  updateCloseButtonIcon();
+}
+
+void AdAlert::refreshOpenState() {
+  ensureLayout();
+  if (open_) {
+    if (closeAnimation_ && closeAnimation_->state() == QAbstractAnimation::Running) {
+      closeAnimation_->stop();
+    }
+    setVisible(true);
+    setMaximumHeight(QWIDGETSIZE_MAX);
+    if (opacityEffect_) {
+      opacityEffect_->setOpacity(1.0);
+    }
     return;
   }
 
-  if (d->closeState == AdAlertPrivate::CloseState::Requested ||
-      d->closeState == AdAlertPrivate::CloseState::Finalizing) {
-    const CloseReason reason = d->pendingCloseReason;
-    d->closeState = AdAlertPrivate::CloseState::Idle;
-    d->pendingCloseReason = CloseReason::Programmatic;
-    d->resetCloseAnimationState();
-    d->invalidateResolvedCache();
-    emit closed(reason);
+  detail::AlertStyleInput styleInput;
+  const DerivedState state = deriveState();
+  styleInput.type = state.type;
+  styleInput.banner = banner_;
+  styleInput.showIcon = state.showIcon;
+  styleInput.closable = closable_;
+  styleInput.hasDescription = state.hasDescription;
+  styleInput.open = open_;
+  styleInput.baseFont = font();
+  styleInput.componentTokens = componentTokens_;
+  styleInput.semanticStyles = resolvedSemanticStyles();
+  const detail::AlertVisualStyle style = detail::resolveAlertVisualStyle(styleInput);
+
+  if (style.metrics.animationDurationMs <= 0 || !isVisible()) {
+    finishCloseAnimation(true);
+    return;
   }
+  startCloseAnimation(style.metrics.animationDurationMs);
 }
 
-void AdAlert::paintEvent(QPaintEvent* event) {
-  Q_UNUSED(event)
-
-  Q_D(AdAlert);
-  const detail::AlertVisualStyle& style = d->resolvedVisualStyle();
-
-  QPainter painter(this);
-  painter.setRenderHint(QPainter::Antialiasing, true);
-
-  const bool hasVisibleBorder = style.metrics.borderWidth > 0 && style.border.alpha() > 0;
-  const qreal inset = hasVisibleBorder ? style.metrics.borderWidth / 2.0 : 0.0;
-  const QRectF shapeRect = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
-  if (shapeRect.width() <= 0.0 || shapeRect.height() <= 0.0) {
+void AdAlert::startCloseAnimation(int durationMs) {
+  if (!closeAnimation_ || !heightAnimation_ || !opacityAnimation_) {
+    finishCloseAnimation(true);
     return;
   }
 
-  const qreal radius = std::max<qreal>(0.0, style.metrics.borderRadius);
-  const QPainterPath fillPath = roundedRectPath(shapeRect, radius, radius, radius, radius);
-  painter.fillPath(fillPath, style.background);
+  setVisible(true);
+  int startHeight = height();
+  if (startHeight <= 0) {
+    startHeight = sizeHint().height();
+  }
+  startHeight = std::max(1, startHeight);
 
-  if (hasVisibleBorder) {
-    painter.strokePath(fillPath,
-                       QPen(style.border,
-                            style.metrics.borderWidth,
-                            Qt::SolidLine,
-                            Qt::SquareCap,
-                            Qt::MiterJoin));
+  setMaximumHeight(startHeight);
+  closeAnimation_->stop();
+
+  heightAnimation_->setDuration(durationMs);
+  heightAnimation_->setStartValue(startHeight);
+  heightAnimation_->setEndValue(0);
+  heightAnimation_->setEasingCurve(QEasingCurve::InOutCubic);
+
+  opacityAnimation_->setDuration(durationMs);
+  opacityAnimation_->setStartValue(1.0);
+  opacityAnimation_->setEndValue(0.0);
+  opacityAnimation_->setEasingCurve(QEasingCurve::InOutCubic);
+
+  closeAnimation_->start();
+}
+
+void AdAlert::finishCloseAnimation(bool emitAfterCloseSignal) {
+  if (open_) {
+    setVisible(true);
+    setMaximumHeight(QWIDGETSIZE_MAX);
+    if (opacityEffect_) {
+      opacityEffect_->setOpacity(1.0);
+    }
+    return;
+  }
+
+  if (closeAnimation_ && closeAnimation_->state() == QAbstractAnimation::Running) {
+    closeAnimation_->stop();
+  }
+  setVisible(false);
+  setMaximumHeight(QWIDGETSIZE_MAX);
+  if (opacityEffect_) {
+    opacityEffect_->setOpacity(1.0);
+  }
+  if (emitAfterCloseSignal) {
+    emit afterClose();
   }
 }
 
-void AdAlert::showEvent(QShowEvent* event) {
-  QFrame::showEvent(event);
-
-  Q_D(AdAlert);
-  if (d->closeAnimation && d->closeAnimation->state() == QAbstractAnimation::Running) {
-    d->closeAnimation->stop();
+void AdAlert::updateCloseButtonIcon() {
+  if (!closeButton_) {
+    return;
   }
-  d->closeState = AdAlertPrivate::CloseState::Idle;
-  d->pendingCloseReason = CloseReason::Programmatic;
-  d->resetCloseAnimationState();
 
-  d->suppressAccessibleEvents = true;
-  d->invalidateResolvedCache();
-  d->refresh();
-  d->suppressAccessibleEvents = false;
+  detail::AlertStyleInput styleInput;
+  const DerivedState state = deriveState();
+  styleInput.type = state.type;
+  styleInput.banner = banner_;
+  styleInput.showIcon = state.showIcon;
+  styleInput.closable = closable_;
+  styleInput.hasDescription = state.hasDescription;
+  styleInput.open = open_;
+  styleInput.baseFont = font();
+  styleInput.componentTokens = componentTokens_;
+  styleInput.semanticStyles = resolvedSemanticStyles();
+  const detail::AlertVisualStyle style = detail::resolveAlertVisualStyle(styleInput);
 
-  notifyAccessibilityEvent(this, QAccessible::ObjectShow);
-  d->announceVisibleContent();
+  adqt::icons::IconToken token = resolvedCloseIconToken();
+  if (!token.style.hasPrimary) {
+    token.style.primary = closeButtonHovered_ ? style.closeHoverColor : style.closeColor;
+    token.style.hasPrimary = true;
+  }
+  closeButton_->setIcon(adqt::icons::makeIcon(token));
+}
+
+void AdAlert::clearLayout(QLayout* layout) {
+  if (!layout) {
+    return;
+  }
+  while (QLayoutItem* item = layout->takeAt(0)) {
+    if (QWidget* widget = item->widget()) {
+      widget->hide();
+    }
+    delete item;
+  }
 }
 
 }  // namespace adqt::widgets

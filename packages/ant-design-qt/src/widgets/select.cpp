@@ -1,22 +1,14 @@
 #include "select.h"
 
-#include "detail/select_models.h"
-#include "detail/select_option_utils.h"
-#include "detail/select_selection_controller.h"
 #include "detail/timing_hub.h"
-#include "detail/overlay_accessibility.h"
-#include "antd_icons.h"
+#include "icons.h"
 #include "interaction_overlay_manager.h"
 #include "popup_placement.h"
 #include "scroll_area.h"
 #include "select_style.h"
 #include "theme/theme.h"
 
-#include <QAbstractItemDelegate>
-#include <QAbstractItemModel>
 #include <QAbstractItemView>
-#include <QAccessible>
-#include <QAccessibleWidget>
 #include <QCursor>
 #include <QEvent>
 #include <QFontMetrics>
@@ -40,7 +32,6 @@
 #include <QScrollBar>
 #include <QScopedValueRollback>
 #include <QSet>
-#include <QStandardItemModel>
 #include <QStyle>
 #include <QStyleOptionViewItem>
 #include <QStyledItemDelegate>
@@ -54,18 +45,11 @@ namespace adqt::widgets {
 
 namespace {
 
-namespace outlined_icons = adqt::icons::antd::outlined;
-namespace filled_icons = adqt::icons::antd::filled;
-namespace twotone_icons = adqt::icons::antd::twotone;
+namespace outlined_icons = adqt::icons::outlined;
+namespace filled_icons = adqt::icons::filled;
+namespace twotone_icons = adqt::icons::twotone;
 constexpr char kSuffixSpinnerFrameKey[] = "AdSelect.SuffixSpinnerFrame";
 constexpr char kShowLayoutRefreshKey[] = "AdSelect.ShowLayoutRefresh";
-constexpr char kTagTextMetadataKey[] = "__tagText";
-constexpr char kSelectedTextMetadataKey[] = "__selectedText";
-constexpr char kValueVariantMetadataKey[] = "__valueVariant";
-
-QString syntheticRoleFieldName(int role) {
-  return QStringLiteral("__role_%1").arg(role);
-}
 
 QRect widgetGlobalRect(const QWidget* widget) {
   if (!widget) {
@@ -98,177 +82,6 @@ QString escapedForRegex(const QString& text) {
   return QRegularExpression::escape(text);
 }
 
-bool iconRefsEqual(const adqt::icons::IconRef& lhs, const adqt::icons::IconRef& rhs) {
-  return lhs == rhs;
-}
-
-bool selectionItemsEqual(const QVector<AdSelect::SelectionItem>& lhs,
-                         const QVector<AdSelect::SelectionItem>& rhs) {
-  if (lhs.size() != rhs.size()) {
-    return false;
-  }
-  for (int i = 0; i < lhs.size(); ++i) {
-    if (lhs.at(i).value != rhs.at(i).value || lhs.at(i).label != rhs.at(i).label) {
-      return false;
-    }
-  }
-  return true;
-}
-
-QString defaultSelectAccessibleName(const AdSelect* select) {
-  if (!select) {
-    return QStringLiteral("Select");
-  }
-
-  const QString explicitName = select->accessibleName().trimmed();
-  if (!explicitName.isEmpty()) {
-    return explicitName;
-  }
-
-  switch (select->mode()) {
-    case AdSelect::Mode::Single:
-      return QObject::tr("Select");
-    case AdSelect::Mode::Multiple:
-      return QObject::tr("Multi-select");
-    case AdSelect::Mode::Tags:
-      return QObject::tr("Tag select");
-  }
-  return QObject::tr("Select");
-}
-
-QString defaultSelectAccessibleDescription(const AdSelect* select) {
-  if (!select) {
-    return QString();
-  }
-
-  const QString explicitDescription = select->accessibleDescription().trimmed();
-  if (!explicitDescription.isEmpty()) {
-    return explicitDescription;
-  }
-
-  const QString placeholder = select->placeholder().trimmed();
-  if (!placeholder.isEmpty()) {
-    return placeholder;
-  }
-
-  if (select->mode() == AdSelect::Mode::Single) {
-    return QObject::tr("Use arrow keys to browse options.");
-  }
-  return QObject::tr("Use arrow keys to browse options and Space to toggle selection.");
-}
-
-QString selectAccessibleValueText(const AdSelect* select) {
-  if (!select) {
-    return QString();
-  }
-
-  if (select->mode() == AdSelect::Mode::Single) {
-    return select->currentText();
-  }
-
-  QStringList labels;
-  const QVector<AdSelect::SelectionItem> items = select->currentItems();
-  labels.reserve(items.size());
-  for (const AdSelect::SelectionItem& item : items) {
-    const QString label = item.label.trimmed();
-    if (!label.isEmpty()) {
-      labels.append(label);
-    }
-  }
-  return labels.join(QStringLiteral(", "));
-}
-
-class AdSelectAccessible final : public QAccessibleWidget {
- public:
-  explicit AdSelectAccessible(AdSelect* select)
-      : QAccessibleWidget(select,
-                          select && select->mode() == AdSelect::Mode::Single ? QAccessible::ComboBox
-                                                                              : QAccessible::List) {}
-
-  QString text(QAccessible::Text t) const override {
-    const auto* select = qobject_cast<AdSelect*>(object());
-    if (!select) {
-      return QAccessibleWidget::text(t);
-    }
-
-    switch (t) {
-      case QAccessible::Name:
-        return defaultSelectAccessibleName(select);
-      case QAccessible::Description:
-        return defaultSelectAccessibleDescription(select);
-      case QAccessible::Value:
-        return selectAccessibleValueText(select);
-      default:
-        return QAccessibleWidget::text(t);
-    }
-  }
-
-  QAccessible::Role role() const override {
-    const auto* select = qobject_cast<AdSelect*>(object());
-    if (!select) {
-      return QAccessibleWidget::role();
-    }
-    return select->mode() == AdSelect::Mode::Single ? QAccessible::ComboBox : QAccessible::List;
-  }
-
-  QAccessible::State state() const override {
-    QAccessible::State st = QAccessibleWidget::state();
-    const auto* select = qobject_cast<AdSelect*>(object());
-    if (!select) {
-      return st;
-    }
-
-    st.focusable = true;
-    st.expandable = true;
-    st.hasPopup = true;
-    st.expanded = select->popupVisible();
-    st.collapsed = !select->popupVisible();
-    st.readOnly = !select->editable();
-    st.editable = select->editable();
-    st.selectable = true;
-    if (select->mode() != AdSelect::Mode::Single) {
-      st.multiSelectable = true;
-      st.extSelectable = true;
-    }
-    if (select->disabled()) {
-      st.disabled = true;
-    }
-    return st;
-  }
-};
-
-QAccessibleInterface* selectAccessibleFactory(const QString& className, QObject* object) {
-  Q_UNUSED(className)
-  if (auto* select = qobject_cast<AdSelect*>(object)) {
-    return new AdSelectAccessible(select);
-  }
-  return nullptr;
-}
-
-void ensureSelectAccessibleFactoryInstalled() {
-  static const bool installed = []() {
-    QAccessible::installFactory(selectAccessibleFactory);
-    return true;
-  }();
-  Q_UNUSED(installed)
-}
-
-QVariantList normalizedSelectValues(const QVariantList& values,
-                                    AdSelect::Mode mode,
-                                    int maxCount) {
-  detail::SelectSelectionController controller;
-  controller.setMode(mode);
-  controller.setMaxCount(maxCount);
-  controller.setCurrentValues(values);
-  return controller.currentValues();
-}
-
-void disposeOwnedSelectionModel(QPointer<QItemSelectionModel>& selectionModel) {
-  if (selectionModel) {
-    selectionModel->deleteLater();
-  }
-  selectionModel.clear();
-}
 
 QPixmap makeSpinnerPixmap(const QSize& logicalSize, qreal devicePixelRatio, const QColor& color, int angleDegrees) {
   if (!logicalSize.isValid() || logicalSize.isEmpty()) {
@@ -919,28 +732,6 @@ class AdSelect::OptionListModel final : public QAbstractListModel {
     if (role == Qt::UserRole) {
       return option.value;
     }
-    if (role == owner_->valueRole_) {
-      const QVariant rawValue = option.metadata.value(QString::fromLatin1(kValueVariantMetadataKey));
-      return rawValue.isValid() ? rawValue : QVariant(option.value);
-    }
-    if (role == owner_->labelRole_) {
-      return option.label;
-    }
-    if (role == owner_->tagTextRole_) {
-      return option.metadata.value(QString::fromLatin1(kTagTextMetadataKey), option.label);
-    }
-    if (role == owner_->selectedTextRole_) {
-      return option.metadata.value(QString::fromLatin1(kSelectedTextMetadataKey), option.label);
-    }
-    if (role == owner_->groupRole_) {
-      return option.group;
-    }
-    if (role >= Qt::UserRole + 1) {
-      const QVariant metadataRoleValue = option.metadata.value(syntheticRoleFieldName(role));
-      if (metadataRoleValue.isValid()) {
-        return metadataRoleValue;
-      }
-    }
     return QVariant();
   }
 
@@ -1105,14 +896,14 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
                             top,
                             iconWidth,
                             iconHeight);
-      adqt::icons::IconColorOverrides emptyIconColorOverrides;
-      emptyIconColorOverrides.primary = style.emptyBorderColor;
-      emptyIconColorOverrides.hasPrimary = true;
-      emptyIconColorOverrides.secondary = style.emptyContentColor;
-      emptyIconColorOverrides.hasSecondary = true;
-      emptyIconColorOverrides.tertiary = style.emptyShadowColor;
-      emptyIconColorOverrides.hasTertiary = true;
-      const adqt::icons::IconRef emptyIcon = twotone_icons::EmptySimple(emptyIconColorOverrides);
+      adqt::icons::IconStyle emptyIconStyle;
+      emptyIconStyle.primary = style.emptyBorderColor;
+      emptyIconStyle.hasPrimary = true;
+      emptyIconStyle.secondary = style.emptyContentColor;
+      emptyIconStyle.hasSecondary = true;
+      emptyIconStyle.tertiary = style.emptyShadowColor;
+      emptyIconStyle.hasTertiary = true;
+      const adqt::icons::IconToken emptyIcon = twotone_icons::EmptySimple(emptyIconStyle);
       const qreal dpr = owner_->devicePixelRatioF();
       const QPixmap iconPixmap =
           adqt::icons::renderIconPixmap(emptyIcon, QSize(iconWidth, iconHeight), dpr, QIcon::Normal, QIcon::Off);
@@ -1214,10 +1005,10 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
                             itemOption.rect.top() + (itemOption.rect.height() - selectedIconSize) / 2,
                             selectedIconSize,
                             selectedIconSize);
-      adqt::icons::IconRef checkIcon = outlined_icons::Check();
+      adqt::icons::IconToken checkIcon = outlined_icons::Check();
       if (adqt::icons::isValid(checkIcon)) {
-        checkIcon.colors.primary = isEnabled ? style.selectorActiveBorderColor : style.disabledTextColor;
-        checkIcon.colors.hasPrimary = true;
+        checkIcon.style.primary = isEnabled ? style.selectorActiveBorderColor : style.disabledTextColor;
+        checkIcon.style.hasPrimary = true;
         const qreal dpr = owner_->devicePixelRatioF();
         const QPixmap iconPixmap = adqt::icons::renderIconPixmap(
             checkIcon, QSize(selectedIconSize, selectedIconSize), dpr, QIcon::Normal, QIcon::Off);
@@ -1248,26 +1039,14 @@ class AdSelect::OptionListDelegate final : public QStyledItemDelegate {
 };
 
 AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
-  ensureSelectAccessibleFactoryInstalled();
   setObjectName(QStringLiteral("adselect-root"));
   setAttribute(Qt::WA_Hover, true);
   setAttribute(Qt::WA_StyledBackground, true);
-  setMouseTracking(true);
   setFocusPolicy(Qt::StrongFocus);
 
-  qRegisterMetaType<AdSelect::SelectionItem>("adqt::widgets::AdSelect::SelectionItem");
-  qRegisterMetaType<QVector<AdSelect::SelectionItem>>(
-      "QVector<adqt::widgets::AdSelect::SelectionItem>");
-
   visualStyle_ = new detail::SelectVisualStyle();
-  compositeModel_ = std::make_unique<detail::SelectCompositeModel>(this);
-  compositeModel_->setPrimaryColumn(modelColumn_);
-  filterProxyModel_ = std::make_unique<detail::SelectFilterProxyModel>(this);
-  filterProxyModel_->setSourceModel(compositeModel_.get());
   searchFilterFields_ = {QStringLiteral("label"), QStringLiteral("value")};
-  searchRoles_ = {DefaultLabelRole, DefaultValueRole};
   tokenSeparators_ = {QStringLiteral(",")};
-  updateRoleConfig();
 
   rootLayout_ = new QHBoxLayout(this);
   rootLayout_->setContentsMargins(10, 4, 10, 4);
@@ -1280,8 +1059,6 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 
   contentHost_ = new QWidget(this);
   contentHost_->setAutoFillBackground(false);
-  contentHost_->setAttribute(Qt::WA_Hover, true);
-  contentHost_->setMouseTracking(true);
   contentLayout_ = new QHBoxLayout(contentHost_);
   contentLayout_->setContentsMargins(0, 0, 0, 0);
   contentLayout_->setSpacing(6);
@@ -1289,8 +1066,6 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
   tagsContainer_ = new QWidget(contentHost_);
   tagsContainer_->setObjectName(QStringLiteral("adselect-tags"));
   tagsContainer_->setAutoFillBackground(false);
-  tagsContainer_->setAttribute(Qt::WA_Hover, true);
-  tagsContainer_->setMouseTracking(true);
   tagsContainer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   tagsContainer_->setVisible(false);
   tagsLayout_ = new WrappingTagsLayout(tagsContainer_);
@@ -1306,8 +1081,6 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 
   lineEdit_ = new QLineEdit(contentHost_);
   lineEdit_->setObjectName(QStringLiteral("adselect-input"));
-  lineEdit_->setAttribute(Qt::WA_Hover, true);
-  lineEdit_->setMouseTracking(true);
   lineEdit_->setFrame(false);
   lineEdit_->setAutoFillBackground(false);
   lineEdit_->setMinimumWidth(4);
@@ -1323,16 +1096,12 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
 
   clearButton_ = new FlatIconToolButton(this);
   clearButton_->setObjectName(QStringLiteral("adselect-clear"));
-  clearButton_->setAttribute(Qt::WA_Hover, true);
-  clearButton_->setMouseTracking(true);
   clearButton_->setCursor(Qt::PointingHandCursor);
   clearButton_->installEventFilter(this);
   clearButton_->setVisible(false);
 
   suffixButton_ = new FlatIconToolButton(this);
   suffixButton_->setObjectName(QStringLiteral("adselect-suffix"));
-  suffixButton_->setAttribute(Qt::WA_Hover, true);
-  suffixButton_->setMouseTracking(true);
   suffixButton_->setCursor(Qt::PointingHandCursor);
   rootLayout_->addWidget(suffixButton_);
 
@@ -1343,22 +1112,17 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
       return;
     }
 
-    QString effectiveText = text;
     if (mode_ == Mode::Tags && !tokenSeparators_.isEmpty()) {
       consumeTokenizedInput(text);
-      effectiveText = lineEdit_ ? lineEdit_->text() : searchText_;
     }
 
     if (!isSearchEnabledForCurrentMode()) {
       return;
     }
-    if (searchText_ == effectiveText) {
+    if (searchText_ == text) {
       return;
     }
-    searchText_ = effectiveText;
-    if (filterProxyModel_) {
-      filterProxyModel_->setSearchText(searchText_);
-    }
+    searchText_ = text;
     emit searchTextChanged(searchText_);
     if (mode_ != Mode::Single) {
       updateDisplay();
@@ -1382,34 +1146,18 @@ AdSelect::AdSelect(QWidget* parent) : QWidget(parent) {
     }
   });
 
+  connect(&adqt::theme::ThemeManager::instance(), &adqt::theme::ThemeManager::themeChanged, this,
+          [this]() { applyVisualStyle(); });
+
   applyVisualStyle();
   updateInputMode();
   updateDisplay();
   updateClearButton();
   updatePrefixVisual();
   updateSuffixVisual();
-  updateAccessibility();
 }
 
 AdSelect::~AdSelect() {
-  if (sourceModel_) {
-    disconnect(sourceModel_, nullptr, this, nullptr);
-    sourceModel_.clear();
-  }
-  if (selectionModel_) {
-    disconnect(selectionModel_, nullptr, this, nullptr);
-    selectionModel_.clear();
-  }
-  ownedSelectionModel_.clear();
-  if (itemDelegateOverride_) {
-    disconnect(itemDelegateOverride_, nullptr, this, nullptr);
-    itemDelegateOverride_.clear();
-  }
-  if (popupFooterWidget_) {
-    disconnect(popupFooterWidget_, nullptr, this, nullptr);
-    popupFooterWidget_ = nullptr;
-  }
-
   stopInteractionFocusForOwner(this);
   detail::clearFrameSubscription(this, QString::fromLatin1(kSuffixSpinnerFrameKey));
   suffixSpinnerSubscribed_ = false;
@@ -1423,393 +1171,51 @@ AdSelect::~AdSelect() {
   visualStyle_ = nullptr;
 }
 
-AdSelect::SelectionSnapshot AdSelect::captureSelectionSnapshot() const {
-  SelectionSnapshot snapshot;
-  snapshot.currentValue = currentValue();
-  snapshot.currentValues = currentValues();
-  snapshot.items = currentItems();
-  snapshot.currentModelIndex = currentModelIndexCache_;
-  return snapshot;
-}
-
-void AdSelect::emitSelectionSignalsFromSnapshot(const SelectionSnapshot& previous) {
-  const QVariant nextCurrentValue = currentValue();
-  const QVariantList nextCurrentValues = currentValues();
-  const QVector<SelectionItem> nextItems = currentItems();
-  const QModelIndex nextCurrentModelIndex = currentModelIndex();
-
-  if (previous.currentValue != nextCurrentValue) {
-    emit currentValueChanged(nextCurrentValue);
-  }
-  if (previous.currentValues != nextCurrentValues) {
-    emit currentValuesChanged(nextCurrentValues);
-  }
-  if (!selectionItemsEqual(previous.items, nextItems)) {
-    emit currentItemsChanged(nextItems);
-    emit selectionChanged(nextItems);
-  }
-  if (previous.currentModelIndex != nextCurrentModelIndex) {
-    emit currentModelIndexChanged(nextCurrentModelIndex);
-  }
-  currentModelIndexCache_ = nextCurrentModelIndex;
-}
-
-QVariantList AdSelect::normalizedSelectionValues(const QVariantList& values) const {
-  return normalizedSelectValues(values, mode_, maxCount_);
-}
-
-void AdSelect::applySelectedValues(const QVariantList& values, bool ensureTagOptions) {
-  const QVariantList normalizedValues = normalizedSelectionValues(values);
-
-  if (ensureTagOptions && mode_ == Mode::Tags) {
-    for (const QVariant& value : normalizedValues) {
-      if (!sourceIndexForValue(value).isValid()) {
-        ensureTagOptionExists(value);
-      }
-    }
-  }
-
-  syncSelectionModelFromState(normalizedValues);
-  setCustomTagValues(normalizedValues);
-  syncSelectionKeysFromState();
-}
-
-QVariantList AdSelect::selectedModelValues() const {
-  QVariantList values;
-  if (!selectionModel_) {
-    return values;
-  }
-
-  QModelIndexList selectedRows = selectionModel_->selectedRows(modelColumn_);
-  std::sort(selectedRows.begin(), selectedRows.end(),
-            [](const QModelIndex& lhs, const QModelIndex& rhs) {
-              if (lhs.row() == rhs.row()) {
-                return lhs.column() < rhs.column();
-              }
-              return lhs.row() < rhs.row();
-            });
-
-  detail::SelectRoleConfig roles;
-  roles.valueRole = valueRole_;
-  roles.labelRole = labelRole_;
-  roles.tagTextRole = tagTextRole_;
-  roles.selectedTextRole = selectedTextRole_;
-  roles.groupRole = groupRole_;
-
-  QStringList seen;
-  for (const QModelIndex& index : selectedRows) {
-    if (!index.isValid()) {
-      continue;
-    }
-    const QVariant value = detail::materializeSelectOption(index, roles).value;
-    const QString key = detail::selectValueKey(value);
-    if (!value.isValid() || value.isNull() || key.isEmpty() || seen.contains(key)) {
-      continue;
-    }
-    seen.append(key);
-    values.append(value);
-  }
-
-  return values;
-}
-
-QVariantList AdSelect::normalizedCustomTagValues(const QVariantList& values) const {
-  QVariantList out;
-  QStringList seen;
-  out.reserve(values.size());
-  for (const QVariant& value : values) {
-    const QVariant normalized = detail::normalizeSelectValue(value);
-    const QString key = detail::selectValueKey(normalized);
-    if (!normalized.isValid() || normalized.isNull() || key.isEmpty() || seen.contains(key)) {
-      continue;
-    }
-    if (sourceIndexForValue(normalized).isValid()) {
-      continue;
-    }
-    seen.append(key);
-    out.append(normalized);
-  }
-
-  return out;
-}
-
-void AdSelect::setCustomTagValues(const QVariantList& values) {
-  customTagValues_ = normalizedCustomTagValues(values);
-  if (maxCount_ > 0) {
-    const int selectedCount = static_cast<int>(selectedModelValues().size());
-    const int allowedCustomCount = std::max(0, maxCount_ - selectedCount);
-    if (customTagValues_.size() > allowedCustomCount) {
-      customTagValues_ = customTagValues_.mid(0, allowedCustomCount);
-    }
-  }
-}
-
-QVariantList AdSelect::effectiveSelectedValues() const {
-  QVariantList values = selectedModelValues();
-
-  QStringList seen;
-  seen.reserve(values.size() + customTagValues_.size());
-  for (const QVariant& value : values) {
-    const QString key = detail::selectValueKey(value);
-    if (!key.isEmpty()) {
-      seen.append(key);
-    }
-  }
-  for (const QVariant& value : customTagValues_) {
-    const QString key = detail::selectValueKey(value);
-    if (!key.isEmpty() && !seen.contains(key)) {
-      seen.append(key);
-      values.append(value);
-    }
-  }
-
-  if (mode_ == Mode::Single && values.size() > 1) {
-    values = {values.constFirst()};
-  }
-  if (maxCount_ > 0 && values.size() > maxCount_) {
-    values = values.mid(0, maxCount_);
-  }
-
-  return values;
-}
-
-void AdSelect::syncSelectionKeysFromState() {
-  detail::SelectSelectionController controller;
-  controller.setMode(mode_);
-  controller.setMaxCount(maxCount_);
-  controller.setCurrentValues(effectiveSelectedValues());
-
-  currentValueKeys_ = controller.currentKeys();
-  currentValueKey_ = mode_ == Mode::Single && !currentValueKeys_.isEmpty()
-                         ? currentValueKeys_.constFirst()
-                         : QString();
-}
-
-QModelIndex AdSelect::sourceIndexForValue(const QVariant& value) const {
-  if (!sourceModel_) {
-    return QModelIndex();
-  }
-
-  const QString expectedKey = detail::selectValueKey(value);
-  if (expectedKey.isEmpty()) {
-    return QModelIndex();
-  }
-
-  for (int row = 0; row < sourceModel_->rowCount(); ++row) {
-    const QModelIndex index = sourceModel_->index(row, modelColumn_);
-    if (!index.isValid()) {
-      continue;
-    }
-    detail::SelectRoleConfig roles;
-    roles.valueRole = valueRole_;
-    roles.labelRole = labelRole_;
-    roles.tagTextRole = tagTextRole_;
-    roles.selectedTextRole = selectedTextRole_;
-    roles.groupRole = groupRole_;
-    const QVariant candidate = detail::materializeSelectOption(index, roles).value;
-    if (detail::selectValueKey(candidate) == expectedKey) {
-      return index;
-    }
-  }
-  return QModelIndex();
-}
-
-QModelIndex AdSelect::compositeIndexForValue(const QVariant& value) const {
-  if (!compositeModel_) {
-    return QModelIndex();
-  }
-
-  const QModelIndex sourceIndex = sourceIndexForValue(value);
-  if (sourceIndex.isValid()) {
-    return compositeModel_->index(sourceIndex.row(), 0);
-  }
-
-  if (!overlayModel_) {
-    return QModelIndex();
-  }
-
-  const QString expectedKey = detail::selectValueKey(value);
-  if (expectedKey.isEmpty()) {
-    return QModelIndex();
-  }
-
-  const int primaryRows = sourceModel_ ? sourceModel_->rowCount() : 0;
-  for (int row = 0; row < overlayModel_->rowCount(); ++row) {
-    const QModelIndex overlayIndex = overlayModel_->index(row, 0);
-    if (!overlayIndex.isValid()) {
-      continue;
-    }
-    const QVariant candidate = overlayModel_->data(overlayIndex, valueRole_);
-    if (detail::selectValueKey(candidate) == expectedKey) {
-      return compositeModel_->index(primaryRows + row, 0);
-    }
-  }
-
-  return QModelIndex();
-}
-
-void AdSelect::syncSelectionStateFromSelectionModel() {
-  if (!selectionModel_ || syncingSelectionModel_) {
-    return;
-  }
-
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const QVariantList modelValues = selectedModelValues();
-  const QVariantList normalizedModelValues = normalizedSelectionValues(modelValues);
-  if (modelValues != normalizedModelValues) {
-    syncSelectionModelFromState(normalizedModelValues);
-  }
-  setCustomTagValues(customTagValues_);
-  syncSelectionKeysFromState();
-  updateSelectionCaches();
-  refreshRows();
-  updateDisplay();
-  updateClearButton();
-  emitSelectionSignalsFromSnapshot(previous);
-}
-
-void AdSelect::syncSelectionModelFromState(const QVariantList& selectedValues) {
-  if (!selectionModel_ || syncingSelectionModel_) {
-    return;
-  }
-  if (sourceModel_ && selectionModel_->model() != sourceModel_) {
-    return;
-  }
-
-  QModelIndexList indexes;
-  QStringList seen;
-  for (const QVariant& value : selectedValues) {
-    const QString key = detail::selectValueKey(value);
-    if (key.isEmpty() || seen.contains(key)) {
-      continue;
-    }
-    seen.append(key);
-    const QModelIndex index = sourceIndexForValue(value);
-    if (index.isValid()) {
-      indexes.append(index);
-    }
-  }
-
-  QScopedValueRollback<bool> syncGuard(syncingSelectionModel_, true);
-  QSignalBlocker blocker(selectionModel_);
-  selectionModel_->clearSelection();
-  selectionModel_->setCurrentIndex(QModelIndex(), QItemSelectionModel::NoUpdate);
-  for (const QModelIndex& index : indexes) {
-    selectionModel_->select(index, QItemSelectionModel::Select | QItemSelectionModel::Rows);
-  }
-  if (!indexes.isEmpty()) {
-    selectionModel_->setCurrentIndex(indexes.constFirst(), QItemSelectionModel::NoUpdate);
-  }
-}
-
-void AdSelect::updateRoleConfig() {
-  if (!filterProxyModel_) {
-    return;
-  }
-
-  detail::SelectRoleConfig roles;
-  roles.valueRole = valueRole_;
-  roles.labelRole = labelRole_;
-  roles.tagTextRole = tagTextRole_;
-  roles.selectedTextRole = selectedTextRole_;
-  roles.groupRole = groupRole_;
-  filterProxyModel_->setRoleConfig(roles);
-  filterProxyModel_->setSearchEnabled(searchEnabled_);
-  filterProxyModel_->setSearchText(searchText_);
-  filterProxyModel_->setSearchPolicy(searchPolicy_);
-  filterProxyModel_->setSearchRoles(searchRoles_);
-  filterProxyModel_->setSearchFilterFields(effectiveSearchFilterFields());
-  filterProxyModel_->setFilterPredicate(filterPredicate_);
-  filterProxyModel_->setSortComparator(sortComparator_);
-}
-
-QStringList AdSelect::effectiveSearchFilterFields() const {
-  if (searchFilterFieldsExplicit_ && !searchFilterFields_.isEmpty()) {
-    return searchFilterFields_;
-  }
-
-  QStringList fields;
-  fields.reserve(searchRoles_.size());
-  for (int role : searchRoles_) {
-    if (role == DefaultLabelRole) {
-      fields.append(QStringLiteral("label"));
-    } else if (role == DefaultValueRole) {
-      fields.append(QStringLiteral("value"));
-    } else {
-      fields.append(syntheticRoleFieldName(role));
-    }
-  }
-  const QStringList normalized = uniqueStringList(fields);
-  return normalized.isEmpty() ? QStringList{QStringLiteral("label"), QStringLiteral("value")}
-                              : normalized;
-}
-
-void AdSelect::ensureOverlayModel() {
-  if (overlayModel_) {
-    return;
-  }
-
-  auto* model = new QStandardItemModel(this);
-  overlayModel_ = model;
-  if (compositeModel_) {
-    compositeModel_->setOverlayModel(model);
-  }
-}
-
-void AdSelect::clearOverlayModel() {
-  if (auto* model = qobject_cast<QStandardItemModel*>(overlayModel_.data())) {
-    model->clear();
-  }
-}
-
 AdSelect::Mode AdSelect::mode() const { return mode_; }
 
 void AdSelect::setMode(Mode value) {
   if (mode_ == value) {
     return;
   }
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const bool previousSearchEnabled = searchEnabled_;
-  const QVariantList preservedValues = currentValues();
   mode_ = value;
-  if (!searchEnabledExplicit_) {
-    searchEnabled_ = (mode_ != Mode::Single);
-  }
-  if (!searchEnabled_ && !searchText_.isEmpty()) {
-    searchText_.clear();
-    emit searchTextChanged(searchText_);
-  }
-  if (mode_ != Mode::Tags) {
-    clearOverlayModel();
+
+  if (mode_ == Mode::Single) {
+    if (!values_.isEmpty()) {
+      value_ = values_.constFirst();
+      values_ = {value_};
+    }
+    if (!searchEnabled_) {
+      searchText_.clear();
+    }
+  } else {
+    if (!value_.isEmpty() && values_.isEmpty()) {
+      values_.append(value_);
+    }
+    value_.clear();
   }
 
-  syncModelBackedOptions(false);
-  applySelectedValues(preservedValues);
-  updateRoleConfig();
-  updateSelectionCaches();
+  enforceMaxCount();
   updateInputMode();
   applyVisualStyle();
   refreshRows();
   updateDisplay();
   updateClearButton();
   updateSuffixVisual();
-  updateAccessibility();
   emit modeChanged(mode_);
-  if (previousSearchEnabled != searchEnabled_) {
-    emit searchEnabledChanged(searchEnabled_);
-  }
-  emitSelectionSignalsFromSnapshot(previous);
+  emit valueChanged(value_);
+  emit valuesChanged(values_);
+  emitSelectionChangedSignals();
 }
 
-AdSelect::ControlSize AdSelect::controlSize() const { return controlSize_; }
+AdSelect::Size AdSelect::size() const { return size_; }
 
-void AdSelect::setControlSize(ControlSize value) {
-  if (controlSize_ == value) {
+void AdSelect::setSize(Size value) {
+  if (size_ == value) {
     return;
   }
-  controlSize_ = value;
+  size_ = value;
   applyVisualStyle();
-  emit controlSizeChanged(controlSize_);
+  emit sizeChanged(size_);
 }
 
 AdSelect::Variant AdSelect::variant() const { return variant_; }
@@ -1857,9 +1263,9 @@ void AdSelect::setLoading(bool value) {
   emit loadingChanged(loading_);
 }
 
-bool AdSelect::popupVisible() const { return open_; }
+bool AdSelect::open() const { return open_; }
 
-void AdSelect::setPopupVisible(bool value) {
+void AdSelect::setOpen(bool value) {
   if (value) {
     openPopup();
   } else {
@@ -1889,30 +1295,14 @@ void AdSelect::setDisabled(bool value) {
 bool AdSelect::searchEnabled() const { return searchEnabled_; }
 
 void AdSelect::setSearchEnabled(bool value) {
-  if (searchEnabled_ == value && searchEnabledExplicit_) {
-    return;
-  }
-  searchEnabledExplicit_ = true;
   if (searchEnabled_ == value) {
-    updateRoleConfig();
-    updateInputMode();
-    updateDisplay();
     return;
   }
   searchEnabled_ = value;
-  if (!searchEnabled_ && !searchText_.isEmpty()) {
-    searchText_.clear();
-    emit searchTextChanged(searchText_);
-  }
-  if (filterProxyModel_) {
-    filterProxyModel_->setSearchEnabled(searchEnabled_);
-    filterProxyModel_->setSearchText(searchText_);
-  }
   updateInputMode();
   refreshRows();
   updateDisplay();
   updateSuffixVisual();
-  updateAccessibility();
   emit searchEnabledChanged(searchEnabled_);
 }
 
@@ -1927,9 +1317,6 @@ void AdSelect::setSearchText(const QString& value) {
   }
   searchText_ = value;
   emit searchTextChanged(searchText_);
-  if (filterProxyModel_) {
-    filterProxyModel_->setSearchText(searchText_);
-  }
   if (isSearchEnabledForCurrentMode()) {
     if (lineEdit_ && (open_ || mode_ != Mode::Single)) {
       suppressLineEditChange_ = true;
@@ -1943,35 +1330,17 @@ void AdSelect::setSearchText(const QString& value) {
   }
 }
 
-AdSelect::SearchPolicy AdSelect::searchPolicy() const { return searchPolicy_; }
-
-void AdSelect::setSearchPolicy(SearchPolicy value) {
-  if (searchPolicy_ == value) {
-    return;
-  }
-  searchPolicy_ = value;
-  if (filterProxyModel_) {
-    filterProxyModel_->setSearchPolicy(searchPolicy_);
-  }
-  refreshRows();
-}
-
 int AdSelect::maxCount() const { return maxCount_; }
 
 void AdSelect::setMaxCount(int value) {
   if (maxCount_ == value) {
     return;
   }
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const QVariantList preservedValues = currentValues();
   maxCount_ = value;
-  applySelectedValues(preservedValues, false);
-  updateSelectionCaches();
-  refreshRows();
+  enforceMaxCount();
   updateDisplay();
   updateClearButton();
   emit maxCountChanged(maxCount_);
-  emitSelectionSignalsFromSnapshot(previous);
 }
 
 int AdSelect::maxTagCount() const { return maxTagCount_; }
@@ -2045,25 +1414,6 @@ void AdSelect::setPopupWidth(int value) {
   emit popupWidthChanged(popupWidth_);
 }
 
-int AdSelect::modelColumn() const { return modelColumn_; }
-
-void AdSelect::setModelColumn(int value) {
-  const int normalized = std::max(0, value);
-  if (modelColumn_ == normalized) {
-    return;
-  }
-
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  modelColumn_ = normalized;
-  if (compositeModel_) {
-    compositeModel_->setPrimaryColumn(modelColumn_);
-  }
-  syncModelBackedOptions(false);
-  updateAccessibility();
-  emit modelColumnChanged(modelColumn_);
-  emitSelectionSignalsFromSnapshot(previous);
-}
-
 QString AdSelect::placeholder() const { return placeholder_; }
 
 void AdSelect::setPlaceholder(const QString& value) {
@@ -2072,7 +1422,6 @@ void AdSelect::setPlaceholder(const QString& value) {
   }
   placeholder_ = value;
   updateDisplay();
-  updateAccessibility();
   emit placeholderChanged(placeholder_);
 }
 
@@ -2111,571 +1460,120 @@ void AdSelect::setPrefixText(const QString& value) {
   emit prefixTextChanged(prefixText_);
 }
 
-adqt::icons::IconRef AdSelect::prefixIconRef() const { return prefixIconRef_; }
+adqt::icons::IconToken AdSelect::prefixIconToken() const { return prefixIconToken_; }
 
-void AdSelect::setPrefixIconRef(const adqt::icons::IconRef& token) {
-  if (iconRefsEqual(prefixIconRef_, token)) {
+void AdSelect::setPrefixIconToken(const adqt::icons::IconToken& token) {
+  if (prefixIconToken_ == token) {
     return;
   }
-  prefixIconRef_ = token;
+  prefixIconToken_ = token;
   updatePrefixVisual();
-  emit prefixIconRefChanged(prefixIconRef_);
+  emit prefixIconTokenChanged(prefixIconToken_);
 }
 
-adqt::icons::IconRef AdSelect::suffixIconRef() const { return suffixIconRef_; }
+adqt::icons::IconToken AdSelect::suffixIconToken() const { return suffixIconToken_; }
 
-void AdSelect::setSuffixIconRef(const adqt::icons::IconRef& token) {
-  if (iconRefsEqual(suffixIconRef_, token)) {
+void AdSelect::setSuffixIconToken(const adqt::icons::IconToken& token) {
+  if (suffixIconToken_ == token) {
     return;
   }
-  suffixIconRef_ = token;
+  suffixIconToken_ = token;
   updateInputMode();
   updateSuffixVisual();
-  emit suffixIconRefChanged(suffixIconRef_);
+  emit suffixIconTokenChanged(suffixIconToken_);
 }
 
-QVariant AdSelect::currentValue() const { return currentValueCache_; }
+QString AdSelect::value() const { return value_; }
 
-void AdSelect::setCurrentValue(const QVariant& value) {
-  setCurrentValues(value.isValid() && !value.isNull() ? QVariantList{value} : QVariantList{});
+void AdSelect::setValue(const QString& value) {
+  if (mode_ != Mode::Single) {
+    setMode(Mode::Single);
+  }
+  selectSingleValue(value.trimmed(), true);
+  refreshRows();
 }
 
-QVariantList AdSelect::currentValues() const { return currentValuesCache_; }
+QStringList AdSelect::values() const { return values_; }
 
-void AdSelect::setCurrentValues(const QVariantList& values) {
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const QVariantList normalizedValues = normalizedSelectionValues(values);
-  if (currentValues() == normalizedValues) {
-    updateSelectionCaches();
-    updateDisplay();
+void AdSelect::setValues(const QStringList& values) {
+  QStringList normalized = normalizedValues(values);
+  if (mode_ == Mode::Single) {
+    const QString next = normalized.isEmpty() ? QString() : normalized.constFirst();
+    selectSingleValue(next, true);
     return;
   }
-  applySelectedValues(normalizedValues);
-  updateSelectionCaches();
+
+  if (mode_ == Mode::Tags) {
+    for (const QString& value : normalized) {
+      ensureTagOptionExists(value);
+    }
+  }
+
+  if (maxCount_ > 0 && normalized.size() > maxCount_) {
+    normalized = normalized.mid(0, maxCount_);
+  }
+  if (values_ == normalized) {
+    return;
+  }
+
+  values_ = normalized;
   refreshRows();
   updateDisplay();
   updateClearButton();
-  emitSelectionSignalsFromSnapshot(previous);
+  emit valuesChanged(values_);
+  emitSelectionChangedSignals();
 }
 
-QVector<AdSelect::SelectionItem> AdSelect::currentItems() const {
+QVector<AdSelect::SelectionItem> AdSelect::selectedItems() const {
   QVector<SelectionItem> items;
-  items.reserve(currentValueKeys_.size());
-  for (const QString& current : currentValueKeys_) {
+  items.reserve(values_.size());
+  for (const QString& current : values_) {
     SelectionItem item;
-    item.value = rawValueForSelectionKey(current);
-    item.label = fallbackSelectedLabel(item.value);
+    item.value = current;
+    item.label = fallbackSelectedLabel(current);
     items.append(item);
   }
   return items;
 }
 
-QModelIndex AdSelect::currentModelIndex() const {
-  if (!selectionModel_) {
-    return QModelIndex();
-  }
-
-  QModelIndex currentIndex = selectionModel_->currentIndex();
-  if (!currentIndex.isValid()) {
-    const QModelIndexList selectedIndexes = selectedModelIndexes();
-    return selectedIndexes.isEmpty() ? QModelIndex() : selectedIndexes.constFirst();
-  }
-  if (currentIndex.model() != sourceModel_) {
-    return QModelIndex();
-  }
-
-  const QModelIndex modelColumnIndex = currentIndex.sibling(currentIndex.row(), modelColumn_);
-  return modelColumnIndex.isValid() ? modelColumnIndex : currentIndex;
-}
-
-QModelIndexList AdSelect::selectedModelIndexes() const {
-  if (!selectionModel_ || (sourceModel_ && selectionModel_->model() != sourceModel_)) {
-    return {};
-  }
-
-  QModelIndexList selectedRows = selectionModel_->selectedRows(modelColumn_);
-  std::sort(selectedRows.begin(), selectedRows.end(),
-            [](const QModelIndex& lhs, const QModelIndex& rhs) {
-              if (lhs.row() == rhs.row()) {
-                return lhs.column() < rhs.column();
-              }
-              return lhs.row() < rhs.row();
-            });
-  return selectedRows;
-}
-
-int AdSelect::currentIndex() const {
-  const QModelIndex index = currentModelIndex();
-  return index.isValid() ? index.row() : -1;
-}
-
-void AdSelect::setCurrentIndex(int index) {
-  if (!sourceModel_ || index < 0 || index >= sourceModel_->rowCount()) {
-    setCurrentValues({});
-    return;
-  }
-
-  const QModelIndex modelIndex = sourceModel_->index(index, modelColumn_);
-  if (!modelIndex.isValid()) {
-    return;
-  }
-
-  const QVariant value = modelIndex.data(valueRole_);
-  if (mode_ == Mode::Single) {
-    setCurrentValue(value);
-  } else {
-    QVariantList nextValues = currentValues();
-    if (!nextValues.contains(value)) {
-      nextValues.append(value);
-      setCurrentValues(nextValues);
-    }
-  }
-}
-
-QString AdSelect::currentText() const {
-  const QModelIndex index = currentModelIndex();
-  if (index.isValid()) {
-    const QString label = index.data(labelRole_).toString().trimmed();
-    if (!label.isEmpty()) {
-      return label;
-    }
-    return index.data(Qt::DisplayRole).toString().trimmed();
-  }
-
-  if (!currentValue().isValid() || currentValue().isNull()) {
-    return QString();
-  }
-  return fallbackSelectedLabel(currentValue());
-}
-
-QVariant AdSelect::currentData(int role) const {
-  const QModelIndex index = currentModelIndex();
-  if (!index.isValid()) {
-    return QVariant();
-  }
-
-  return index.data(role);
-}
-
-void AdSelect::setCurrentData(const QVariant& value, int role) {
-  if (!sourceModel_) {
-    return;
-  }
-
-  for (int row = 0; row < sourceModel_->rowCount(); ++row) {
-    const QModelIndex index = sourceModel_->index(row, modelColumn_);
-    if (!index.isValid()) {
-      continue;
-    }
-    if (index.data(role) == value) {
-      setCurrentIndex(row);
-      return;
-    }
-  }
-}
-
-bool AdSelect::editable() const { return searchEnabled_; }
-
-void AdSelect::setEditable(bool value) { setSearchEnabled(value); }
-
-QLineEdit* AdSelect::lineEdit() const { return lineEdit_; }
-
-QListView* AdSelect::view() const {
-  auto* self = const_cast<AdSelect*>(this);
-  self->ensurePopup();
-  return listView_;
-}
-
-void AdSelect::showPopup() { openPopup(); }
-
-void AdSelect::hidePopup() { closePopup(); }
-
 QVector<AdSelect::Option> AdSelect::options() const { return options_; }
 
 void AdSelect::setOptions(const QVector<Option>& options) {
-  auto* model = new QStandardItemModel(this);
-  for (const Option& option : options) {
-    auto* item = new QStandardItem(option.label);
-    item->setData(option.label, Qt::DisplayRole);
-    item->setData(option.value, valueRole_);
-    item->setData(option.label, labelRole_);
-    item->setData(option.group, groupRole_);
-    item->setData(option.metadata, DefaultMetadataRole);
-
-    Qt::ItemFlags flags = item->flags();
-    if (option.disabled) {
-      flags &= ~Qt::ItemIsEnabled;
-      flags &= ~Qt::ItemIsSelectable;
+  options_ = options;
+  if (mode_ == Mode::Tags) {
+    for (const QString& current : values_) {
+      ensureTagOptionExists(current);
     }
-    item->setFlags(flags);
-    model->appendRow(item);
   }
-  if (ownedModel_ && ownedModel_ != model && ownedModel_ != sourceModel_) {
-    ownedModel_->deleteLater();
-  }
-  ownedModel_ = model;
-  setModel(model);
-}
-
-void AdSelect::appendOption(const Option& option) {
-  QVector<Option> next = options_;
-  next.append(option);
-  setOptions(next);
-}
-
-void AdSelect::clearOptions() {
-  if (!sourceModel_ && options_.isEmpty()) {
-    return;
-  }
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  if (ownedModel_) {
-    if (ownedModel_ != sourceModel_) {
-      ownedModel_->deleteLater();
-    }
-    ownedModel_.clear();
-  }
-  clearOverlayModel();
-  setModel(nullptr);
-  options_.clear();
-  updateSelectionCaches();
   refreshRows();
   updateDisplay();
   updateClearButton();
   emit optionsChanged();
-  emitSelectionSignalsFromSnapshot(previous);
 }
 
-QAbstractItemModel* AdSelect::model() const { return sourceModel_.data(); }
-
-void AdSelect::setModel(QAbstractItemModel* model) {
-  if (sourceModel_ == model) {
-    return;
-  }
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-
-  if (ownedModel_ && ownedModel_ == sourceModel_ && ownedModel_ != model) {
-    ownedModel_->deleteLater();
-    ownedModel_.clear();
-  }
-
-  if (sourceModel_) {
-    disconnect(sourceModel_, nullptr, this, nullptr);
-  }
-
-  sourceModel_ = model;
-  if (compositeModel_) {
-    compositeModel_->setPrimaryModel(sourceModel_);
-    compositeModel_->setPrimaryColumn(modelColumn_);
-  }
-
-  if (sourceModel_) {
-    connect(sourceModel_, &QObject::destroyed, this, [this]() {
-      const SelectionSnapshot previousSnapshot = captureSelectionSnapshot();
-      sourceModel_.clear();
-      if (compositeModel_) {
-        compositeModel_->setPrimaryModel(nullptr);
-      }
-      if (selectionModel_ && (!sourceModel_ || selectionModel_->model() != sourceModel_)) {
-        disconnect(selectionModel_, nullptr, this, nullptr);
-        selectionModel_.clear();
-        disposeOwnedSelectionModel(ownedSelectionModel_);
-        emit selectionModelChanged(nullptr);
-      }
-      syncModelBackedOptions();
-      updateSelectionCaches();
-      refreshRows();
-      updateDisplay();
-      updateClearButton();
-      emitSelectionSignalsFromSnapshot(previousSnapshot);
-      emit modelChanged(nullptr);
-    });
-    connect(sourceModel_, &QAbstractItemModel::modelReset, this,
-            [this]() { syncModelBackedOptions(); });
-    connect(sourceModel_, &QAbstractItemModel::layoutChanged, this,
-            [this](const QList<QPersistentModelIndex>&, QAbstractItemModel::LayoutChangeHint) {
-              syncModelBackedOptions();
-            });
-    connect(sourceModel_, &QAbstractItemModel::rowsInserted, this,
-            [this](const QModelIndex&, int, int) { syncModelBackedOptions(); });
-    connect(sourceModel_, &QAbstractItemModel::rowsRemoved, this,
-            [this](const QModelIndex&, int, int) { syncModelBackedOptions(); });
-    connect(sourceModel_, &QAbstractItemModel::rowsMoved, this,
-            [this](const QModelIndex&, int, int, const QModelIndex&, int) {
-              syncModelBackedOptions();
-            });
-    connect(sourceModel_,
-            qOverload<const QModelIndex&, const QModelIndex&, const QList<int>&>(
-                &QAbstractItemModel::dataChanged),
-            this,
-            [this](const QModelIndex&, const QModelIndex&, const QList<int>&) {
-              syncModelBackedOptions();
-            });
-  }
-
-  if (selectionModel_ && selectionModel_->model() != sourceModel_) {
-    disconnect(selectionModel_, nullptr, this, nullptr);
-    selectionModel_.clear();
-    disposeOwnedSelectionModel(ownedSelectionModel_);
-    emit selectionModelChanged(nullptr);
-  }
-
-  if (!selectionModel_ && sourceModel_) {
-    auto* ownedSelection = new QItemSelectionModel(sourceModel_, this);
-    ownedSelectionModel_ = ownedSelection;
-    setSelectionModel(ownedSelection);
-  } else if (selectionModel_) {
-    syncSelectionStateFromSelectionModel();
-  }
-
-  updateRoleConfig();
-  syncModelBackedOptions();
-  updateSelectionCaches();
+void AdSelect::appendOption(const Option& option) {
+  options_.append(option);
   refreshRows();
   updateDisplay();
-  updateClearButton();
-  updateAccessibility();
-  emit modelChanged(sourceModel_.data());
-  emitSelectionSignalsFromSnapshot(previous);
+  emit optionsChanged();
 }
 
-QItemSelectionModel* AdSelect::selectionModel() const { return selectionModel_.data(); }
-
-void AdSelect::setSelectionModel(QItemSelectionModel* model) {
-  if (selectionModel_ == model) {
+void AdSelect::clearOptions() {
+  if (options_.isEmpty()) {
     return;
   }
-
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const QVariantList preservedValues = currentValues();
-
-  if (model && sourceModel_ && model->model() != sourceModel_) {
-    return;
-  }
-
-  if (selectionModel_) {
-    disconnect(selectionModel_, nullptr, this, nullptr);
-  }
-
-  selectionModel_ = model;
-  if (!selectionModel_ || selectionModel_ != ownedSelectionModel_) {
-    disposeOwnedSelectionModel(ownedSelectionModel_);
-  }
-
-  bool selectionSignalsHandled = false;
-  if (selectionModel_) {
-    connect(selectionModel_, &QItemSelectionModel::selectionChanged, this,
-            [this](const QItemSelection&, const QItemSelection&) {
-              syncSelectionStateFromSelectionModel();
-            });
-    connect(selectionModel_, &QItemSelectionModel::currentChanged, this,
-            [this](const QModelIndex&, const QModelIndex&) {
-              syncSelectionStateFromSelectionModel();
-            });
-    if (!selectionModel_->selectedRows(modelColumn_).isEmpty()) {
-      syncSelectionStateFromSelectionModel();
-      selectionSignalsHandled = true;
-    } else {
-      applySelectedValues(preservedValues, false);
-      updateSelectionCaches();
-      refreshRows();
-      updateDisplay();
-      updateClearButton();
-    }
-  } else {
-    setCustomTagValues(preservedValues);
-    syncSelectionKeysFromState();
-    updateSelectionCaches();
-    refreshRows();
-    updateDisplay();
-    updateClearButton();
-  }
-
-  updateAccessibility();
-  emit selectionModelChanged(selectionModel_.data());
-  if (!selectionSignalsHandled) {
-    emitSelectionSignalsFromSnapshot(previous);
-  }
-}
-
-QList<AdSelect::Item> AdSelect::items() const { return options_.toList(); }
-
-void AdSelect::setItems(const QList<Item>& items) {
-  QVector<Option> options;
-  options.reserve(items.size());
-  for (const Item& item : items) {
-    options.append(item);
-  }
-  setOptions(options);
-}
-
-int AdSelect::valueRole() const { return valueRole_; }
-
-void AdSelect::setValueRole(int role) {
-  if (valueRole_ == role) {
-    return;
-  }
-  valueRole_ = role;
-  updateRoleConfig();
-  syncModelBackedOptions(false);
-}
-
-int AdSelect::labelRole() const { return labelRole_; }
-
-void AdSelect::setLabelRole(int role) {
-  if (labelRole_ == role) {
-    return;
-  }
-  labelRole_ = role;
-  updateRoleConfig();
-  syncModelBackedOptions(false);
-}
-
-int AdSelect::tagTextRole() const { return tagTextRole_; }
-
-void AdSelect::setTagTextRole(int role) {
-  if (tagTextRole_ == role) {
-    return;
-  }
-  tagTextRole_ = role;
-  updateRoleConfig();
-  syncModelBackedOptions(false);
-}
-
-int AdSelect::selectedTextRole() const { return selectedTextRole_; }
-
-void AdSelect::setSelectedTextRole(int role) {
-  if (selectedTextRole_ == role) {
-    return;
-  }
-  selectedTextRole_ = role;
-  updateRoleConfig();
-  syncModelBackedOptions(false);
-}
-
-int AdSelect::groupRole() const { return groupRole_; }
-
-void AdSelect::setGroupRole(int role) {
-  if (groupRole_ == role) {
-    return;
-  }
-  groupRole_ = role;
-  updateRoleConfig();
-  syncModelBackedOptions(false);
-}
-
-AdSelect::RoleConfig AdSelect::roleConfig() const {
-  RoleConfig config;
-  config.valueRole = valueRole_;
-  config.labelRole = labelRole_;
-  config.tagTextRole = tagTextRole_;
-  config.selectedTextRole = selectedTextRole_;
-  config.groupRole = groupRole_;
-  config.searchRoles = searchRoles_;
-  return config;
-}
-
-void AdSelect::setRoleConfig(const RoleConfig& config) {
-  const int nextValueRole = config.valueRole;
-  const int nextLabelRole = config.labelRole;
-  const int nextTagTextRole = config.tagTextRole;
-  const int nextSelectedTextRole = config.selectedTextRole;
-  const int nextGroupRole = config.groupRole;
-  const QList<int> nextSearchRoles =
-      config.searchRoles.isEmpty() ? QList<int>{nextLabelRole, nextValueRole} : config.searchRoles;
-
-  if (valueRole_ == nextValueRole && labelRole_ == nextLabelRole && tagTextRole_ == nextTagTextRole &&
-      selectedTextRole_ == nextSelectedTextRole && groupRole_ == nextGroupRole &&
-      searchRoles_ == nextSearchRoles) {
-    return;
-  }
-
-  valueRole_ = nextValueRole;
-  labelRole_ = nextLabelRole;
-  tagTextRole_ = nextTagTextRole;
-  selectedTextRole_ = nextSelectedTextRole;
-  groupRole_ = nextGroupRole;
-  searchRoles_ = nextSearchRoles;
-  if (!searchFilterFieldsExplicit_) {
-    searchFilterFields_ = effectiveSearchFilterFields();
-  }
-
-  updateRoleConfig();
-  syncModelBackedOptions(false);
-}
-
-QList<int> AdSelect::searchRoles() const { return searchRoles_; }
-
-void AdSelect::setSearchRoles(const QList<int>& roles) {
-  const QList<int> normalized = roles.isEmpty() ? QList<int>{labelRole_, valueRole_} : roles;
-  if (searchRoles_ == normalized) {
-    return;
-  }
-  searchRoles_ = normalized;
-  if (!searchFilterFieldsExplicit_) {
-    searchFilterFields_ = effectiveSearchFilterFields();
-  }
-  updateRoleConfig();
-  syncModelBackedOptions();
+  options_.clear();
   refreshRows();
-}
-
-QAbstractItemDelegate* AdSelect::itemDelegate() const { return itemDelegateOverride_.data(); }
-
-void AdSelect::setItemDelegate(QAbstractItemDelegate* delegate) {
-  if (itemDelegateOverride_ == delegate) {
-    return;
-  }
-  itemDelegateOverride_ = delegate;
-  if (listView_) {
-    listView_->setItemDelegate(itemDelegateOverride_ ? itemDelegateOverride_.data()
-                                                     : new OptionListDelegate(this));
-  }
-}
-
-QWidget* AdSelect::popupFooterWidget() const { return popupFooterWidget_; }
-
-void AdSelect::setPopupFooterWidget(QWidget* widget) {
-  if (popupFooterWidget_ == widget) {
-    return;
-  }
-
-  if (popupFooterWidget_) {
-    if (popupLayout_) {
-      popupLayout_->removeWidget(popupFooterWidget_);
-    }
-    if (popupExtraContent_ == popupFooterWidget_) {
-      popupExtraContent_ = nullptr;
-    }
-    if (popupFooterWidget_->parentWidget() == popup_ || popupFooterWidget_->parentWidget() == this) {
-      popupFooterWidget_->setParent(this);
-    }
-    popupFooterWidget_->hide();
-  }
-
-  popupFooterWidget_ = widget;
-  if (popupFooterWidget_) {
-    // Keep custom popup content out of the selector area before the popup exists.
-    popupFooterWidget_->setParent(this);
-    popupFooterWidget_->hide();
-  }
-
-  if (popup_) {
-    syncPopupExtraContentWidget();
-    if (open_) {
-      syncPopupGeometry();
-    }
-  }
+  updateDisplay();
+  emit optionsChanged();
 }
 
 void AdSelect::setSearchFilterFields(const QStringList& fields) {
   const QStringList normalized = uniqueStringList(fields);
-  const bool explicitOverride = !normalized.isEmpty();
-  if (searchFilterFields_ == normalized && searchFilterFieldsExplicit_ == explicitOverride) {
+  if (searchFilterFields_ == normalized) {
     return;
   }
   searchFilterFields_ = normalized;
-  searchFilterFieldsExplicit_ = explicitOverride;
-  updateRoleConfig();
   refreshRows();
 }
 
@@ -2683,9 +1581,6 @@ QStringList AdSelect::searchFilterFields() const { return searchFilterFields_; }
 
 void AdSelect::setFilterPredicate(FilterPredicate predicate) {
   filterPredicate_ = std::move(predicate);
-  if (filterProxyModel_) {
-    filterProxyModel_->setFilterPredicate(filterPredicate_);
-  }
   refreshRows();
 }
 
@@ -2693,9 +1588,6 @@ AdSelect::FilterPredicate AdSelect::filterPredicate() const { return filterPredi
 
 void AdSelect::setSortComparator(SortComparator comparator) {
   sortComparator_ = std::move(comparator);
-  if (filterProxyModel_) {
-    filterProxyModel_->setSortComparator(sortComparator_);
-  }
   refreshRows();
 }
 
@@ -2731,11 +1623,9 @@ AdSelect::LabelFormatter AdSelect::labelFormatter() const { return labelFormatte
 
 void AdSelect::setPopupExtraContentFactory(PopupExtraContentFactory factory) {
   popupExtraContentFactory_ = std::move(factory);
-  if (popup_) {
+  if (open_) {
     rebuildPopupExtraContent();
-    if (popupIsVisible()) {
-      syncPopupGeometry();
-    }
+    syncPopupGeometry();
   }
 }
 
@@ -2748,13 +1638,11 @@ AdSelect::ComponentTokens AdSelect::componentTokens() const { return componentTo
 void AdSelect::setComponentTokens(const ComponentTokens& tokens) {
   componentTokens_ = tokens;
   applyVisualStyle();
-  emit componentTokensChanged();
 }
 
 void AdSelect::resetComponentTokens() {
   componentTokens_ = ComponentTokens();
   applyVisualStyle();
-  emit componentTokensChanged();
 }
 
 AdSelect::SemanticStyles AdSelect::semanticStyles() const { return semanticStyles_; }
@@ -2762,13 +1650,11 @@ AdSelect::SemanticStyles AdSelect::semanticStyles() const { return semanticStyle
 void AdSelect::setSemanticStyles(const SemanticStyles& styles) {
   semanticStyles_ = styles;
   applyVisualStyle();
-  emit semanticStylesChanged();
 }
 
 void AdSelect::setSemanticStyleResolver(SemanticStyleResolver resolver) {
   semanticStyleResolver_ = std::move(resolver);
   applyVisualStyle();
-  emit semanticStylesChanged();
 }
 
 QSize AdSelect::sizeHint() const {
@@ -2807,41 +1693,16 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
       }
       if (!disabled()) {
         // Single-select should behave like a pure toggle target even when
-        // search is enabled: clicking the embedded editor must not bubble up
-        // and trigger a second toggle on the selector shell.
-        if (mode_ == Mode::Single) {
-          if (open_) {
-            closePopup();
-          } else {
-            openPopup();
-          }
+        // search is enabled: repeated clicks on the selector close popup.
+        if (mode_ == Mode::Single && open_) {
+          closePopup();
           return true;
         }
         if (!open_) {
           openPopup();
         }
       }
-    } else if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter) {
-      if (!disabled()) {
-        hovered_ = true;
-        updateClearButton();
-        update();
-      }
-    } else if (event->type() == QEvent::Leave || event->type() == QEvent::HoverLeave) {
-      if (!underMouse() && !(clearButton_ && clearButton_->underMouse())) {
-        hovered_ = false;
-      }
-      if (!clearButton_ || !clearButton_->underMouse()) {
-        clearHovered_ = false;
-      }
-      updateClearButton();
-      update();
     } else if (event->type() == QEvent::MouseMove) {
-      if (!disabled() && !hovered_) {
-        hovered_ = true;
-        updateClearButton();
-        update();
-      }
       if (lineEdit_->isReadOnly()) {
         return true;
       }
@@ -2883,54 +1744,9 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
       if (lineEdit_->isReadOnly() && keyEvent->matches(QKeySequence::SelectAll)) {
         return true;
       }
-      if (keyEvent->key() == Qt::Key_F4) {
-        if (open_) {
-          closePopup();
-        } else {
-          openPopup();
-        }
-        return true;
-      }
-      if (keyEvent->modifiers().testFlag(Qt::AltModifier) && keyEvent->key() == Qt::Key_Down) {
+      if (keyEvent->key() == Qt::Key_Down) {
         if (!open_) {
           openPopup();
-        }
-        return true;
-      } else if (keyEvent->modifiers().testFlag(Qt::AltModifier) && keyEvent->key() == Qt::Key_Up) {
-        if (open_) {
-          closePopup();
-        }
-        return true;
-      } else if (keyEvent->key() == Qt::Key_Down) {
-        if (!open_) {
-          openPopup();
-          return true;
-        }
-        moveCurrentListRow(1);
-        return true;
-      } else if (keyEvent->key() == Qt::Key_Up) {
-        if (open_) {
-          moveCurrentListRow(-1);
-          return true;
-        }
-      } else if (keyEvent->key() == Qt::Key_PageDown) {
-        if (open_) {
-          moveCurrentListRow(1, true);
-          return true;
-        }
-      } else if (keyEvent->key() == Qt::Key_PageUp) {
-        if (open_) {
-          moveCurrentListRow(-1, true);
-          return true;
-        }
-      } else if (keyEvent->key() == Qt::Key_Home) {
-        if (open_) {
-          moveCurrentListRowToBoundary(false);
-          return true;
-        }
-      } else if (keyEvent->key() == Qt::Key_End) {
-        if (open_) {
-          moveCurrentListRowToBoundary(true);
           return true;
         }
       } else if (keyEvent->key() == Qt::Key_Escape) {
@@ -2953,23 +1769,23 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
             return true;
           }
         }
-        if (open_) {
-          activateCurrentListRow();
-          return true;
+        if (open_ && listView_ && listView_->currentIndex().isValid()) {
+          const int row = listView_->currentIndex().row();
+          if (row >= 0 && row < rows_.size()) {
+            const ModelRow& modelRow = rows_.at(row);
+            if (modelRow.optionIndex >= 0 && modelRow.optionIndex < options_.size()) {
+              toggleSelectionForOption(options_.at(modelRow.optionIndex));
+              return true;
+            }
+          }
         }
       } else if (keyEvent->key() == Qt::Key_Backspace &&
                  (mode_ == Mode::Multiple || mode_ == Mode::Tags)) {
-        if (lineEdit_->text().isEmpty() && !currentValueKeys_.isEmpty()) {
-          const SelectionSnapshot previous = captureSelectionSnapshot();
-          QVariantList nextValues = currentValues();
-          if (nextValues.isEmpty()) {
-            return true;
-          }
-          const QVariant removedRaw = nextValues.takeLast();
-          applySelectedValues(nextValues, false);
-          emit deselected(removedRaw, fallbackSelectedLabel(removedRaw));
-          updateSelectionCaches();
-          emitSelectionSignalsFromSnapshot(previous);
+        if (lineEdit_->text().isEmpty() && !values_.isEmpty()) {
+          const QString removed = values_.takeLast();
+          emit deselected(removed, fallbackSelectedLabel(removed));
+          emit valuesChanged(values_);
+          emitSelectionChangedSignals();
           refreshRows();
           updateDisplay();
           updateClearButton();
@@ -2994,29 +1810,21 @@ bool AdSelect::eventFilter(QObject* watched, QEvent* event) {
   } else if (watched == listView_) {
     if (event->type() == QEvent::KeyPress) {
       auto* keyEvent = static_cast<QKeyEvent*>(event);
-      if (keyEvent->key() == Qt::Key_F4) {
-        if (open_) {
-          closePopup();
-        } else {
-          openPopup();
-        }
-        return true;
-      }
-      if (keyEvent->modifiers().testFlag(Qt::AltModifier) && keyEvent->key() == Qt::Key_Up) {
-        closePopup();
-        return true;
-      }
       if (keyEvent->key() == Qt::Key_Escape) {
         closePopup();
         return true;
       }
       if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
-        activateCurrentListRow();
-        return true;
-      }
-      if (keyEvent->key() == Qt::Key_Space && mode_ != Mode::Single) {
-        activateCurrentListRow();
-        return true;
+        if (listView_->currentIndex().isValid()) {
+          const int row = listView_->currentIndex().row();
+          if (row >= 0 && row < rows_.size()) {
+            const ModelRow& modelRow = rows_.at(row);
+            if (modelRow.optionIndex >= 0 && modelRow.optionIndex < options_.size()) {
+              toggleSelectionForOption(options_.at(modelRow.optionIndex));
+              return true;
+            }
+          }
+        }
       }
     }
   } else if (listView_ && watched == listView_->viewport()) {
@@ -3254,8 +2062,7 @@ void AdSelect::changeEvent(QEvent* event) {
     return;
   }
   if (event->type() == QEvent::EnabledChange || event->type() == QEvent::PaletteChange ||
-      event->type() == QEvent::ApplicationPaletteChange || event->type() == QEvent::FontChange ||
-      event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::StyleChange) {
+      event->type() == QEvent::FontChange) {
     if (event->type() == QEvent::EnabledChange && disabled()) {
       hovered_ = false;
     }
@@ -3268,217 +2075,39 @@ void AdSelect::changeEvent(QEvent* event) {
   }
 }
 
-void AdSelect::syncModelBackedOptions(bool preserveCurrentValues) {
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const QVariantList preservedValues = currentValues();
-  const QVariantList preservedCustomValues = customTagValues_;
-  if (!searchFilterFieldsExplicit_) {
-    searchFilterFields_ = effectiveSearchFilterFields();
-  }
-  updateRoleConfig();
-
-  QVector<Option> nextOptions;
-  QAbstractItemModel* effectiveModel = compositeModel_ ? static_cast<QAbstractItemModel*>(compositeModel_.get())
-                                                       : sourceModel_.data();
-  const int rowCount = effectiveModel ? effectiveModel->rowCount() : 0;
-  nextOptions.reserve(rowCount);
-
-  detail::SelectRoleConfig roles;
-  roles.valueRole = valueRole_;
-  roles.labelRole = labelRole_;
-  roles.tagTextRole = tagTextRole_;
-  roles.selectedTextRole = selectedTextRole_;
-  roles.groupRole = groupRole_;
-
-  for (int row = 0; row < rowCount; ++row) {
-    const QModelIndex index = effectiveModel->index(row, 0);
-    if (!index.isValid()) {
-      continue;
-    }
-    nextOptions.append(detail::materializeSelectOption(index, roles));
-  }
-
-  options_ = nextOptions;
-  if (preserveCurrentValues) {
-    applySelectedValues(preservedValues, false);
-  } else {
-    customTagValues_ = preservedCustomValues;
-    setCustomTagValues(customTagValues_);
-    syncSelectionKeysFromState();
-  }
-  updateSelectionCaches();
-  refreshRows();
-  updateDisplay();
-  updateClearButton();
-  emit optionsChanged();
-  emitSelectionSignalsFromSnapshot(previous);
-}
-
-AdSelect::Option AdSelect::optionFromRow(int row) const {
-  if (row < 0 || row >= rows_.size()) {
-    return {};
-  }
-  const ModelRow& modelRow = rows_.at(row);
-  if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
-    return {};
-  }
-  return options_.at(modelRow.optionIndex);
-}
-
-QString AdSelect::modelLabelForValue(const QVariant& value) const {
-  const QString key = detail::selectValueKey(value);
-  if (selectedLabelCache_.contains(key)) {
-    return selectedLabelCache_.value(key);
-  }
-  const Option* option = findOption(value);
-  return option ? optionLabelOrFallback(*option) : value.toString().trimmed();
-}
-
-void AdSelect::updateSelectionCaches() {
-  const auto previousLabels = selectedLabelCache_;
-  const auto previousTagTexts = selectedTagTextCache_;
-  const auto previousDisplayTexts = selectedDisplayTextCache_;
-  const auto previousCurrentValues = currentValuesCache_;
-  const QVariantList selectedValues = effectiveSelectedValues();
-
-  selectedLabelCache_.clear();
-  selectedTagTextCache_.clear();
-  selectedDisplayTextCache_.clear();
-
-  currentValuesCache_.clear();
-  currentValuesCache_.reserve(selectedValues.size());
-
-  QHash<QString, QVariant> previousValueMap;
-  previousValueMap.reserve(previousCurrentValues.size());
-  for (const QVariant& previousValue : previousCurrentValues) {
-    const QString key = detail::selectValueKey(previousValue);
-    if (!key.isEmpty()) {
-      previousValueMap.insert(key, previousValue);
-    }
-  }
-
-  for (const QVariant& selectedValue : selectedValues) {
-    const QString current = detail::selectValueKey(selectedValue);
-    if (current.isEmpty()) {
-      continue;
-    }
-
-    QVariant rawValue = previousValueMap.value(current, selectedValue);
-    QString label = previousLabels.value(current, rawValue.toString().trimmed());
-    QString tagText = previousTagTexts.value(current, label);
-    QString displayText = previousDisplayTexts.value(current, label);
-
-    if (const Option* option = findOption(rawValue)) {
-      label = optionLabelOrFallback(*option);
-
-      const QVariant candidateRaw =
-          option->metadata.value(QString::fromLatin1(kValueVariantMetadataKey));
-      if (candidateRaw.isValid()) {
-        rawValue = candidateRaw;
-      } else {
-        rawValue = option->value;
-      }
-
-      const QString candidateTag =
-          option->metadata.value(QString::fromLatin1(kTagTextMetadataKey)).toString().trimmed();
-      tagText = candidateTag.isEmpty()
-                    ? (tagTextFormatter_ ? tagTextFormatter_(*option) : label)
-                    : candidateTag;
-
-      const QString candidateDisplay =
-          option->metadata.value(QString::fromLatin1(kSelectedTextMetadataKey)).toString().trimmed();
-      displayText = candidateDisplay.isEmpty()
-                        ? (labelFormatter_ ? labelFormatter_(*option) : label)
-                        : candidateDisplay;
-    }
-
-    selectedLabelCache_.insert(current, label);
-    selectedTagTextCache_.insert(current, tagText.isEmpty() ? label : tagText);
-    selectedDisplayTextCache_.insert(current, displayText.isEmpty() ? label : displayText);
-    currentValuesCache_.append(rawValue);
-  }
-
-  currentValueCache_ = currentValuesCache_.isEmpty() ? QVariant() : currentValuesCache_.constFirst();
-}
-
-void AdSelect::syncPopupExtraContentWidget() {
-  if (!popup_ || !popupLayout_) {
-    return;
-  }
-
-  QWidget* nextContent = popupFooterWidget_;
-  if (!nextContent && popupExtraContentFactory_) {
-    nextContent = popupExtraContentFactory_(popup_);
-  }
-
-  if (popupExtraContent_ == nextContent) {
-    if (popupExtraContent_) {
-      if (popupExtraContent_->parentWidget() != popup_) {
-        popupExtraContent_->setParent(popup_);
-      }
-      if (popupLayout_->indexOf(popupExtraContent_) < 0) {
-        popupLayout_->addWidget(popupExtraContent_);
-      }
-      popupExtraContent_->show();
-    }
-    return;
-  }
-
-  QWidget* previous = popupExtraContent_;
-  popupExtraContent_ = nullptr;
-
-  if (previous) {
-    popupLayout_->removeWidget(previous);
-    if (previous == popupFooterWidget_) {
-      previous->hide();
-      previous->setParent(nullptr);
-    } else {
-      previous->deleteLater();
-    }
-  }
-
-  if (!nextContent) {
-    return;
-  }
-
-  popupExtraContent_ = nextContent;
-  popupExtraContent_->setParent(popup_);
-  popupLayout_->addWidget(popupExtraContent_);
-  popupExtraContent_->show();
-}
-
 bool AdSelect::isSearchEnabledForCurrentMode() const {
-  return searchEnabled_;
-}
-
-bool AdSelect::isValueSelected(const QVariant& value) const {
-  const QString key = detail::selectValueKey(value);
   if (mode_ == Mode::Single) {
-    return !currentValueKey_.isEmpty() && currentValueKey_ == key;
+    return searchEnabled_;
   }
-  return currentValueKeys_.contains(key);
+  return true;
 }
 
-int AdSelect::indexOfValue(const QVariant& value) const {
-  const QString key = detail::selectValueKey(value);
+bool AdSelect::isValueSelected(const QString& value) const {
+  if (mode_ == Mode::Single) {
+    return !value_.isEmpty() && value_ == value;
+  }
+  return values_.contains(value);
+}
+
+int AdSelect::indexOfOptionValue(const QString& value) const {
   for (int i = 0; i < options_.size(); ++i) {
-    if (detail::selectValueKey(options_.at(i).value) == key) {
+    if (options_.at(i).value == value) {
       return i;
     }
   }
   return -1;
 }
 
-const AdSelect::Option* AdSelect::findOption(const QVariant& value) const {
-  const int index = indexOfValue(value);
+const AdSelect::Option* AdSelect::findOption(const QString& value) const {
+  const int index = indexOfOptionValue(value);
   if (index < 0 || index >= options_.size()) {
     return nullptr;
   }
   return &options_.at(index);
 }
 
-AdSelect::Option* AdSelect::findOption(const QVariant& value) {
-  const int index = indexOfValue(value);
+AdSelect::Option* AdSelect::findOption(const QString& value) {
+  const int index = indexOfOptionValue(value);
   if (index < 0 || index >= options_.size()) {
     return nullptr;
   }
@@ -3487,7 +2116,17 @@ AdSelect::Option* AdSelect::findOption(const QVariant& value) {
 
 QString AdSelect::optionLabelOrFallback(const Option& option) const {
   const QString trimmed = option.label.trimmed();
-  return trimmed.isEmpty() ? option.value.toString().trimmed() : trimmed;
+  return trimmed.isEmpty() ? option.value : trimmed;
+}
+
+QString AdSelect::optionSearchFieldValue(const Option& option, const QString& field) const {
+  if (field == QStringLiteral("label")) {
+    return optionLabelOrFallback(option);
+  }
+  if (field == QStringLiteral("value")) {
+    return option.value;
+  }
+  return option.metadata.value(field).toString();
 }
 
 QString AdSelect::formattedOptionText(const Option& option) const {
@@ -3501,11 +2140,6 @@ QString AdSelect::formattedTagText(const Option& option) const {
   if (tagTextFormatter_) {
     return tagTextFormatter_(option);
   }
-  const QString tagText =
-      option.metadata.value(QString::fromLatin1(kTagTextMetadataKey)).toString().trimmed();
-  if (!tagText.isEmpty()) {
-    return tagText;
-  }
   return optionLabelOrFallback(option);
 }
 
@@ -3513,22 +2147,13 @@ QString AdSelect::formattedSelectedLabel(const Option& option) const {
   if (labelFormatter_) {
     return labelFormatter_(option);
   }
-  const QString selectedText =
-      option.metadata.value(QString::fromLatin1(kSelectedTextMetadataKey)).toString().trimmed();
-  if (!selectedText.isEmpty()) {
-    return selectedText;
-  }
   return optionLabelOrFallback(option);
 }
 
-QString AdSelect::fallbackSelectedLabel(const QVariant& value) const {
-  const QString key = detail::selectValueKey(value);
+QString AdSelect::fallbackSelectedLabel(const QString& value) const {
   const Option* option = findOption(value);
   if (!option) {
-    if (mode_ == Mode::Multiple || mode_ == Mode::Tags) {
-      return selectedTagTextCache_.value(key, selectedLabelCache_.value(key, value.toString().trimmed()));
-    }
-    return selectedDisplayTextCache_.value(key, selectedLabelCache_.value(key, value.toString().trimmed()));
+    return value;
   }
   if (mode_ == Mode::Multiple || mode_ == Mode::Tags) {
     return formattedTagText(*option);
@@ -3536,36 +2161,9 @@ QString AdSelect::fallbackSelectedLabel(const QVariant& value) const {
   return formattedSelectedLabel(*option);
 }
 
-QVariant AdSelect::rawValueForSelectionKey(const QString& value) const {
-  const QVariantList selectedValues = effectiveSelectedValues();
-  for (const QVariant& candidate : selectedValues) {
-    if (detail::selectValueKey(candidate) == value) {
-      return candidate;
-    }
-  }
-
-  const int selectedIndex = currentValueKeys_.indexOf(value);
-  if (selectedIndex >= 0 && selectedIndex < currentValuesCache_.size()) {
-    const QVariant cached = currentValuesCache_.at(selectedIndex);
-    if (cached.isValid()) {
-      return cached;
-    }
-  }
-
-  for (const Option& option : options_) {
-    if (detail::selectValueKey(option.value) != value) {
-      continue;
-    }
-    const QVariant candidateRaw = option.metadata.value(QString::fromLatin1(kValueVariantMetadataKey));
-    if (candidateRaw.isValid()) {
-      return candidateRaw;
-    }
-    return option.value;
-  }
-
-  return value;
+QStringList AdSelect::normalizedValues(const QStringList& values) const {
+  return uniqueStringList(values);
 }
-
 
 int AdSelect::responsiveVisibleTagCount(const QStringList& labels, int availableWidth) const {
   if (labels.isEmpty() || availableWidth <= 0) {
@@ -3650,9 +2248,9 @@ void AdSelect::rebuildTagWidgets() {
   }
 
   QStringList labels;
-  labels.reserve(currentValueKeys_.size());
-  for (const QString& current : currentValueKeys_) {
-    labels.append(fallbackSelectedLabel(rawValueForSelectionKey(current)));
+  labels.reserve(values_.size());
+  for (const QString& current : values_) {
+    labels.append(fallbackSelectedLabel(current));
   }
 
   int visibleCount = labels.size();
@@ -3773,10 +2371,10 @@ void AdSelect::rebuildTagWidgets() {
       removeButton->setIconSize(QSize(removeIconSize, removeIconSize));
       removeButton->setCursor(Qt::PointingHandCursor);
 
-      adqt::icons::IconRef closeIcon = outlined_icons::Close();
+      adqt::icons::IconToken closeIcon = outlined_icons::Close();
       if (adqt::icons::isValid(closeIcon)) {
-        closeIcon.colors.primary = removeColor;
-        closeIcon.colors.hasPrimary = true;
+        closeIcon.style.primary = removeColor;
+        closeIcon.style.hasPrimary = true;
         const qreal dpr = devicePixelRatioF();
         QPixmap closePixmap = adqt::icons::renderIconPixmap(
             closeIcon, QSize(removeIconSize, removeIconSize), dpr, QIcon::Normal, QIcon::Off);
@@ -3784,8 +2382,8 @@ void AdSelect::rebuildTagWidgets() {
         if (!closePixmap.isNull()) {
           closeButtonIcon.addPixmap(closePixmap, QIcon::Normal, QIcon::Off);
         }
-        adqt::icons::IconRef hoverIcon = closeIcon;
-        hoverIcon.colors.primary = removeHoverColor;
+        adqt::icons::IconToken hoverIcon = closeIcon;
+        hoverIcon.style.primary = removeHoverColor;
         QPixmap closeHoverPixmap = adqt::icons::renderIconPixmap(
             hoverIcon, QSize(removeIconSize, removeIconSize), dpr, QIcon::Active, QIcon::Off);
         if (!closeHoverPixmap.isNull()) {
@@ -3802,23 +2400,15 @@ void AdSelect::rebuildTagWidgets() {
         if (value.isEmpty() || disabled()) {
           return;
         }
-        const SelectionSnapshot previous = captureSelectionSnapshot();
         const bool shouldRestoreInputFocus = open_ && lineEdit_ && !lineEdit_->isReadOnly();
-        const int index = currentValueKeys_.indexOf(value);
+        const int index = values_.indexOf(value);
         if (index < 0) {
           return;
         }
-        const QVariant removedRaw = rawValueForSelectionKey(value);
-        QVariantList nextValues = currentValues();
-        if (index < nextValues.size()) {
-          nextValues.removeAt(index);
-        } else {
-          nextValues.removeAll(removedRaw);
-        }
-        applySelectedValues(nextValues, false);
-        emit deselected(removedRaw, fallbackSelectedLabel(removedRaw));
-        updateSelectionCaches();
-        emitSelectionSignalsFromSnapshot(previous);
+        values_.removeAt(index);
+        emit deselected(value, fallbackSelectedLabel(value));
+        emit valuesChanged(values_);
+        emitSelectionChangedSignals();
         refreshRows();
         updateDisplay();
         updateClearButton();
@@ -3833,8 +2423,8 @@ void AdSelect::rebuildTagWidgets() {
   };
 
   bool hasRenderedTag = false;
-  for (int i = 0; i < visibleCount && i < labels.size() && i < currentValueKeys_.size(); ++i) {
-    buildTag(labels.at(i), currentValueKeys_.at(i), true);
+  for (int i = 0; i < visibleCount && i < labels.size() && i < values_.size(); ++i) {
+    buildTag(labels.at(i), values_.at(i), true);
     hasRenderedTag = true;
   }
   if (hiddenCount > 0) {
@@ -3861,13 +2451,27 @@ void AdSelect::rebuildTagWidgets() {
   tagsContainer_->setToolTip(labels.join(QStringLiteral(", ")));
 }
 
+void AdSelect::enforceMaxCount() {
+  if (maxCount_ <= 0) {
+    return;
+  }
+  if (mode_ == Mode::Single) {
+    return;
+  }
+  if (values_.size() > maxCount_) {
+    values_ = values_.mid(0, maxCount_);
+    emit valuesChanged(values_);
+    emitSelectionChangedSignals();
+  }
+}
+
 bool AdSelect::suffixButtonTriggersPopup() const {
   if (disabled()) {
     return false;
   }
   // Keep Ant Design behavior: custom suffix icons are decorative by default and
   // should not change popup visibility.
-  return !adqt::icons::isValid(suffixIconRef_);
+  return !adqt::icons::isValid(suffixIconToken_);
 }
 
 Qt::CursorShape AdSelect::selectorCursorShape() const {
@@ -3890,132 +2494,6 @@ Qt::CursorShape AdSelect::optionCursorShapeAtRow(int row) const {
     return Qt::ArrowCursor;
   }
   return options_.at(modelRow.optionIndex).disabled ? Qt::ForbiddenCursor : Qt::PointingHandCursor;
-}
-
-int AdSelect::nextSelectableRow(int startRow, int step) const {
-  if (rows_.isEmpty()) {
-    return -1;
-  }
-
-  const int direction = step >= 0 ? 1 : -1;
-  for (int row = startRow; row >= 0 && row < rows_.size(); row += direction) {
-    const ModelRow& modelRow = rows_.at(row);
-    if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
-      continue;
-    }
-    if (!options_.at(modelRow.optionIndex).disabled) {
-      return row;
-    }
-  }
-  return -1;
-}
-
-void AdSelect::moveCurrentListRow(int step, bool pageStep) {
-  if (!listView_ || rows_.isEmpty()) {
-    return;
-  }
-
-  int moveStep = step;
-  if (pageStep && visualStyle_ && visualStyle_->metrics.optionHeight > 0) {
-    const int viewportHeight =
-        popupScrollArea_ ? popupScrollArea_->height()
-                         : (listView_->viewport() ? listView_->viewport()->height() : listView_->height());
-    const int visibleRows = std::max(1, viewportHeight / std::max(1, visualStyle_->metrics.optionHeight));
-    moveStep *= visibleRows;
-  }
-
-  const QModelIndex currentIndex = listView_->currentIndex();
-  int targetRow = -1;
-  if (currentIndex.isValid()) {
-    targetRow = nextSelectableRow(currentIndex.row() + moveStep, moveStep);
-  } else {
-    targetRow = nextSelectableRow(moveStep > 0 ? 0 : rows_.size() - 1, moveStep);
-  }
-  if (targetRow < 0) {
-    return;
-  }
-
-  const QModelIndex targetIndex = listModel_ ? listModel_->index(targetRow, 0) : QModelIndex();
-  if (!targetIndex.isValid()) {
-    return;
-  }
-
-  listView_->setCurrentIndex(targetIndex);
-  if (mode_ == Mode::Single && listView_->selectionModel()) {
-    listView_->selectionModel()->select(targetIndex, QItemSelectionModel::ClearAndSelect);
-  }
-  listView_->scrollTo(targetIndex, QAbstractItemView::PositionAtCenter);
-}
-
-void AdSelect::moveCurrentListRowToBoundary(bool toEnd) {
-  if (!listView_ || rows_.isEmpty()) {
-    return;
-  }
-
-  const int targetRow = nextSelectableRow(toEnd ? rows_.size() - 1 : 0, toEnd ? -1 : 1);
-  if (targetRow < 0) {
-    return;
-  }
-
-  const QModelIndex targetIndex = listModel_ ? listModel_->index(targetRow, 0) : QModelIndex();
-  if (!targetIndex.isValid()) {
-    return;
-  }
-
-  listView_->setCurrentIndex(targetIndex);
-  if (mode_ == Mode::Single && listView_->selectionModel()) {
-    listView_->selectionModel()->select(targetIndex, QItemSelectionModel::ClearAndSelect);
-  }
-  listView_->scrollTo(targetIndex, toEnd ? QAbstractItemView::PositionAtBottom
-                                         : QAbstractItemView::PositionAtTop);
-}
-
-void AdSelect::activateCurrentListRow() {
-  if (!listView_) {
-    return;
-  }
-  const QModelIndex currentIndex = listView_->currentIndex();
-  if (!currentIndex.isValid()) {
-    return;
-  }
-
-  const int row = currentIndex.row();
-  if (row < 0 || row >= rows_.size()) {
-    return;
-  }
-  const ModelRow& modelRow = rows_.at(row);
-  if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
-    return;
-  }
-  toggleSelectionForOption(options_.at(modelRow.optionIndex));
-}
-
-void AdSelect::syncPopupSelectionState() {
-  if (!listView_ || !listView_->selectionModel()) {
-    return;
-  }
-
-  if (mode_ == Mode::Single) {
-    return;
-  }
-
-  QItemSelectionModel* popupSelectionModel = listView_->selectionModel();
-  QSignalBlocker blocker(popupSelectionModel);
-  popupSelectionModel->clearSelection();
-  for (int row = 0; row < rows_.size(); ++row) {
-    const ModelRow& modelRow = rows_.at(row);
-    if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
-      continue;
-    }
-    const Option& option = options_.at(modelRow.optionIndex);
-    if (!isValueSelected(option.value)) {
-      continue;
-    }
-    const QModelIndex index = listModel_ ? listModel_->index(row, 0) : QModelIndex();
-    if (index.isValid()) {
-      popupSelectionModel->select(index, QItemSelectionModel::Select);
-    }
-  }
 }
 
 void AdSelect::syncPopupOptionCursor(const QPoint& viewportPos) {
@@ -4124,8 +2602,6 @@ void AdSelect::updateInputMode() {
   }
 
   if (listView_) {
-    listView_->setSelectionMode(mode_ == Mode::Single ? QAbstractItemView::SingleSelection
-                                                      : QAbstractItemView::MultiSelection);
     setWidgetCursorIfChanged(listView_, disabled() ? Qt::ForbiddenCursor : Qt::ArrowCursor);
     if (QWidget* viewport = listView_->viewport()) {
       if (disabled()) {
@@ -4151,7 +2627,7 @@ void AdSelect::updateDisplay() {
     clearTagWidgets();
     tagsContainer_->setVisible(false);
     tagsContainer_->setToolTip(QString());
-    const QString label = currentValueKey_.isEmpty() ? QString() : fallbackSelectedLabel(rawValueForSelectionKey(currentValueKey_));
+    const QString label = value_.isEmpty() ? QString() : fallbackSelectedLabel(value_);
     const QString targetText = (open_ && isSearchEnabledForCurrentMode()) ? searchText_ : label;
     if (lineEdit_->text() != targetText) {
       lineEdit_->setText(targetText);
@@ -4213,7 +2689,7 @@ void AdSelect::updateDisplay() {
 
     if (placeholderLabel_) {
       const bool showPlaceholder =
-          currentValueKeys_.isEmpty() && effectiveInputText.isEmpty() && !placeholder_.trimmed().isEmpty();
+          values_.isEmpty() && effectiveInputText.isEmpty() && !placeholder_.trimmed().isEmpty();
       placeholderLabel_->setText(placeholder_);
       placeholderLabel_->setVisible(showPlaceholder);
     }
@@ -4273,15 +2749,12 @@ void AdSelect::updateClearButton() {
   if (!clearButton_ || !visualStyle_) {
     return;
   }
-  const bool hasValue = mode_ == Mode::Single ? !currentValueKey_.isEmpty() : !currentValueKeys_.isEmpty();
+  const bool hasValue = mode_ == Mode::Single ? !value_.isEmpty() : !values_.isEmpty();
   const bool canShow = allowClear_ && hasValue && !disabled();
   if (!canShow) {
     clearHovered_ = false;
   }
-  const bool hovered = hovered_ || clearHovered_ || underMouse() ||
-                       (lineEdit_ && lineEdit_->underMouse()) ||
-                       (clearButton_ && clearButton_->underMouse()) ||
-                       (suffixButton_ && suffixButton_->underMouse());
+  const bool hovered = hovered_ || clearHovered_;
   const bool shouldShow = canShow && hovered;
   if (clearButton_->isVisible() != shouldShow) {
     clearButton_->setVisible(shouldShow);
@@ -4304,10 +2777,10 @@ void AdSelect::updateClearVisual() {
     iconColor = visualStyle_->disabledTextColor;
   }
 
-  adqt::icons::IconRef icon = filled_icons::CloseCircle();
+  adqt::icons::IconToken icon = filled_icons::CloseCircle();
   if (adqt::icons::isValid(icon)) {
-    icon.colors.primary = iconColor;
-    icon.colors.hasPrimary = true;
+    icon.style.primary = iconColor;
+    icon.style.hasPrimary = true;
     const qreal dpr = devicePixelRatioF();
     const QPixmap pixmap =
         adqt::icons::renderIconPixmap(icon, QSize(iconSize, iconSize), dpr, QIcon::Normal, QIcon::Off);
@@ -4357,7 +2830,7 @@ void AdSelect::updatePrefixVisual() {
   }
 
   const bool hasPrefixText = !prefixText_.trimmed().isEmpty();
-  const bool hasPrefixIcon = adqt::icons::isValid(prefixIconRef_);
+  const bool hasPrefixIcon = adqt::icons::isValid(prefixIconToken_);
   if (!hasPrefixText && !hasPrefixIcon) {
     prefixLabel_->clear();
     prefixLabel_->setVisible(false);
@@ -4371,9 +2844,9 @@ void AdSelect::updatePrefixVisual() {
     return;
   }
 
-  adqt::icons::IconRef icon = prefixIconRef_;
-  icon.colors.primary = visualStyle_->prefixColor;
-  icon.colors.hasPrimary = true;
+  adqt::icons::IconToken icon = prefixIconToken_;
+  icon.style.primary = visualStyle_->prefixColor;
+  icon.style.hasPrimary = true;
   const qreal dpr = devicePixelRatioF();
   const int iconSize = std::max(10, visualStyle_->metrics.iconSize);
   const QPixmap pixmap =
@@ -4401,40 +2874,6 @@ void AdSelect::updateLoadingSpinnerState() {
   if (suffixSpinnerSubscribed_) {
     detail::clearFrameSubscription(this, QString::fromLatin1(kSuffixSpinnerFrameKey));
     suffixSpinnerSubscribed_ = false;
-  }
-}
-
-void AdSelect::updateAccessibility() {
-  const QString controlName = mode_ == Mode::Single
-                                  ? tr("Select")
-                                  : (mode_ == Mode::Multiple ? tr("Multi-select") : tr("Tag select"));
-  const QString placeholderText = placeholder_.trimmed();
-
-  if (contentHost_) {
-    contentHost_->setAccessibleName(controlName);
-    contentHost_->setAccessibleDescription(placeholderText);
-  }
-  if (lineEdit_) {
-    lineEdit_->setAccessibleName(isSearchEnabledForCurrentMode() ? tr("Filter options") : controlName);
-    lineEdit_->setAccessibleDescription(placeholderText);
-  }
-  if (clearButton_) {
-    clearButton_->setAccessibleName(tr("Clear selection"));
-  }
-  if (suffixButton_) {
-    const QString suffixName = suffixButtonTriggersPopup()
-                                   ? (open_ ? tr("Close options") : tr("Open options"))
-                                   : tr("Selector icon");
-    suffixButton_->setAccessibleName(suffixName);
-  }
-  if (popup_) {
-    popup_->setAccessibleName(tr("Select popup"));
-  }
-  if (popupScrollArea_) {
-    popupScrollArea_->setAccessibleName(tr("Options"));
-  }
-  if (listView_) {
-    listView_->setAccessibleName(tr("Options"));
   }
 }
 
@@ -4469,14 +2908,14 @@ void AdSelect::updateSuffixVisual() {
     return;
   }
 
-  adqt::icons::IconRef icon = suffixIconRef_;
+  adqt::icons::IconToken icon = suffixIconToken_;
   if (!adqt::icons::isValid(icon)) {
     const bool showSearchIcon = open_ && isSearchEnabledForCurrentMode();
     icon = showSearchIcon ? outlined_icons::Search() : outlined_icons::Down();
   }
   if (adqt::icons::isValid(icon)) {
-    icon.colors.primary = visualStyle_->suffixColor;
-    icon.colors.hasPrimary = true;
+    icon.style.primary = visualStyle_->suffixColor;
+    icon.style.hasPrimary = true;
     const qreal dpr = devicePixelRatioF();
     const int iconSize = std::max(10, visualStyle_->metrics.iconSize);
     const QPixmap pixmap =
@@ -4499,14 +2938,13 @@ void AdSelect::applyVisualStyle() {
 
   StyleContext context;
   context.mode = mode_;
-  context.controlSize = controlSize_;
+  context.size = size_;
   context.variant = variant_;
   context.status = status_;
   context.disabled = disabled();
-  context.popupVisible = open_;
+  context.open = open_;
   context.searchText = searchText_;
-  context.currentValues = currentValues();
-  context.currentValueKeys = currentValueKeys_;
+  context.values = values_;
 
   SemanticStyles effectiveSemantic = semanticStyles_;
   if (semanticStyleResolver_) {
@@ -4515,7 +2953,7 @@ void AdSelect::applyVisualStyle() {
 
   detail::SelectStyleInput input;
   input.mode = mode_;
-  input.controlSize = controlSize_;
+  input.size = size_;
   input.variant = variant_;
   input.status = status_;
   input.disabled = disabled();
@@ -4523,12 +2961,11 @@ void AdSelect::applyVisualStyle() {
   input.componentTokens = componentTokens_;
   input.semanticStyles = effectiveSemantic;
   const detail::SelectVisualStyle previousStyle = *visualStyle_;
-  const adqt::theme::ResolvedTheme resolvedTheme = adqt::theme::ThemeManager::instance().resolve(this);
-  *visualStyle_ = detail::resolveSelectVisualStyle(input, resolvedTheme);
-  const bool prefixIconColorOverridesChanged =
+  *visualStyle_ = detail::resolveSelectVisualStyle(input);
+  const bool prefixIconStyleChanged =
       previousStyle.prefixColor != visualStyle_->prefixColor ||
       previousStyle.metrics.iconSize != visualStyle_->metrics.iconSize;
-  const bool suffixIconColorOverridesChanged =
+  const bool suffixIconStyleChanged =
       previousStyle.suffixColor != visualStyle_->suffixColor ||
       previousStyle.metrics.iconSize != visualStyle_->metrics.iconSize;
   const bool listDelegateStyleChanged =
@@ -4693,9 +3130,9 @@ void AdSelect::applyVisualStyle() {
   }
 
   updateInteractionFocusOverlay();
-  const bool hasPrefixIcon = prefixText_.trimmed().isEmpty() && adqt::icons::isValid(prefixIconRef_);
-  const bool shouldRefreshPrefixIcon = hasPrefixIcon && prefixIconColorOverridesChanged;
-  const bool shouldRefreshSuffixIcon = suffixIconColorOverridesChanged || loading_;
+  const bool hasPrefixIcon = prefixText_.trimmed().isEmpty() && adqt::icons::isValid(prefixIconToken_);
+  const bool shouldRefreshPrefixIcon = hasPrefixIcon && prefixIconStyleChanged;
+  const bool shouldRefreshSuffixIcon = suffixIconStyleChanged || loading_;
   if (shouldRefreshPrefixIcon) {
     updatePrefixVisual();
   }
@@ -4722,7 +3159,7 @@ void AdSelect::refreshRows() {
   preservePopupScrollOnRefresh_ = false;
 
   int preservedScrollValue = -1;
-  QVariant preservedCurrentValue;
+  QString preservedCurrentValue;
   if (preserveScrollPosition && listView_ && popupScrollArea_) {
     if (QScrollBar* scrollBar = popupScrollArea_->verticalScrollBar()) {
       preservedScrollValue = scrollBar->value();
@@ -4776,7 +3213,7 @@ void AdSelect::refreshRows() {
   if (nextRows.isEmpty()) {
     ModelRow emptyRow;
     emptyRow.empty = true;
-    emptyRow.headerText = tr("No data");
+    emptyRow.headerText = QStringLiteral("No data");
     nextRows.append(emptyRow);
   }
 
@@ -4785,7 +3222,6 @@ void AdSelect::refreshRows() {
     listModel_->setRows(rows_);
   }
   syncCurrentListRow(preservedCurrentValue, preserveScrollPosition);
-  syncPopupSelectionState();
   if (listView_ && listView_->viewport()) {
     syncPopupOptionCursor(listView_->viewport()->mapFromGlobal(QCursor::pos()));
   }
@@ -4801,36 +3237,57 @@ void AdSelect::refreshRows() {
 
 QVector<int> AdSelect::filteredOptionIndexes() const {
   QVector<int> indexes;
-  if (!filterProxyModel_) {
-    indexes.reserve(options_.size());
-    for (int i = 0; i < options_.size(); ++i) {
+  indexes.reserve(options_.size());
+
+  const bool useSearch = isSearchEnabledForCurrentMode() && !searchText_.trimmed().isEmpty();
+  const QString term = searchText_.trimmed();
+  const QStringList fields = searchFilterFields_.isEmpty()
+                                 ? QStringList{QStringLiteral("label"), QStringLiteral("value")}
+                                 : searchFilterFields_;
+
+  for (int i = 0; i < options_.size(); ++i) {
+    const Option& option = options_.at(i);
+    bool match = true;
+    if (useSearch) {
+      if (filterPredicate_) {
+        match = filterPredicate_(term, option);
+      } else {
+        match = false;
+        for (const QString& field : fields) {
+          const QString fieldValue = optionSearchFieldValue(option, field);
+          if (fieldValue.contains(term, Qt::CaseInsensitive)) {
+            match = true;
+            break;
+          }
+        }
+      }
+    }
+    if (match) {
       indexes.append(i);
     }
-    return indexes;
   }
 
-  indexes.reserve(filterProxyModel_->rowCount());
-  for (int row = 0; row < filterProxyModel_->rowCount(); ++row) {
-    const QModelIndex proxyIndex = filterProxyModel_->index(row, 0);
-    if (!proxyIndex.isValid()) {
-      continue;
-    }
-    const QModelIndex sourceIndex = filterProxyModel_->mapToSource(proxyIndex);
-    if (!sourceIndex.isValid()) {
-      continue;
-    }
-    indexes.append(sourceIndex.row());
+  if (sortComparator_) {
+    std::stable_sort(indexes.begin(), indexes.end(),
+                     [this](int lhsIndex, int rhsIndex) {
+                       if (lhsIndex < 0 || lhsIndex >= options_.size() || rhsIndex < 0 ||
+                           rhsIndex >= options_.size()) {
+                         return lhsIndex < rhsIndex;
+                       }
+                       return sortComparator_(options_.at(lhsIndex), options_.at(rhsIndex));
+                     });
   }
+
   return indexes;
 }
 
-void AdSelect::syncCurrentListRow(const QVariant& preferredValue, bool preserveScrollPosition) {
+void AdSelect::syncCurrentListRow(const QString& preferredValue, bool preserveScrollPosition) {
   if (!listView_ || rows_.isEmpty()) {
     return;
   }
 
   int targetRow = -1;
-  if (preferredValue.isValid() && !preferredValue.isNull()) {
+  if (!preferredValue.isEmpty()) {
     for (int row = 0; row < rows_.size(); ++row) {
       const ModelRow& modelRow = rows_.at(row);
       if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
@@ -4843,29 +3300,14 @@ void AdSelect::syncCurrentListRow(const QVariant& preferredValue, bool preserveS
     }
   }
 
-  if (mode_ == Mode::Single && !currentValueKey_.isEmpty()) {
+  if (mode_ == Mode::Single && !value_.isEmpty()) {
     for (int row = 0; row < rows_.size(); ++row) {
       const ModelRow& modelRow = rows_.at(row);
       if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
         continue;
       }
       const Option& option = options_.at(modelRow.optionIndex);
-      if (detail::selectValueKey(option.value) == currentValueKey_) {
-        targetRow = row;
-        break;
-      }
-    }
-  }
-
-  if (targetRow < 0 && mode_ != Mode::Single && !currentValueKeys_.isEmpty()) {
-    const QString selectedKey = currentValueKeys_.constFirst();
-    for (int row = 0; row < rows_.size(); ++row) {
-      const ModelRow& modelRow = rows_.at(row);
-      if (modelRow.optionIndex < 0 || modelRow.optionIndex >= options_.size()) {
-        continue;
-      }
-      const Option& option = options_.at(modelRow.optionIndex);
-      if (detail::selectValueKey(option.value) == selectedKey) {
+      if (option.value == value_) {
         targetRow = row;
         break;
       }
@@ -4909,44 +3351,30 @@ bool AdSelect::addTagValue(const QString& value) {
   if (mode_ != Mode::Tags) {
     return false;
   }
-  const QString normalizedKey = detail::selectValueKey(normalized);
-  if (currentValueKeys_.contains(normalizedKey)) {
+  if (values_.contains(normalized)) {
     return false;
   }
-  if (maxCount_ > 0 && currentValueKeys_.size() >= maxCount_) {
+  if (maxCount_ > 0 && values_.size() >= maxCount_) {
     return false;
   }
 
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  QVariantList nextValues = currentValues();
-  nextValues.append(normalized);
-  if (normalizedSelectionValues(nextValues).size() == currentValues().size()) {
-    return false;
-  }
-  applySelectedValues(nextValues);
-  updateSelectionCaches();
+  ensureTagOptionExists(normalized);
+  values_.append(normalized);
   emit selected(normalized, fallbackSelectedLabel(normalized));
-  emitSelectionSignalsFromSnapshot(previous);
+  emit valuesChanged(values_);
+  emitSelectionChangedSignals();
   return true;
 }
 
-void AdSelect::ensureTagOptionExists(const QVariant& value) {
-  const QVariant normalized = detail::normalizeSelectValue(value);
-  if (sourceIndexForValue(normalized).isValid() || compositeIndexForValue(normalized).isValid()) {
+void AdSelect::ensureTagOptionExists(const QString& value) {
+  if (indexOfOptionValue(value) >= 0) {
     return;
   }
-  ensureOverlayModel();
-  auto* model = qobject_cast<QStandardItemModel*>(overlayModel_.data());
-  if (!model) {
-    return;
-  }
-
-  auto* item = new QStandardItem(normalized.toString().trimmed());
-  item->setData(normalized.toString().trimmed(), Qt::DisplayRole);
-  item->setData(normalized, valueRole_);
-  item->setData(normalized.toString().trimmed(), labelRole_);
-  model->appendRow(item);
-  syncModelBackedOptions();
+  Option option;
+  option.value = value;
+  option.label = value;
+  options_.append(option);
+  emit optionsChanged();
 }
 
 void AdSelect::consumeTokenizedInput(const QString& text) {
@@ -5008,71 +3436,64 @@ void AdSelect::consumeTokenizedInput(const QString& text) {
 }
 
 void AdSelect::clearSelectionInternal(bool emitSignals) {
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  if (currentValues().isEmpty()) {
+  bool changed = false;
+  if (mode_ == Mode::Single) {
+    changed = !value_.isEmpty();
+    value_.clear();
+    values_.clear();
+  } else {
+    changed = !values_.isEmpty();
+    values_.clear();
+  }
+
+  if (!changed) {
     return;
   }
 
-  applySelectedValues({}, false);
-  updateSelectionCaches();
-
   if (emitSignals) {
     emit cleared();
+    emit valueChanged(value_);
+    emit valuesChanged(values_);
+    emitSelectionChangedSignals();
   }
   refreshRows();
   updateDisplay();
   updateClearButton();
-  emitSelectionSignalsFromSnapshot(previous);
 }
 
-void AdSelect::emitSelectionChangedSignals() { emit selectionChanged(currentItems()); }
+void AdSelect::emitSelectionChangedSignals() { emit selectionChanged(selectedItems()); }
 
 void AdSelect::toggleSelectionForOption(const Option& option) {
   if (option.disabled) {
     return;
   }
 
-  const SelectionSnapshot previous = captureSelectionSnapshot();
-  const QString optionKey = detail::selectValueKey(option.value);
-  const QVariant selectedRaw = rawValueForSelectionKey(optionKey);
-  const QString selectedLabel = fallbackSelectedLabel(option.value);
-
   if (mode_ == Mode::Single) {
-    const bool changed = currentValueKey_ != optionKey;
-    applySelectedValues({option.value}, false);
-    updateSelectionCaches();
-    updateDisplay();
-    updateClearButton();
+    const bool changed = value_ != option.value;
+    selectSingleValue(option.value, true);
     if (changed) {
-      emit selected(rawValueForSelectionKey(optionKey), selectedLabel);
+      emit selected(option.value, fallbackSelectedLabel(option.value));
     }
-    emitSelectionSignalsFromSnapshot(previous);
     closePopup();
     return;
   }
 
   const bool shouldRestoreInputFocus = open_ && lineEdit_ && !lineEdit_->isReadOnly();
-  QVariantList nextValues = currentValues();
 
-  const int index = currentValueKeys_.indexOf(optionKey);
+  const int index = values_.indexOf(option.value);
   if (index >= 0) {
-    if (index < nextValues.size()) {
-      nextValues.removeAt(index);
-    } else {
-      nextValues.removeAll(selectedRaw);
-    }
-    emit deselected(selectedRaw, selectedLabel);
+    values_.removeAt(index);
+    emit deselected(option.value, fallbackSelectedLabel(option.value));
   } else {
-    if (maxCount_ > 0 && currentValueKeys_.size() >= maxCount_) {
+    if (maxCount_ > 0 && values_.size() >= maxCount_) {
       return;
     }
-    nextValues.append(option.value);
-    emit selected(option.value, selectedLabel);
+    values_.append(option.value);
+    emit selected(option.value, fallbackSelectedLabel(option.value));
   }
 
-  applySelectedValues(nextValues, false);
-  updateSelectionCaches();
-  emitSelectionSignalsFromSnapshot(previous);
+  emit valuesChanged(values_);
+  emitSelectionChangedSignals();
   if (autoClearSearchValue_ && isSearchEnabledForCurrentMode()) {
     preservePopupScrollOnRefresh_ = true;
     setSearchText(QString());
@@ -5087,6 +3508,27 @@ void AdSelect::toggleSelectionForOption(const Option& option) {
   if (shouldRestoreInputFocus && lineEdit_ && !lineEdit_->hasFocus()) {
     lineEdit_->setFocus(Qt::MouseFocusReason);
   }
+}
+
+void AdSelect::selectSingleValue(const QString& value, bool emitSignals) {
+  const QString normalized = value.trimmed();
+  if (value_ == normalized && values_ == QStringList{normalized}) {
+    return;
+  }
+
+  value_ = normalized;
+  values_.clear();
+  if (!value_.isEmpty()) {
+    values_.append(value_);
+  }
+
+  if (emitSignals) {
+    emit valueChanged(value_);
+    emit valuesChanged(values_);
+    emitSelectionChangedSignals();
+  }
+  updateDisplay();
+  updateClearButton();
 }
 
 void AdSelect::ensurePopup() {
@@ -5114,19 +3556,16 @@ void AdSelect::ensurePopup() {
   listView_ = new QListView(popupScrollArea_);
   listView_->setObjectName(QStringLiteral("adselect-list"));
   listView_->setModel(listModel_);
-  listView_->setItemDelegate(itemDelegateOverride_ ? itemDelegateOverride_.data()
-                                                   : new OptionListDelegate(this));
+  listView_->setItemDelegate(new OptionListDelegate(this));
   listView_->setFrameShape(QFrame::NoFrame);
-  listView_->setSelectionMode(mode_ == Mode::Single ? QAbstractItemView::SingleSelection
-                                                    : QAbstractItemView::MultiSelection);
+  listView_->setSelectionMode(QAbstractItemView::SingleSelection);
   listView_->setEditTriggers(QAbstractItemView::NoEditTriggers);
   listView_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   listView_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   listView_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   listView_->setSpacing(0);
-  listView_->setUniformItemSizes(false);
+  listView_->setUniformItemSizes(true);
   listView_->setMouseTracking(true);
-  listView_->setFocusPolicy(Qt::StrongFocus);
   listView_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   if (listView_->viewport()) {
     listView_->viewport()->setMouseTracking(true);
@@ -5151,17 +3590,28 @@ void AdSelect::ensurePopup() {
     toggleSelectionForOption(options_.at(modelRow.optionIndex));
   });
 
-  syncPopupExtraContentWidget();
   applyVisualStyle();
   updateInputMode();
-  updateAccessibility();
 }
 
 void AdSelect::rebuildPopupExtraContent() {
   if (!popup_ || !popupLayout_) {
     return;
   }
-  syncPopupExtraContentWidget();
+  if (popupExtraContent_) {
+    popupExtraContent_->deleteLater();
+    popupExtraContent_ = nullptr;
+  }
+  if (!popupExtraContentFactory_) {
+    return;
+  }
+
+  popupExtraContent_ = popupExtraContentFactory_(popup_);
+  if (!popupExtraContent_) {
+    return;
+  }
+  popupExtraContent_->setParent(popup_);
+  popupLayout_->addWidget(popupExtraContent_);
 }
 
 int AdSelect::popupContentWidthHint() const {
@@ -5379,11 +3829,11 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
     hasFocusWithin_ = true;
     bumpJoinedZOrder();
     applyVisualStyle();
-    if (isSearchEnabledForCurrentMode() && lineEdit_) {
+    if (lineEdit_) {
       lineEdit_->setFocus();
-      lineEdit_->selectAll();
-    } else if (listView_) {
-      listView_->setFocus(Qt::PopupFocusReason);
+      if (isSearchEnabledForCurrentMode()) {
+        lineEdit_->selectAll();
+      }
     }
   } else {
     if (popup_) {
@@ -5418,10 +3868,9 @@ void AdSelect::setOpenInternal(bool value, bool emitSignal) {
   }
 
   updateSuffixVisual();
-  updateAccessibility();
 
   if (emitSignal) {
-    emit popupVisibleChanged(open_);
+    emit openChanged(open_);
   }
 }
 
@@ -5509,6 +3958,5 @@ void AdSelect::updateFocusState() {
   updateInteractionFocusOverlay();
   update();
 }
-
 
 }  // namespace adqt::widgets

@@ -16,6 +16,7 @@ HEADERS += \
     src/widgets/button_style.h \
     src/widgets/color_picker.h \
     src/widgets/color_picker_style.h \
+    src/widgets/detail/icon_utils.h \
     src/widgets/detail/timing_hub.h \
     src/widgets/image.h \
     src/widgets/image_style.h \
@@ -61,6 +62,7 @@ SOURCES += \
     src/widgets/button_style.cpp \
     src/widgets/color_picker.cpp \
     src/widgets/color_picker_style.cpp \
+    src/widgets/detail/icon_utils.cpp \
     src/widgets/detail/timing_hub.cpp \
     src/widgets/image.cpp \
     src/widgets/image_style.cpp \

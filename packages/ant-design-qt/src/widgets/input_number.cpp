@@ -37,15 +37,6 @@ namespace {
 
 namespace outlined_icons = adqt::icons::outlined;
 
-bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
-  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
-         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
-}
-
-bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
-  return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
-}
 
 QPoint mouseEventPos(const QMouseEvent* event) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -638,7 +629,7 @@ adqt::icons::IconToken AdInputNumber::prefixIconToken() const {
 }
 
 void AdInputNumber::setPrefixIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(prefixIconToken_, token)) {
+  if (prefixIconToken_ == token) {
     return;
   }
   prefixIconToken_ = token;
@@ -652,7 +643,7 @@ adqt::icons::IconToken AdInputNumber::suffixIconToken() const {
 }
 
 void AdInputNumber::setSuffixIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(suffixIconToken_, token)) {
+  if (suffixIconToken_ == token) {
     return;
   }
   suffixIconToken_ = token;
@@ -666,7 +657,7 @@ adqt::icons::IconToken AdInputNumber::upIconToken() const {
 }
 
 void AdInputNumber::setUpIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(upIconToken_, token)) {
+  if (upIconToken_ == token) {
     return;
   }
   upIconToken_ = token;
@@ -679,7 +670,7 @@ adqt::icons::IconToken AdInputNumber::downIconToken() const {
 }
 
 void AdInputNumber::setDownIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(downIconToken_, token)) {
+  if (downIconToken_ == token) {
     return;
   }
   downIconToken_ = token;

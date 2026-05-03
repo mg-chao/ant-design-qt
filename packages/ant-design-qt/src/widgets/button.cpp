@@ -1,11 +1,11 @@
 #include "button.h"
 
 #include "button_style.h"
+#include "detail/icon_utils.h"
 #include "detail/timing_hub.h"
 #include "interaction_overlay_manager.h"
 #include "theme/theme.h"
 #include "icons.h"
-#include "generated/icon_manifest.h"
 
 #include <QApplication>
 #include <QEvent>
@@ -87,19 +87,6 @@ QPoint mouseEventPos(const QMouseEvent* event) {
     return QPoint();
   }
   return event->position().toPoint();
-}
-
-bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
-  if (!adqt::icons::isValid(icon)) {
-    return false;
-  }
-
-  if (icon.style.hasPrimary || icon.style.hasSecondary || icon.style.hasTertiary) {
-    return false;
-  }
-
-  const adqt::icons::detail::IconEntry& entry = adqt::icons::detail::iconEntryAt(icon.index);
-  return entry.theme != adqt::icons::IconTheme::TwoTone;
 }
 
 int resolveIconSide(const QPushButton* button, const QFontMetrics& fm, const QFont& contentFont) {
@@ -463,6 +450,9 @@ void AdButton::setAutoInsertSpace(bool value) {
 adqt::icons::IconToken AdButton::iconToken() const { return iconToken_; }
 
 void AdButton::setIconToken(const adqt::icons::IconToken& value) {
+  if (iconToken_ == value) {
+    return;
+  }
   iconToken_ = value;
   refreshAfterPropertyChange(false);
   emit iconTokenChanged(iconToken_);
@@ -471,6 +461,9 @@ void AdButton::setIconToken(const adqt::icons::IconToken& value) {
 adqt::icons::IconToken AdButton::loadingIconToken() const { return loadingIconToken_; }
 
 void AdButton::setLoadingIconToken(const adqt::icons::IconToken& value) {
+  if (loadingIconToken_ == value) {
+    return;
+  }
   loadingIconToken_ = value;
   updateSpinnerState();
   refreshAfterPropertyChange(false);
@@ -660,10 +653,7 @@ void AdButton::paintEvent(QPaintEvent* event) {
     if (drawBuiltinLoadingSpinner) {
       drawSpinner(painter, layout.iconRect, contentColor);
     } else {
-      if (shouldInheritCurrentColor(iconToRender)) {
-        iconToRender.style.primary = contentColor;
-        iconToRender.style.hasPrimary = true;
-      }
+      iconToRender = detail::iconWithInheritedColor(iconToRender, contentColor);
       const QIcon::Mode mode = enabled ? QIcon::Normal : QIcon::Disabled;
       const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
       const QPixmap pixmap =

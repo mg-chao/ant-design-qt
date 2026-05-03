@@ -1,4 +1,4 @@
-﻿#include "select.h"
+#include "select.h"
 
 #include "detail/timing_hub.h"
 #include "icons.h"
@@ -82,15 +82,6 @@ QString escapedForRegex(const QString& text) {
   return QRegularExpression::escape(text);
 }
 
-bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
-  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
-         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
-}
-
-bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
-  return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
-}
 
 QPixmap makeSpinnerPixmap(const QSize& logicalSize, qreal devicePixelRatio, const QColor& color, int angleDegrees) {
   if (!logicalSize.isValid() || logicalSize.isEmpty()) {
@@ -1472,7 +1463,7 @@ void AdSelect::setPrefixText(const QString& value) {
 adqt::icons::IconToken AdSelect::prefixIconToken() const { return prefixIconToken_; }
 
 void AdSelect::setPrefixIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(prefixIconToken_, token)) {
+  if (prefixIconToken_ == token) {
     return;
   }
   prefixIconToken_ = token;
@@ -1483,7 +1474,7 @@ void AdSelect::setPrefixIconToken(const adqt::icons::IconToken& token) {
 adqt::icons::IconToken AdSelect::suffixIconToken() const { return suffixIconToken_; }
 
 void AdSelect::setSuffixIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(suffixIconToken_, token)) {
+  if (suffixIconToken_ == token) {
     return;
   }
   suffixIconToken_ = token;

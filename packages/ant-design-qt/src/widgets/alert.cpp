@@ -28,12 +28,6 @@ QString toRgba(const QColor& color) {
       .arg(color.alpha());
 }
 
-bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
-  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
-         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
-}
-
 adqt::icons::IconToken defaultTypeIcon(AdAlert::Type type) {
   adqt::icons::IconToken token;
   switch (type) {
@@ -193,7 +187,7 @@ void AdAlert::setDescriptionText(const QString& value) {
 adqt::icons::IconToken AdAlert::iconToken() const { return iconToken_; }
 
 void AdAlert::setIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(iconToken_, value)) {
+  if (iconToken_ == value) {
     return;
   }
   iconToken_ = value;
@@ -205,7 +199,7 @@ void AdAlert::setIconToken(const adqt::icons::IconToken& value) {
 adqt::icons::IconToken AdAlert::closeIconToken() const { return closeIconToken_; }
 
 void AdAlert::setCloseIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(closeIconToken_, value)) {
+  if (closeIconToken_ == value) {
     return;
   }
   closeIconToken_ = value;
@@ -327,10 +321,6 @@ void AdAlert::changeEvent(QEvent* event) {
   if (event->type() == QEvent::EnabledChange || event->type() == QEvent::FontChange) {
     applyVisualStyle();
   }
-}
-
-bool AdAlert::iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
-  return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
 }
 
 AdAlert::DerivedState AdAlert::deriveState() const {

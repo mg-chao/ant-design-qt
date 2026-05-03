@@ -63,15 +63,6 @@ void traverseObjectTree(QObject* root, Callback&& callback) {
   }
 }
 
-bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
-  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
-         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
-}
-
-bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
-  return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
-}
 
 int measureSingleLineTextWidth(const QFontMetrics& metrics, const QString& line) {
   if (line.isEmpty()) {
@@ -372,7 +363,7 @@ void AdPopconfirm::setIconVisible(bool value) {
 adqt::icons::IconToken AdPopconfirm::iconToken() const { return iconToken_; }
 
 void AdPopconfirm::setIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(iconToken_, value)) {
+  if (iconToken_ == value) {
     return;
   }
   iconToken_ = value;

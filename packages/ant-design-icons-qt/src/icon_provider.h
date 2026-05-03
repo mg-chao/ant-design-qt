@@ -11,6 +11,11 @@ namespace adqt::icons::detail {
 IconToken makeTokenByIndex(int index, const IconStyle& style);
 QIcon makeIconByIndex(int index, const IconStyle& style);
 QIcon makeIcon(const IconToken& token);
+IconMetadata iconMetadata(const IconToken& token);
+bool isTwoTone(const IconToken& token);
+bool isSingleTone(const IconToken& token);
+
+IconToken registerCustomIcon(const CustomIconSource& source, const IconStyle& style);
 
 QPixmap renderIconPixmapByIndex(int index,
                                 const IconStyle& style,

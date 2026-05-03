@@ -4,6 +4,7 @@
 #include <QCryptographicHash>
 #include <QFile>
 #include <QImage>
+#include <QTemporaryFile>
 #include <QSvgRenderer>
 
 #include "icons.h"
@@ -74,6 +75,24 @@ class IconsTests final : public QObject {
     const adqt::icons::IconToken token = adqt::icons::twotone::Alert();
     const QIcon icon = adqt::icons::makeIcon(token);
     QVERIFY(!icon.isNull());
+  }
+
+  void builtInIconMetadataReflectsTheme() {
+    const adqt::icons::IconMetadata outlined = adqt::icons::iconMetadata(adqt::icons::outlined::Search());
+    QVERIFY(outlined.valid);
+    QVERIFY(!outlined.custom);
+    QCOMPARE(outlined.theme, adqt::icons::IconTheme::Outlined);
+    QCOMPARE(outlined.name, QStringLiteral("search"));
+    QVERIFY(adqt::icons::isSingleTone(adqt::icons::outlined::Search()));
+    QVERIFY(!adqt::icons::isTwoTone(adqt::icons::outlined::Search()));
+
+    const adqt::icons::IconMetadata twotone = adqt::icons::iconMetadata(adqt::icons::twotone::Alert());
+    QVERIFY(twotone.valid);
+    QVERIFY(!twotone.custom);
+    QCOMPARE(twotone.theme, adqt::icons::IconTheme::TwoTone);
+    QCOMPARE(twotone.name, QStringLiteral("alert"));
+    QVERIFY(adqt::icons::isTwoTone(adqt::icons::twotone::Alert()));
+    QVERIFY(!adqt::icons::isSingleTone(adqt::icons::twotone::Alert()));
   }
 
   void renderedPixmapHasExpectedSize() {
@@ -150,6 +169,78 @@ class IconsTests final : public QObject {
     QVERIFY(translucentAvg.green() > 200);
     QVERIFY(translucentAvg.blue() > 200);
     QVERIFY(translucentAvg.alpha() < opaqueAvg.alpha());
+  }
+
+  void customSvgBytesRenderLikeIconToken() {
+    const QByteArray svg(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\">"
+        "<path fill=\"currentColor\" d=\"M128 128h768v768H128z\"/>"
+        "</svg>");
+    adqt::icons::IconStyle style;
+    style.primary = QColor(QStringLiteral("#ff4d4f"));
+    style.hasPrimary = true;
+
+    const adqt::icons::IconToken token =
+        adqt::icons::registerSvgIcon(adqt::icons::IconTheme::Outlined,
+                                     QStringLiteral("custom-square"),
+                                     svg,
+                                     style);
+    QVERIFY(adqt::icons::isValid(token));
+    QVERIFY(!adqt::icons::makeIcon(token).isNull());
+    const adqt::icons::IconMetadata metadata = adqt::icons::iconMetadata(token);
+    QVERIFY(metadata.valid);
+    QVERIFY(metadata.custom);
+    QCOMPARE(metadata.theme, adqt::icons::IconTheme::Outlined);
+    QCOMPARE(metadata.name, QStringLiteral("custom-square"));
+    QVERIFY(adqt::icons::isSingleTone(token));
+    QVERIFY(!adqt::icons::isTwoTone(token));
+
+    const QImage image =
+        adqt::icons::renderIconPixmap(token, QSize(20, 20), 2.0, QIcon::Normal, QIcon::Off).toImage();
+    QVERIFY(!image.isNull());
+    QCOMPARE(image.size(), QSize(40, 40));
+
+    const QColor avg = averageVisibleColor(image);
+    QVERIFY(avg.isValid());
+    QVERIFY(avg.red() > avg.blue());
+  }
+
+  void customSvgFileUsesThemeResolver() {
+    QTemporaryFile file;
+    QVERIFY(file.open());
+    file.write(QByteArray(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1024 1024\">"
+        "<circle fill=\"currentColor\" cx=\"512\" cy=\"512\" r=\"384\"/>"
+        "</svg>"));
+    file.flush();
+
+    const adqt::icons::IconToken token =
+        adqt::icons::registerSvgIconFile(adqt::icons::IconTheme::Outlined,
+                                         QStringLiteral("custom-circle"),
+                                         file.fileName());
+    QVERIFY(adqt::icons::isValid(token));
+
+    adqt::icons::setThemeResolver([] {
+      adqt::icons::IconThemeSnapshot snapshot;
+      snapshot.text = QColor(QStringLiteral("#1677ff"));
+      snapshot.revision = 501;
+      return snapshot;
+    });
+    const QImage blue =
+        adqt::icons::renderIconPixmap(token, QSize(24, 24), 1.0, QIcon::Normal, QIcon::Off).toImage();
+
+    adqt::icons::setThemeResolver([] {
+      adqt::icons::IconThemeSnapshot snapshot;
+      snapshot.text = QColor(QStringLiteral("#52c41a"));
+      snapshot.revision = 502;
+      return snapshot;
+    });
+    const QImage green =
+        adqt::icons::renderIconPixmap(token, QSize(24, 24), 1.0, QIcon::Normal, QIcon::Off).toImage();
+
+    QVERIFY(!blue.isNull());
+    QVERIFY(!green.isNull());
+    QVERIFY(pngDigest(blue) != pngDigest(green));
   }
 
   void twotoneEmptySimpleRespectsExplicitTertiaryColor() {

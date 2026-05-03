@@ -2,7 +2,9 @@
 #define ADQT_ICONS_TYPES_H
 
 #include <QColor>
+#include <QByteArray>
 #include <QMetaType>
+#include <QString>
 #include <QtGlobal>
 
 #include <functional>
@@ -26,11 +28,60 @@ struct IconStyle {
   bool hasTertiary = false;
 };
 
+inline bool operator==(const IconStyle& lhs, const IconStyle& rhs) {
+  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
+         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
+         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
+}
+
+inline bool operator!=(const IconStyle& lhs, const IconStyle& rhs) {
+  return !(lhs == rhs);
+}
+
+enum class IconSourceType {
+  SvgBytes,
+  SvgFile,
+  SvgResource,
+};
+
+struct CustomIconSource {
+  IconTheme theme = IconTheme::Outlined;
+  QString name;
+  IconSourceType sourceType = IconSourceType::SvgBytes;
+  QByteArray svg;
+  QString path;
+
+  bool isValid() const {
+    if (name.trimmed().isEmpty()) {
+      return false;
+    }
+    if (sourceType == IconSourceType::SvgBytes) {
+      return !svg.trimmed().isEmpty();
+    }
+    return !path.trimmed().isEmpty();
+  }
+};
+
 struct IconToken {
   int index = -1;
   IconStyle style;
 
   bool isValid() const { return index >= 0; }
+};
+
+inline bool operator==(const IconToken& lhs, const IconToken& rhs) {
+  return lhs.index == rhs.index && lhs.style == rhs.style;
+}
+
+inline bool operator!=(const IconToken& lhs, const IconToken& rhs) {
+  return !(lhs == rhs);
+}
+
+struct IconMetadata {
+  bool valid = false;
+  bool custom = false;
+  IconTheme theme = IconTheme::Outlined;
+  QString name;
 };
 
 struct IconThemeSnapshot {

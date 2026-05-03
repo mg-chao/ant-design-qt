@@ -45,15 +45,6 @@ namespace {
 namespace outlined_icons = adqt::icons::outlined;
 namespace filled_icons = adqt::icons::filled;
 
-bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
-  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
-         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
-}
-
-bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
-  return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
-}
 
 QPoint mouseEventPos(const QMouseEvent* event) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -672,7 +663,7 @@ void AdInput::setEchoMode(QLineEdit::EchoMode value) {
 adqt::icons::IconToken AdInput::prefixIconToken() const { return prefixIconToken_; }
 
 void AdInput::setPrefixIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(prefixIconToken_, token)) {
+  if (prefixIconToken_ == token) {
     return;
   }
   prefixIconToken_ = token;
@@ -684,7 +675,7 @@ void AdInput::setPrefixIconToken(const adqt::icons::IconToken& token) {
 adqt::icons::IconToken AdInput::suffixIconToken() const { return suffixIconToken_; }
 
 void AdInput::setSuffixIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(suffixIconToken_, token)) {
+  if (suffixIconToken_ == token) {
     return;
   }
   suffixIconToken_ = token;
@@ -708,7 +699,7 @@ void AdInput::setSuffixActionVisible(bool value) {
 adqt::icons::IconToken AdInput::suffixActionIconToken() const { return suffixActionIconToken_; }
 
 void AdInput::setSuffixActionIconToken(const adqt::icons::IconToken& token) {
-  if (iconTokensEqual(suffixActionIconToken_, token)) {
+  if (suffixActionIconToken_ == token) {
     return;
   }
   suffixActionIconToken_ = token;
@@ -2659,7 +2650,7 @@ void AdInputPassword::setPasswordVisible(bool value) {
 adqt::icons::IconToken AdInputPassword::visibleIconToken() const { return visibleIconToken_; }
 
 void AdInputPassword::setVisibleIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(visibleIconToken_, value)) {
+  if (visibleIconToken_ == value) {
     return;
   }
   visibleIconToken_ = value;
@@ -2669,7 +2660,7 @@ void AdInputPassword::setVisibleIconToken(const adqt::icons::IconToken& value) {
 adqt::icons::IconToken AdInputPassword::hiddenIconToken() const { return hiddenIconToken_; }
 
 void AdInputPassword::setHiddenIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(hiddenIconToken_, value)) {
+  if (hiddenIconToken_ == value) {
     return;
   }
   hiddenIconToken_ = value;

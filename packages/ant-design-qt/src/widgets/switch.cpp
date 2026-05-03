@@ -1,7 +1,7 @@
 #include "switch.h"
 
+#include "detail/icon_utils.h"
 #include "detail/timing_hub.h"
-#include "generated/icon_manifest.h"
 #include "icons.h"
 #include "interaction_overlay_manager.h"
 #include "switch_style.h"
@@ -30,16 +30,6 @@ namespace {
 constexpr char kThumbFrameKey[] = "AdSwitch.ThumbFrame";
 constexpr char kPressStateFrameKey[] = "AdSwitch.PressStateFrame";
 constexpr char kSpinnerFrameKey[] = "AdSwitch.SpinnerFrame";
-
-bool iconStylesEqual(const adqt::icons::IconStyle& lhs, const adqt::icons::IconStyle& rhs) {
-  return lhs.hasPrimary == rhs.hasPrimary && lhs.hasSecondary == rhs.hasSecondary &&
-         lhs.hasTertiary == rhs.hasTertiary && lhs.primary == rhs.primary &&
-         lhs.secondary == rhs.secondary && lhs.tertiary == rhs.tertiary;
-}
-
-bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs) {
-  return lhs.index == rhs.index && iconStylesEqual(lhs.style, rhs.style);
-}
 
 bool isKeyboardFocusReason(Qt::FocusReason reason) {
   return reason != Qt::MouseFocusReason && reason != Qt::NoFocusReason;
@@ -147,17 +137,6 @@ QPainterPath roundedRectPath(const QRectF& rect,
   }
   path.closeSubpath();
   return path;
-}
-
-bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
-  if (!adqt::icons::isValid(icon)) {
-    return false;
-  }
-  if (icon.style.hasPrimary || icon.style.hasSecondary || icon.style.hasTertiary) {
-    return false;
-  }
-  const adqt::icons::detail::IconEntry& entry = adqt::icons::detail::iconEntryAt(icon.index);
-  return entry.theme != adqt::icons::IconTheme::TwoTone;
 }
 
 int sharedSpinnerAngle() {
@@ -279,7 +258,7 @@ void AdSwitch::setUnCheckedChildren(const QString& value) {
 adqt::icons::IconToken AdSwitch::checkedChildrenIconToken() const { return checkedChildrenIconToken_; }
 
 void AdSwitch::setCheckedChildrenIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(checkedChildrenIconToken_, value)) {
+  if (checkedChildrenIconToken_ == value) {
     return;
   }
   checkedChildrenIconToken_ = value;
@@ -292,7 +271,7 @@ adqt::icons::IconToken AdSwitch::unCheckedChildrenIconToken() const {
 }
 
 void AdSwitch::setUnCheckedChildrenIconToken(const adqt::icons::IconToken& value) {
-  if (iconTokensEqual(unCheckedChildrenIconToken_, value)) {
+  if (unCheckedChildrenIconToken_ == value) {
     return;
   }
   unCheckedChildrenIconToken_ = value;
@@ -452,11 +431,7 @@ void AdSwitch::paintEvent(QPaintEvent* event) {
 
     int cursorX = static_cast<int>(std::round(x));
     if (hasIcon) {
-      adqt::icons::IconToken iconToRender = icon;
-      if (shouldInheritCurrentColor(iconToRender)) {
-        iconToRender.style.primary = style.contentColor;
-        iconToRender.style.hasPrimary = true;
-      }
+      adqt::icons::IconToken iconToRender = detail::iconWithInheritedColor(icon, style.contentColor);
       const QPixmap pixmap = adqt::icons::renderIconPixmap(
           iconToRender, QSize(iconSide, iconSide), devicePixelRatioF(), QIcon::Normal, QIcon::Off);
       if (!pixmap.isNull()) {

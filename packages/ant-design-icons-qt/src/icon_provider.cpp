@@ -11,8 +11,10 @@
 #include <QPixmapCache>
 #include <QStringList>
 #include <QSvgRenderer>
+#include <QVector>
 #include <QtMath>
 
+#include <mutex>
 #include <utility>
 
 int qInitResources_ant_design_icons();
@@ -58,11 +60,10 @@ void applyGlobalOpacity(QPixmap& pixmap, qreal opacity) {
 }
 
 void ensureIconResources() {
-  static bool initialized = false;
-  if (!initialized) {
+  static std::once_flag once;
+  std::call_once(once, []() {
     ::qInitResources_ant_design_icons();
-    initialized = true;
-  }
+  });
 }
 
 struct ResolvedColors {
@@ -70,6 +71,12 @@ struct ResolvedColors {
   QColor secondary;
   QColor tertiary;
   quint64 revision = 1;
+};
+
+struct ResolvedIconSource {
+  IconTheme theme = IconTheme::Outlined;
+  QString name;
+  QByteArray svg;
 };
 
 class IconRuntime final {
@@ -80,12 +87,56 @@ class IconRuntime final {
   }
 
   QIcon makeIcon(int index, const IconStyle& style) {
-    ensureIconResources();
-    if (index < 0 || index >= iconEntryCount()) {
+    if (!isKnownIndex(index)) {
       return QIcon();
     }
 
     return QIcon(new SvgIconEngine(index, style));
+  }
+
+  IconToken registerCustomIcon(const CustomIconSource& source, const IconStyle& style) {
+    if (!source.isValid()) {
+      return IconToken();
+    }
+
+    QMutexLocker locker(&mutex_);
+    const int index = iconEntryCount() + customEntries_.size();
+    customEntries_.append(source);
+
+    IconToken token;
+    token.index = index;
+    token.style = style;
+    return token;
+  }
+
+  IconMetadata metadata(int index) {
+    IconMetadata metadata;
+    if (index < 0) {
+      return metadata;
+    }
+
+    if (index < iconEntryCount()) {
+      ensureIconResources();
+      const IconEntry& entry = iconEntryAt(index);
+      metadata.valid = true;
+      metadata.custom = false;
+      metadata.theme = entry.theme;
+      metadata.name = QString::fromLatin1(entry.name);
+      return metadata;
+    }
+
+    QMutexLocker locker(&mutex_);
+    const int offset = customEntryOffset(index);
+    if (offset < 0 || offset >= customEntries_.size()) {
+      return metadata;
+    }
+
+    const CustomIconSource& source = customEntries_.at(offset);
+    metadata.valid = true;
+    metadata.custom = true;
+    metadata.theme = source.theme;
+    metadata.name = source.name;
+    return metadata;
   }
 
   QPixmap renderPixmapByIndex(int index,
@@ -94,12 +145,10 @@ class IconRuntime final {
                               qreal devicePixelRatio,
                               QIcon::Mode mode,
                               QIcon::State state) {
-    ensureIconResources();
-    if (index < 0 || index >= iconEntryCount()) {
+    const ResolvedIconSource source = resolveIconSource(index);
+    if (source.svg.isEmpty()) {
       return QPixmap();
     }
-
-    const IconEntry& entry = iconEntryAt(index);
 
     const QSize effectiveSize = logicalSize.isValid() && !logicalSize.isEmpty()
                                     ? logicalSize
@@ -110,7 +159,7 @@ class IconRuntime final {
     const bool enablePixmapCache = shouldCachePixmap(pixelW, pixelH);
 
     const IconThemeSnapshot snapshot = resolveThemeSnapshot();
-    const ResolvedColors colors = resolveColors(entry.theme, style, snapshot, mode);
+    const ResolvedColors colors = resolveColors(source.theme, style, snapshot, mode);
     const QString key = cacheKey(index, effectiveSize, dpr, mode, state, colors);
 
     if (enablePixmapCache) {
@@ -120,13 +169,13 @@ class IconRuntime final {
       }
     }
 
-    const QByteArray source = loadSvgSource(QString::fromLatin1(entry.qrcPath));
-    if (source.isEmpty()) {
-      return QPixmap();
-    }
-
     const QByteArray coloredSvg =
-        applyColorsToSvg(source, entry.theme, entry.name, colors.primary, colors.secondary, colors.tertiary);
+        applyColorsToSvg(source.svg,
+                         source.theme,
+                         source.name.toUtf8().constData(),
+                         colors.primary,
+                         colors.secondary,
+                         colors.tertiary);
     QSvgRenderer renderer(coloredSvg);
     if (!renderer.isValid()) {
       return QPixmap();
@@ -142,7 +191,7 @@ class IconRuntime final {
 
     // QtSvg may ignore alpha in `fill` color strings. Keep rgb replacement stable and
     // apply final opacity on the rendered pixmap for non-twotone single-color icons.
-    if (entry.theme != IconTheme::TwoTone) {
+    if (source.theme != IconTheme::TwoTone) {
       applyGlobalOpacity(pm, colors.primary.alphaF());
     }
 
@@ -305,6 +354,58 @@ class IconRuntime final {
     return payload;
   }
 
+  bool isKnownIndex(int index) {
+    if (index < 0) {
+      return false;
+    }
+    if (index < iconEntryCount()) {
+      ensureIconResources();
+      return true;
+    }
+
+    QMutexLocker locker(&mutex_);
+    return customEntryOffset(index) >= 0 && customEntryOffset(index) < customEntries_.size();
+  }
+
+  ResolvedIconSource resolveIconSource(int index) {
+    ResolvedIconSource source;
+    if (index < 0) {
+      return source;
+    }
+
+    if (index < iconEntryCount()) {
+      ensureIconResources();
+      const IconEntry& entry = iconEntryAt(index);
+      source.theme = entry.theme;
+      source.name = QString::fromLatin1(entry.name);
+      source.svg = loadSvgSource(QString::fromLatin1(entry.qrcPath));
+      return source;
+    }
+
+    CustomIconSource custom;
+    {
+      QMutexLocker locker(&mutex_);
+      const int offset = customEntryOffset(index);
+      if (offset < 0 || offset >= customEntries_.size()) {
+        return source;
+      }
+      custom = customEntries_.at(offset);
+    }
+
+    source.theme = custom.theme;
+    source.name = custom.name;
+    if (custom.sourceType == IconSourceType::SvgBytes) {
+      source.svg = custom.svg;
+    } else {
+      source.svg = loadSvgSource(custom.path);
+    }
+    return source;
+  }
+
+  static int customEntryOffset(int index) {
+    return index - iconEntryCount();
+  }
+
   void putSvgSourceCacheLocked(const QString& key, const QByteArray& value) {
     if (svgSourceCache_.contains(key)) {
       svgSourceOrder_.removeAll(key);
@@ -329,6 +430,7 @@ class IconRuntime final {
   int svgSourceCacheMaxEntries_ = 128;
   QHash<QString, QByteArray> svgSourceCache_;
   QStringList svgSourceOrder_;
+  QVector<CustomIconSource> customEntries_;
 };
 
 }  // namespace
@@ -349,6 +451,27 @@ QIcon makeIcon(const IconToken& token) {
     return QIcon();
   }
   return makeIconByIndex(token.index, token.style);
+}
+
+IconMetadata iconMetadata(const IconToken& token) {
+  if (!token.isValid()) {
+    return IconMetadata();
+  }
+  return IconRuntime::instance().metadata(token.index);
+}
+
+bool isTwoTone(const IconToken& token) {
+  const IconMetadata metadata = iconMetadata(token);
+  return metadata.valid && metadata.theme == IconTheme::TwoTone;
+}
+
+bool isSingleTone(const IconToken& token) {
+  const IconMetadata metadata = iconMetadata(token);
+  return metadata.valid && metadata.theme != IconTheme::TwoTone;
+}
+
+IconToken registerCustomIcon(const CustomIconSource& source, const IconStyle& style) {
+  return IconRuntime::instance().registerCustomIcon(source, style);
 }
 
 QPixmap renderIconPixmapByIndex(int index,

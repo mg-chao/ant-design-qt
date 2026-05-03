@@ -159,8 +159,6 @@ class AdAlert final : public QWidget {
     bool hasDescription = false;
   };
 
-  static bool iconTokensEqual(const adqt::icons::IconToken& lhs, const adqt::icons::IconToken& rhs);
-
   DerivedState deriveState() const;
   SemanticStyles resolvedSemanticStyles() const;
   adqt::icons::IconToken resolvedIconToken() const;

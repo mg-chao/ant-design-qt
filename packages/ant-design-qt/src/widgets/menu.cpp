@@ -1,8 +1,8 @@
 #include "menu.h"
 
+#include "detail/icon_utils.h"
 #include "detail/timing_hub.h"
 #include "icons.h"
-#include "generated/icon_manifest.h"
 #include "menu_style.h"
 #include "popup_placement.h"
 #include "theme/theme.h"
@@ -164,19 +164,6 @@ QSize pixmapDeviceIndependentSize(const QPixmap& pixmap) {
   return QSize(qRound(pixmap.width() / dpr), qRound(pixmap.height() / dpr));
 }
 
-bool shouldInheritCurrentColor(const adqt::icons::IconToken& icon) {
-  if (!adqt::icons::isValid(icon)) {
-    return false;
-  }
-
-  if (icon.style.hasPrimary || icon.style.hasSecondary || icon.style.hasTertiary) {
-    return false;
-  }
-
-  const adqt::icons::detail::IconEntry& entry = adqt::icons::detail::iconEntryAt(icon.index);
-  return entry.theme != adqt::icons::IconTheme::TwoTone;
-}
-
 void paintMenuIcon(QPainter& painter,
                    adqt::icons::IconToken icon,
                    const QRect& targetRect,
@@ -186,10 +173,7 @@ void paintMenuIcon(QPainter& painter,
     return;
   }
 
-  if (shouldInheritCurrentColor(icon)) {
-    icon.style.primary = color;
-    icon.style.hasPrimary = true;
-  }
+  icon = detail::iconWithInheritedColor(icon, color);
   const qreal dpr = painter.device() ? painter.device()->devicePixelRatioF() : 1.0;
   const QIcon::Mode mode = disabled ? QIcon::Disabled : QIcon::Normal;
   IconPixmapCacheKey cacheKey;
